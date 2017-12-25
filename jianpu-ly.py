@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.145 (c) 2012-2016 Silas S. Brown
+# v1.146 (c) 2012-2017 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -40,6 +40,7 @@ Prohibit page breaks until end of this movement: OnePage
 Tuplets: 3[ q1 q1 q1 ]
 Da capo: 1 1 Fine 1 1 1 1 1 1 DC
 Repeat (with alternate endings): R{ 1 1 1 } A{ 2 | 3 }
+Short repeats (percent): R4{ 1 2 }
 Ties (like Lilypond's, if you don't want dashes): 1 ~ 1
 Slurs (like Lilypond's): 1 ( 2 )
 Dynamics (applies to previous note): \p \mp \f
@@ -165,7 +166,7 @@ class notehead_markup:
       self.startBarPos = self.barPos
   def __call__(self,figure,nBeams,dot,octave,accidental):
     # figure is '1'-'7' or '0' or '-'
-    # nBeams is 0, 1, 2 .. etc
+    # nBeams is 0, 1, 2 .. etc (number of beams for this note)
     # dot is "" or "." (dotted length)
     # octave is "", "'", "''", "," or ",,"
     # accidental is "", "#", "b"
@@ -253,6 +254,9 @@ class notehead_markup:
     if dot: toAdd += toAdd/2
     ret += ("%d" % length + dot)
     if not self.inBeamGroup and not midi:
+        # Even if not nBeams, we might still need to start a '['
+        # (and override stemLeftBeamCount etc above), unless we
+        # can re-test on ALL Lilypond versions that it's OK not to.
         ret += '['
         self.inBeamGroup = 1
     if not self.tuplet[0]==self.tuplet[1]:
@@ -274,12 +278,14 @@ class notehead_markup:
         self.current_accidentals = {}
     # Octave dots:
     if not midi and not invisTieLast:
-      if octave.startswith(",") and not nBeams: ret += r"-\tweak #'Y-offset #-1.2 " # as Lilypond occasionally puts it too far down
+      # Tweak the Y-offset, as Lilypond occasionally puts it too far down:
+      if not nBeams: ret += {",":r"-\tweak #'Y-offset #-1.2 ",
+                             ",,":r"-\tweak #'Y-offset #1 "}.get(octave,"")
       ret += {"":"",
             "'":"^.",
-            "''":r"^\markup{:}", # TODO: check horiz align
+            "''":r"-\tweak #'X-offset #0.3 ^\markup{\bold :}",
             ",":r"-\tweak #'X-offset #0.6 _.",
-            ",,":r"-\tweak #'X-offset #0.6 _\markup{:}"}[octave]
+            ",,":r"-\tweak #'X-offset #0.3 _\markup{\bold :}"}[octave]
     if invisTieLast:
         if midi: b4last, aftrlast = "", " ~"
         else: b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
@@ -365,7 +371,7 @@ for score in re.split(r"\sNextScore\s"," "+inDat+" "):
    notehead_markup.initOneScore(midi)
    lyrics = "" ; headers = {}
    out = [] ; maxBeams = 0 ; need_final_barline = 0
-   closeBracesNeeded = 0 ; lastPtr = 0
+   repeatStack = [] ; lastPtr = 0
    escaping = inTranspose = 0
    for line in score.split("\n"):
     line = fix_fullwidth(line).strip()
@@ -447,16 +453,25 @@ for score in re.split(r"\sNextScore\s"," "+inDat+" "):
                 out.append(word) # Lilypond command, \p etc
             elif word=="OnePage": notehead_markup.onePage=1
             elif word=="R{":
-                closeBracesNeeded = 1
+                repeatStack.append((1,0,0))
                 out.append(r'\repeat volta 2 {')
+            elif word.startswith("R") and word.endswith("{"):
+                times = int(word[1:-1])
+                repeatStack.append((1,self.barPos,times-1))
+                out.append(r'\repeat percent %d {' % times)
             elif word=="}":
-                out.append("}"*closeBracesNeeded)
-                closeBracesNeeded = 0
+                numBraces,oldBarPos,multiplier = repeatStack.pop()
+                out.append("}"*numBraces)
+                # Re-synchronise so bar check still works if percent is less than a bar:
+                newBarPos = self.barPos
+                while newBarPos < oldBarPos: newBarPos += self.barLength
+                # newBarPos-oldBarPos now gives the remainder (mod barLength) of the percent section's length
+                self.barPos = (self.barPos + (newBarPos-oldBarPos)*multiplier) % self.barLength
             elif word=="A{":
+                repeatStack.append((2,0,0))
                 out.append(r'\alternative { {')
-                closeBracesNeeded = 2
             elif word=="|":
-                assert closeBracesNeeded==2, "| used outside an A{ .. } block"
+                assert repeatStack[-1]==2, "| should be in an A{ .. } block"
                 out.append("} {")
             elif word.endswith('[') and intor0(word[:-1]):
                 # tuplet start, e.g. 3[
@@ -489,7 +504,7 @@ for score in re.split(r"\sNextScore\s"," "+inDat+" "):
                 else: assert 0,"Unrecognised command "+word
    if notehead_markup.inBeamGroup and not midi: out[lastPtr] += ']' # needed if ending on an incomplete beat
    if inTranspose: out.append("}")
-   assert not closeBracesNeeded, "Unterminated repeat or something"
+   assert not repeatStack, "Unterminated repeat"
    assert not escaping, "Unterminated LP:"
    notehead_markup.endScore() # perform checks
    print score_start(midi)
