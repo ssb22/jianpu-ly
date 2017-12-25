@@ -13,6 +13,9 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
+# Homepage: http://people.ds.cam.ac.uk/ssb22/mwrhome/jianpu-ly.py
+# Git repository: https://github.com/ssb22/jianpu-ly
+
 # (The following doc string's format is fixed, see --html)
 r"""Run jianpu-ly < text-file > ly-file
 The text file is whitespace-separated and can contain:
