@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.146 (c) 2012-2017 Silas S. Brown
+# v1.147 (c) 2012-2017 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -238,13 +238,16 @@ class notehead_markup:
         if nBeams < self.lastNBeams: leftBeams = nBeams
         else: leftBeams = self.lastNBeams
     else: leftBeams = 0
-    oldRetLen1 = len(ret)
-    if (leftBeams or nBeams) and not midi: # must set these unconditionally regardless of what we think their current values are (Lilypond's own beamer can change them from note to note)
+    if leftBeams: assert nBeams, "following logic assumes if (leftBeams or nBeams) == if nBeams"
+    if not nBeams and self.inBeamGroup:
+        aftrlast0 = "] "
+        self.inBeamGroup = 0
+    else: aftrlast0 = ""
+    if nBeams and not midi: # must set these unconditionally regardless of what we think their current values are (Lilypond's own beamer can change them from note to note)
         # TODO: is there any version of Lilypond that will need this lot done even if leftBeams==nBeams==0 ?
         # TODO: song 5 q0 at end ?  ok in 16
         ret += (r"\set stemLeftBeamCount = #%d"+"\n") % leftBeams
         ret += (r"\set stemRightBeamCount = #%d"+"\n") % nBeams
-    oldRetLen2 = len(ret)
     if '1'<=figure<='7': self.current_accidentals[octave][int(figure)-1] = accidental
     if not midi:
         if ret: ret = ret.rstrip()+"\n" # try to keep the .ly code vaguely readable
@@ -256,10 +259,8 @@ class notehead_markup:
     while b < nBeams: b,length,toAdd = b+1,length*2,toAdd/2
     if dot: toAdd += toAdd/2
     ret += ("%d" % length + dot)
-    if not self.inBeamGroup and not midi:
-        # Even if not nBeams, we might still need to start a '['
-        # (and override stemLeftBeamCount etc above), unless we
-        # can re-test on ALL Lilypond versions that it's OK not to.
+    if nBeams and not self.inBeamGroup and not midi:
+        # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
         ret += '['
         self.inBeamGroup = 1
     if not self.tuplet[0]==self.tuplet[1]:
@@ -267,14 +268,11 @@ class notehead_markup:
     self.barPos += toAdd
     # sys.stderr.write(accidental+figure+octave+dot+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
     assert self.barPos <= self.barLength, "barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (figure,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo)
-    if self.barPos%self.beatLength == 0 and (nBeams or self.barPos==self.barLength) and self.inBeamGroup: # (self.inBeamGroup is set only if not midi)
+    if self.barPos%self.beatLength == 0 and self.inBeamGroup: # (self.inBeamGroup is set only if not midi)
         # jianpu printouts tend to restart beams every beat
         # (but if there are no beams running anyway, it occasionally helps typesetting to keep the logical group running, e.g. to work around bugs involving beaming a dash-and-rest beat in 6/8) (TODO: what if there's a dash-and-rest BAR?  [..]-notated beams don't usually work across barlines
         ret += ']'
         self.inBeamGroup = 0 # DON'T reset lastNBeams here (needed for start-of-group accidental logic)
-    if ret.endswith("[]") and not leftBeams and not nBeams:
-        # remove needless overrides (if any were added; if not then oldRetLen1 == oldRetLen2 anyway) and the "[]"
-        ret = ret[:oldRetLen1]+ret[oldRetLen2:-2]
     self.lastNBeams = nBeams
     if self.barPos == self.barLength:
         self.barPos = 0 ; self.barNo += 1
@@ -293,7 +291,7 @@ class notehead_markup:
         if midi: b4last, aftrlast = "", " ~"
         else: b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
     else: b4last,aftrlast = "",""
-    return b4last,aftrlast,ret
+    return b4last,aftrlast0+aftrlast,ret
 
 notehead_markup = notehead_markup()
 
