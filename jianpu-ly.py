@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.147 (c) 2012-2017 Silas S. Brown
+# v1.148 (c) 2012-2017 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -51,7 +51,7 @@ Other 1-word Lilypond \ commands: \fermata \> \! \( \) etc
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
 """
 
-import sys
+import sys,os,re,string
 if not sys.version_info[0]==2:
     sys.stderr.write("Sorry, jianpu-ly cannot run on Python "+repr(sys.version_info[0])+"\nPlease use Python 2.x\n")
     sys.exit(1)
@@ -210,18 +210,16 @@ class notehead_markup:
     if figure not in self.defines_done and not midi:
         # Define a notehead graphical object for the figure
         self.defines_done[figure] = "note-"+name
-        if figure in "0-": iType="rest"
-        else: iType="note-head"
         if figure.startswith("-"):
             figure2=u"\u2013".encode('utf-8')
         else: figure2 = figure
         ret = """#(define (%s grob grob-origin context)
-  (if (grob::has-interface grob '%s-interface)
+  (if (grob::has-interface grob 'note-head-interface)
     (begin
       (ly:grob-set-property! grob 'stencil
         (grob-interpret-markup grob
           (make-lower-markup 0.5 (make-bold-markup "%s")))))))
-""" % (self.defines_done[figure],iType,figure2)
+""" % (self.defines_done[figure],figure2)
         # TODO: chords?  Could have something like
         # (make-bold-markup (make-center-column-markup '("1" "3")))
         # but would then need to take over accidentals from
@@ -245,14 +243,15 @@ class notehead_markup:
     else: aftrlast0 = ""
     if nBeams and not midi: # must set these unconditionally regardless of what we think their current values are (Lilypond's own beamer can change them from note to note)
         # TODO: is there any version of Lilypond that will need this lot done even if leftBeams==nBeams==0 ?
-        # TODO: song 5 q0 at end ?  ok in 16
         ret += (r"\set stemLeftBeamCount = #%d"+"\n") % leftBeams
         ret += (r"\set stemRightBeamCount = #%d"+"\n") % nBeams
     if '1'<=figure<='7': self.current_accidentals[octave][int(figure)-1] = accidental
     if not midi:
         if ret: ret = ret.rstrip()+"\n" # try to keep the .ly code vaguely readable
         ret += r"  \applyOutput #'Voice #"+self.defines_done[figure]+" "
-    ret += placeholder_note
+        if placeholder_note == "r": ret += "c" # work around diagonal-tail problem with some isolated quaver rests (usually at end of bar) that's OK if it's a note
+        else: ret += placeholder_note
+    else: ret += placeholder_note # always as-is in MIDI
     ret += {"":"", "#":"is", "b":"es"}[accidental]
     if not placeholder_note=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI, put it so no-mark starts near middle C
     length = 4 ; b = 0 ; toAdd = 16 # crotchet
@@ -322,7 +321,6 @@ def parseNote(word):
             accidental = acc ; break
     return figure,nBeams,dot,octave,accidental
 
-import re,string
 if "--html" in sys.argv:
     # Write an HTML version of the doc string
     def htmlify(l): return l.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
@@ -342,6 +340,9 @@ if "--html" in sys.argv:
             print htmlify(line)
     if inTable: print "</table>"
     raise SystemExit
+if len(sys.argv)==2 and os.path.isfile(sys.argv[1]):
+    # support jianpu-ly FILE as well as jianpu-ly < FILE
+    sys.stdin = open(sys.argv[1])
 if sys.stdin.isatty():
     sys.stderr.write(__doc__)
     raise SystemExit
