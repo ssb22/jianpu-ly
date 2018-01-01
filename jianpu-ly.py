@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.148 (c) 2012-2017 Silas S. Brown
+# v1.149 (c) 2012-2018 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -365,7 +365,7 @@ inDat = sys.stdin.read()
 if inDat.startswith('\xef\xbb\xbf'): inDat = inDat[3:]
 if inDat.startswith(r'\version'):
     sys.stderr.write("jianpu-ly does not READ Lilypond code.\nPlease see the instructions.\n") ; sys.exit(1)
-print all_scores_start() ; scoreNo = 0
+print all_scores_start() ; scoreNo = 1
 for score in re.split(r"\sNextScore\s"," "+inDat+" "):
   if not score.strip(): continue
   scoreNo += 1
@@ -453,7 +453,9 @@ for score in re.split(r"\sNextScore\s"," "+inDat+" "):
                     out.append(r'\partial '+anac)
             elif word.startswith("\\") or word in ["~","(",")"]:
                 out.append(word) # Lilypond command, \p etc
-            elif word=="OnePage": notehead_markup.onePage=1
+            elif word=="OnePage":
+                if notehead_markup.onePage: sys.stderr.write("WARNING: Duplicate OnePage, did you miss out a NextScore?\n")
+                notehead_markup.onePage=1
             elif word=="R{":
                 repeatStack.append((1,0,0))
                 out.append(r'\repeat volta 2 {')
