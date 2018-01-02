@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.149 (c) 2012-2018 Silas S. Brown
+# v1.15 (c) 2012-2018 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -103,9 +103,21 @@ def score_end(midi,**headers):
     else: ret += r"\layout{}"
     return ret + " }"
 
-def jianpu_staff_start(voiceName="jianpu",maxBeams=0):
+def jianpu_voice_start(voiceName="temp"):
     if maxBeams >= 2: stemLenFrac = "0.5" # sometimes needed if the semiquavers occur in isolation rather than in groups (TODO do we need to increase this for 3+ beams in some cases?)
     else: stemLenFrac = "0"
+    return r"""\new Voice="%s" {
+    \override Beam #'transparent = ##f %% (needed for LilyPond 2.18 or the above switch will also hide beams)
+    \override Stem #'direction = #DOWN
+    \override Stem #'length-fraction = #%s
+    \override Beam #'beam-thickness = #0.1
+    \override Beam #'length-fraction = #0.5
+    \override Accidental #'font-size = #-4
+    \override Tie #'staff-position = #2.5
+    \override TupletBracket #'bracket-visibility = ##t
+    \tupletUp
+""" % (voiceName,stemLenFrac)
+def jianpu_staff_start(voiceName="jianpu"):
     # (we add "BEGIN JIANPU STAFF" and "END JIANPU STAFF" comments to make it easier to copy/paste into other Lilypond files)
     return r"""
 %% === BEGIN JIANPU STAFF ===
@@ -117,20 +129,10 @@ def jianpu_staff_start(voiceName="jianpu",maxBeams=0):
     \override StaffSymbol #'line-count = #0 %% tested in 2.15.40, 2.16.2, 2.18.0 and 2.18.2
     \override BarLine #'bar-extent = #'(-2 . 2) %% LilyPond 2.18: please make barlines as high as the time signature even though we're on a RhythmicStaff (2.16 and 2.15 don't need this although its presence doesn't hurt; Issue 3685 seems to indicate they'll fix it post-2.18)
     }
-    { \new Voice="%s" {
+    { """+jianpu_voice_start(voiceName)+r"""
     \override Staff.TimeSignature #'style = #'numbered
     \override Staff.Stem #'transparent = ##t
-    \override Beam #'transparent = ##f %% (needed for LilyPond 2.18 or the above switch will also hide beams)
-    \override Stem #'direction = #DOWN
-    \override Stem #'length-fraction = #%s
-    \override Beam #'beam-thickness = #0.1
-    \override Beam #'length-fraction = #0.5
-    \override Voice.Rest #'style = #'neomensural %% this size tends to line up better (we'll override the appearance)
-    \override Accidental #'font-size = #-4
-    \override Tie #'staff-position = #2.5
-    \override TupletBracket #'bracket-visibility = ##t
-    \tupletUp
-""" % (voiceName,stemLenFrac)
+    """
 def jianpu_staff_end(): return "} }\n% === END JIANPU STAFF ===\n" # \bar "|." is added separately if there's not a DC etc
 def midi_staff_start(voiceName="midi"):
     return r"""
@@ -238,7 +240,8 @@ class notehead_markup:
     else: leftBeams = 0
     if leftBeams: assert nBeams, "following logic assumes if (leftBeams or nBeams) == if nBeams"
     if not nBeams and self.inBeamGroup:
-        aftrlast0 = "] "
+        if not self.inBeamGroup=="restHack":
+            aftrlast0 = "] "
         self.inBeamGroup = 0
     else: aftrlast0 = ""
     if nBeams and not midi: # must set these unconditionally regardless of what we think their current values are (Lilypond's own beamer can change them from note to note)
@@ -249,16 +252,25 @@ class notehead_markup:
     if not midi:
         if ret: ret = ret.rstrip()+"\n" # try to keep the .ly code vaguely readable
         ret += r"  \applyOutput #'Voice #"+self.defines_done[figure]+" "
-        if placeholder_note == "r": ret += "c" # work around diagonal-tail problem with some isolated quaver rests (usually at end of bar) that's OK if it's a note
-        else: ret += placeholder_note
-    else: ret += placeholder_note # always as-is in MIDI
+        if placeholder_note == "r":
+            ret = jianpu_voice_start() + ret + " c"
+            # C to work around diagonal-tail problem with
+            # some isolated quaver rests in some Lilypond
+            # versions (usually at end of bar); new voice
+            # so lyrics miss it as if it were a rest
+            inRestHack = 1
+            if self.inBeamGroup and not self.inBeamGroup=="restHack": aftrlast0 = "] "
+        else:
+            ret += placeholder_note ; inRestHack = 0
+    else: # always as-is in MIDI
+        ret += placeholder_note ; inRestHack = 0
     ret += {"":"", "#":"is", "b":"es"}[accidental]
     if not placeholder_note=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI, put it so no-mark starts near middle C
     length = 4 ; b = 0 ; toAdd = 16 # crotchet
     while b < nBeams: b,length,toAdd = b+1,length*2,toAdd/2
     if dot: toAdd += toAdd/2
-    ret += ("%d" % length + dot)
-    if nBeams and not self.inBeamGroup and not midi:
+    ret += ("%d" % length) + dot
+    if nBeams and (not self.inBeamGroup or self.inBeamGroup=="restHack" or inRestHack) and not midi:
         # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
         ret += '['
         self.inBeamGroup = 1
@@ -272,6 +284,9 @@ class notehead_markup:
         # (but if there are no beams running anyway, it occasionally helps typesetting to keep the logical group running, e.g. to work around bugs involving beaming a dash-and-rest beat in 6/8) (TODO: what if there's a dash-and-rest BAR?  [..]-notated beams don't usually work across barlines
         ret += ']'
         self.inBeamGroup = 0 # DON'T reset lastNBeams here (needed for start-of-group accidental logic)
+    elif inRestHack and self.inBeamGroup:
+        ret += ']'
+        self.inBeamGroup = 'restHack'
     self.lastNBeams = nBeams
     if self.barPos == self.barLength:
         self.barPos = 0 ; self.barNo += 1
@@ -290,6 +305,7 @@ class notehead_markup:
         if midi: b4last, aftrlast = "", " ~"
         else: b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
     else: b4last,aftrlast = "",""
+    if inRestHack: ret += " } "
     return b4last,aftrlast0+aftrlast,ret
 
 notehead_markup = notehead_markup()
@@ -517,7 +533,7 @@ for score in re.split(r"\sNextScore\s"," "+inDat+" "):
        print ' '.join(out)
        print midi_staff_end()
    else:
-       print jianpu_staff_start(maxBeams=maxBeams) # TODO: multiple staffs?
+       print jianpu_staff_start() # TODO: multiple staffs?
        print '\n'.join(out)
        if need_final_barline: print r'\bar "|."'
        print jianpu_staff_end()
