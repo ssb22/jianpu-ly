@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.15 (c) 2012-2018 Silas S. Brown
+# v1.151 (c) 2012-2018 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -112,6 +112,7 @@ def jianpu_voice_start(voiceName="temp"):
     \override Stem #'length-fraction = #%s
     \override Beam #'beam-thickness = #0.1
     \override Beam #'length-fraction = #0.5
+    \override Voice.Rest #'style = #'neomensural %% this size tends to line up better (we'll override the appearance anyway)
     \override Accidental #'font-size = #-4
     \override Tie #'staff-position = #2.5
     \override TupletBracket #'bracket-visibility = ##t
@@ -147,6 +148,8 @@ def lyrics_start(voiceName="jianpu"):
 def lyrics_end(): return "} }"
 
 dashes_as_ties = True # TODO: document this.  Implements dash (-) continuations as invisible ties rather than rests; sometimes works better in awkward beaming situations
+
+use_rest_hack = True # TODO: document this
 
 class notehead_markup:
   def __init__(self):
@@ -249,21 +252,22 @@ class notehead_markup:
         ret += (r"\set stemLeftBeamCount = #%d"+"\n") % leftBeams
         ret += (r"\set stemRightBeamCount = #%d"+"\n") % nBeams
     if '1'<=figure<='7': self.current_accidentals[octave][int(figure)-1] = accidental
+    inRestHack = 0
     if not midi:
         if ret: ret = ret.rstrip()+"\n" # try to keep the .ly code vaguely readable
         ret += r"  \applyOutput #'Voice #"+self.defines_done[figure]+" "
-        if placeholder_note == "r":
-            ret = jianpu_voice_start() + ret + " c"
+        if placeholder_note == "r" and use_rest_hack:
+            placeholder_note = "c"
             # C to work around diagonal-tail problem with
             # some isolated quaver rests in some Lilypond
             # versions (usually at end of bar); new voice
             # so lyrics miss it as if it were a rest
-            inRestHack = 1
-            if self.inBeamGroup and not self.inBeamGroup=="restHack": aftrlast0 = "] "
-        else:
-            ret += placeholder_note ; inRestHack = 0
-    else: # always as-is in MIDI
-        ret += placeholder_note ; inRestHack = 0
+            if has_lyrics:
+                ret = jianpu_voice_start() + ret
+                inRestHack = 1
+                if self.inBeamGroup and not self.inBeamGroup=="restHack": aftrlast0 = "] "
+    ret += placeholder_note
+    if placeholder_note=="r": ret=ret.replace("note-head-interface","rest-interface")
     ret += {"":"", "#":"is", "b":"es"}[accidental]
     if not placeholder_note=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI, put it so no-mark starts near middle C
     length = 4 ; b = 0 ; toAdd = 16 # crotchet
@@ -385,6 +389,8 @@ print all_scores_start() ; scoreNo = 1
 for score in re.split(r"\sNextScore\s"," "+inDat+" "):
   if not score.strip(): continue
   scoreNo += 1
+  wordSet = set(score.split())
+  has_lyrics = "L:" in wordSet or "H:" in wordSet
   for midi in [0,1]:
    notehead_markup.initOneScore(midi)
    lyrics = "" ; headers = {}
