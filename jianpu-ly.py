@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.151 (c) 2012-2018 Silas S. Brown
+# v1.152 (c) 2012-2018 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -385,7 +385,7 @@ inDat = sys.stdin.read()
 if inDat.startswith('\xef\xbb\xbf'): inDat = inDat[3:]
 if inDat.startswith(r'\version'):
     sys.stderr.write("jianpu-ly does not READ Lilypond code.\nPlease see the instructions.\n") ; sys.exit(1)
-print all_scores_start() ; scoreNo = 1
+print all_scores_start() ; scoreNo = 0 # incr'd to 1 below
 for score in re.split(r"\sNextScore\s"," "+inDat+" "):
   if not score.strip(): continue
   scoreNo += 1
@@ -483,21 +483,23 @@ for score in re.split(r"\sNextScore\s"," "+inDat+" "):
                 out.append(r'\repeat volta 2 {')
             elif word.startswith("R") and word.endswith("{"):
                 times = int(word[1:-1])
-                repeatStack.append((1,self.barPos,times-1))
+                repeatStack.append((1,notehead_markup.barPos,times-1))
                 out.append(r'\repeat percent %d {' % times)
             elif word=="}":
                 numBraces,oldBarPos,multiplier = repeatStack.pop()
                 out.append("}"*numBraces)
                 # Re-synchronise so bar check still works if percent is less than a bar:
-                newBarPos = self.barPos
-                while newBarPos < oldBarPos: newBarPos += self.barLength
+                newBarPos = notehead_markup.barPos
+                while newBarPos < oldBarPos: newBarPos += notehead_markup.barLength
                 # newBarPos-oldBarPos now gives the remainder (mod barLength) of the percent section's length
-                self.barPos = (self.barPos + (newBarPos-oldBarPos)*multiplier) % self.barLength
+                notehead_markup.barPos = (notehead_markup.barPos + (newBarPos-oldBarPos)*multiplier) % notehead_markup.barLength
+                # TODO: update barNo also (but it's used only for error reports)
             elif word=="A{":
                 repeatStack.append((2,0,0))
                 out.append(r'\alternative { {')
             elif word=="|":
-                assert repeatStack[-1]==2, "| should be in an A{ .. } block"
+                if not repeatStack[-1][0]==2:
+                    sys.stderr.write("ERROR: | should be in an A{ .. } block (scoreNo=%d barNo=%d)\n" % (scoreNo,notehead_markup.barNo)) ; sys.exit(1)
                 out.append("} {")
             elif word.endswith('[') and intor0(word[:-1]):
                 # tuplet start, e.g. 3[
