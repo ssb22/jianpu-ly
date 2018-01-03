@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.152 (c) 2012-2018 Silas S. Brown
+# v1.153 (c) 2012-2018 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -223,7 +223,8 @@ class notehead_markup:
             figure2=u"\u2013".encode('utf-8')
         else: figure2 = figure
         ret = """#(define (%s grob grob-origin context)
-  (if (grob::has-interface grob 'note-head-interface)
+  (if (or (grob::has-interface grob 'note-head-interface)
+        (grob::has-interface grob 'rest-interface))
     (begin
       (ly:grob-set-property! grob 'stencil
         (grob-interpret-markup grob
@@ -265,13 +266,12 @@ class notehead_markup:
             # C to work around diagonal-tail problem with
             # some isolated quaver rests in some Lilypond
             # versions (usually at end of bar); new voice
-            # so lyrics miss it as if it were a rest
+            # so lyrics miss it as if it were a rest:
             if has_lyrics:
                 ret = jianpu_voice_start() + ret
                 inRestHack = 1
                 if self.inBeamGroup and not self.inBeamGroup=="restHack": aftrlast0 = "] "
     ret += placeholder_note
-    if placeholder_note=="r": ret=ret.replace("note-head-interface","rest-interface")
     ret += {"":"", "#":"is", "b":"es"}[accidental]
     if not placeholder_note=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI, put it so no-mark starts near middle C
     length = 4 ; b = 0 ; toAdd = 16 # crotchet
