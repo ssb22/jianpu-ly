@@ -103,7 +103,11 @@ def score_end(midi,**headers):
     else: ret += r"\layout{}"
     return ret + " }"
 
-def jianpu_voice_start(voiceName="temp"):
+tempCount = 0
+def jianpu_voice_start(voiceName="tmp"):
+    if voiceName=="tmp": # make it unique just in case
+        global tempCount
+        voiceName += str(tempCount) ; tempCount += 1
     if maxBeams >= 2: stemLenFrac = "0.5" # sometimes needed if the semiquavers occur in isolation rather than in groups (TODO do we need to increase this for 3+ beams in some cases?)
     else: stemLenFrac = "0"
     return r"""\new Voice="%s" {
@@ -147,9 +151,9 @@ def lyrics_start(voiceName="jianpu"):
     return r'\new Lyrics = "I%s" { \lyricsto "%s" { ' % (str(lyricsPtr).translate((string.letters*5)[:256]),voiceName)
 def lyrics_end(): return "} }"
 
-dashes_as_ties = True # TODO: document this.  Implements dash (-) continuations as invisible ties rather than rests; sometimes works better in awkward beaming situations
-
-use_rest_hack = True # TODO: document this
+dashes_as_ties = True # Implement dash (-) continuations as invisible ties rather than rests; sometimes works better in awkward beaming situations
+use_rest_hack = True # Implement short rests as notes (and if there are lyrics, creates temporary voices so the lyrics miss them); sometimes works better for beaming (at least in 2.15, 2.16 and 2.18)
+assert not (use_rest_hack and not dashes_as_ties), "This combination has not been tested"
 
 class notehead_markup:
   def __init__(self):
@@ -256,7 +260,7 @@ class notehead_markup:
     if not midi:
         if ret: ret = ret.rstrip()+"\n" # try to keep the .ly code vaguely readable
         ret += r"  \applyOutput #'Voice #"+self.defines_done[figure]+" "
-        if placeholder_note == "r" and use_rest_hack:
+        if placeholder_note == "r" and use_rest_hack and nBeams:
             placeholder_note = "c"
             # C to work around diagonal-tail problem with
             # some isolated quaver rests in some Lilypond
