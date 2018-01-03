@@ -530,7 +530,7 @@ for score in re.split(r"\sNextScore\s"," "+inDat+" "):
                     out.append(this)
                     if nBeams > maxBeams: maxBeams = nBeams
                 else: assert 0,"Unrecognised command "+word
-   if notehead_markup.inBeamGroup and not midi: out[lastPtr] += ']' # needed if ending on an incomplete beat
+   if notehead_markup.inBeamGroup and not midi and not notehead_markup.inBeamGroup=="restHack": out[lastPtr] += ']' # needed if ending on an incomplete beat
    if inTranspose: out.append("}")
    assert not repeatStack, "Unterminated repeat"
    assert not escaping, "Unterminated LP:"
