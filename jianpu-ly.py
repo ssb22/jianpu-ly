@@ -155,6 +155,8 @@ dashes_as_ties = True # Implement dash (-) continuations as invisible ties rathe
 use_rest_hack = True # Implement short rests as notes (and if there are lyrics, creates temporary voices so the lyrics miss them); sometimes works better for beaming (at least in 2.15, 2.16 and 2.18)
 assert not (use_rest_hack and not dashes_as_ties), "This combination has not been tested"
 
+def errExit(msg): sys.stderr.write("ERROR: "+msg+"\n"),sys.exit(1)
+
 class notehead_markup:
   def __init__(self):
       self.defines_done = {} ; self.initOneScore()
@@ -166,7 +168,8 @@ class notehead_markup:
       self.barNo = 1
       self.tuplet = (1,1)
       self.last_figure = None
-  def endScore(self): assert self.barPos == self.startBarPos, ("Incomplete bar at end of score %d (pos %d, should be %d)" % (scoreNo,self.barPos,self.startBarPos))
+  def endScore(self):
+      if not self.barPos == self.startBarPos: errExit("Incomplete bar at end of score %d (pos %d, should be %d)" % (scoreNo,self.barPos,self.startBarPos))
   def setTime(self,num,denom):
       self.barLength = 64*num/denom
       if denom>4 and num%3==0: self.beatLength = 24 # compound time
@@ -174,7 +177,7 @@ class notehead_markup:
   def setAnac(self,denom,dotted):
       self.barPos = self.barLength-64/denom
       if dotted: self.barPos -= 64/denom/2
-      assert self.barPos > 0, ("Anacrusis should be shorter than bar in score %d" % scoreNo)
+      if not self.barPos: errExit("Anacrusis should be shorter than bar in score %d" % scoreNo)
       self.startBarPos = self.barPos
   def __call__(self,figure,nBeams,dot,octave,accidental):
     # figure is '1'-'7' or '0' or '-'
@@ -286,7 +289,7 @@ class notehead_markup:
         toAdd = 1.0*toAdd*self.tuplet[0]/self.tuplet[1] # and hope it rounds OK (otherwise should get barcheck fail)
     self.barPos += toAdd
     # sys.stderr.write(accidental+figure+octave+dot+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
-    if self.barPos > self.barLength: sys.stderr.write("ERROR: barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)\n" % (figure,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo)),sys.exit(1)
+    if self.barPos > self.barLength: errExit("barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (figure,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
     if self.barPos%self.beatLength == 0 and self.inBeamGroup: # (self.inBeamGroup is set only if not midi)
         # jianpu printouts tend to restart beams every beat
         # (but if there are no beams running anyway, it occasionally helps typesetting to keep the logical group running, e.g. to work around bugs involving beaming a dash-and-rest beat in 6/8) (TODO: what if there's a dash-and-rest BAR?  [..]-notated beams don't usually work across barlines
@@ -503,7 +506,7 @@ for score in re.split(r"\sNextScore\s"," "+inDat+" "):
                 out.append(r'\alternative { {')
             elif word=="|":
                 if not repeatStack[-1][0]==2:
-                    sys.stderr.write("ERROR: | should be in an A{ .. } block (scoreNo=%d barNo=%d)\n" % (scoreNo,notehead_markup.barNo)) ; sys.exit(1)
+                    sys.stderr.write("| should be in an A{ .. } block (scoreNo=%d barNo=%d)" % (scoreNo,notehead_markup.barNo))
                 out.append("} {")
             elif word.endswith('[') and intor0(word[:-1]):
                 # tuplet start, e.g. 3[
@@ -533,11 +536,12 @@ for score in re.split(r"\sNextScore\s"," "+inDat+" "):
                     lastPtr = len(out)
                     out.append(this)
                     if nBeams > maxBeams: maxBeams = nBeams
-                else: assert 0,"Unrecognised command "+word
+                else: errExit("Unrecognised command "+word+" in score "+str(scoreNo))
+   if notehead_markup.barPos == 0 and notehead_markup.barNo == 1: errExit("No jianpu in score %d" % scoreNo)
    if notehead_markup.inBeamGroup and not midi and not notehead_markup.inBeamGroup=="restHack": out[lastPtr] += ']' # needed if ending on an incomplete beat
    if inTranspose: out.append("}")
-   assert not repeatStack, "Unterminated repeat"
-   assert not escaping, "Unterminated LP:"
+   if repeatStack: errExit("Unterminated repeat in score %d" % scoreNo)
+   if escaping: errExit("Unterminated LP: in score %d" % scoreNo)
    notehead_markup.endScore() # perform checks
    print score_start(midi)
    if midi:
