@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.153 (c) 2012-2018 Silas S. Brown
+# v1.154 (c) 2012-2018 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -168,6 +168,7 @@ class notehead_markup:
       self.barNo = 1
       self.tuplet = (1,1)
       self.last_figure = None
+      self.notesHad = []
   def endScore(self):
       if not self.barPos == self.startBarPos: errExit("Incomplete bar at end of score %d (pos %d, should be %d)" % (scoreNo,self.barPos,self.startBarPos))
   def setTime(self,num,denom):
@@ -185,6 +186,7 @@ class notehead_markup:
     # dot is "" or "." (dotted length)
     # octave is "", "'", "''", "," or ",,"
     # accidental is "", "#", "b"
+    self.notesHad.append(figure)
     names = {'0':'nought',
              '1':'one',
              '2':'two',
@@ -250,11 +252,11 @@ class notehead_markup:
         else: leftBeams = self.lastNBeams
     else: leftBeams = 0
     if leftBeams: assert nBeams, "following logic assumes if (leftBeams or nBeams) == if nBeams"
+    aftrlast0 = ""
     if not nBeams and self.inBeamGroup:
         if not self.inBeamGroup=="restHack":
             aftrlast0 = "] "
         self.inBeamGroup = 0
-    else: aftrlast0 = ""
     if nBeams and not midi: # must set these unconditionally regardless of what we think their current values are (Lilypond's own beamer can change them from note to note)
         # TODO: is there any version of Lilypond that will need this lot done even if leftBeams==nBeams==0 ?
         ret += (r"\set stemLeftBeamCount = #%d"+"\n") % leftBeams
@@ -289,7 +291,7 @@ class notehead_markup:
         toAdd = 1.0*toAdd*self.tuplet[0]/self.tuplet[1] # and hope it rounds OK (otherwise should get barcheck fail)
     self.barPos += toAdd
     # sys.stderr.write(accidental+figure+octave+dot+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
-    if self.barPos > self.barLength: errExit("barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (figure,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
+    if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figure,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
     if self.barPos%self.beatLength == 0 and self.inBeamGroup: # (self.inBeamGroup is set only if not midi)
         # jianpu printouts tend to restart beams every beat
         # (but if there are no beams running anyway, it occasionally helps typesetting to keep the logical group running, e.g. to work around bugs involving beaming a dash-and-rest beat in 6/8) (TODO: what if there's a dash-and-rest BAR?  [..]-notated beams don't usually work across barlines
