@@ -65,6 +65,8 @@ def all_scores_start(staff_size = 20):
 %% un-comment the next line to remove Lilypond tagline:
 %% \header { tagline="" }
 
+\pointAndClickOff
+
 \paper {
   print-all-headers = ##t %% allow per-score headers
 
