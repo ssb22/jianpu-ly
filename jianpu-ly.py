@@ -371,7 +371,7 @@ if "--html" in sys.argv:
             if not inTable:
                 print "<table border>" # "<tr><th>To get:</th><th>Type:</th></tr>"
                 inTable = 1
-            print "<tr><td>"+toGet.strip()+"</td><td><tt>"+shouldType.strip()+"</tt></td>"
+            print "<tr><td>"+toGet.strip()+"</td><td><kbd>"+shouldType.strip()+"</kbd></td>"
         else:
             if inTable: print "</table>"
             elif not justStarted: print "<br>"
