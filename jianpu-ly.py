@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.155 (c) 2012-2018 Silas S. Brown
+# v1.156 (c) 2012-2018 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -520,7 +520,7 @@ def getLY(score):
                 repeatStack.append((2,0,0))
                 out.append(r'\alternative { {')
             elif word=="|":
-                if not repeatStack[-1][0]==2:
+                if not (repeatStack and repeatStack[-1][0]==2):
                     sys.stderr.write("| should be in an A{ .. } block (scoreNo=%d barNo=%d)" % (scoreNo,notehead_markup.barNo))
                 out.append("} {")
             elif word.endswith('[') and intor0(word[:-1]):
