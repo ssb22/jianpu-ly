@@ -15,6 +15,8 @@
 
 # Homepage: http://people.ds.cam.ac.uk/ssb22/mwrhome/jianpu-ly.py
 # Git repository: https://github.com/ssb22/jianpu-ly
+# or on GitLab: https://gitlab.com/ssb22/jianpu-ly
+# or Bitbucket: https://bitbucket.org/ssb22/jianpu-ly
 
 # (The following doc string's format is fixed, see --html)
 r"""Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file)
