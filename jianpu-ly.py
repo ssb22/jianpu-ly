@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.156 (c) 2012-2018 Silas S. Brown
+# v1.157 (c) 2012-2018 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -142,6 +142,25 @@ def jianpu_staff_start(voiceName="jianpu"):
     { """+jianpu_voice_start(voiceName)+r"""
     \override Staff.TimeSignature #'style = #'numbered
     \override Staff.Stem #'transparent = ##t
+    
+    \set Voice.chordChanges = ##t
+    % This is to work around a bug in LilyPond 2.19.82.
+    % \applyOutput docs say "called for every layout object
+    % found in the context Context at the current time step"
+    % but 2.19.x breaks this by calling it for ALL contexts
+    % in the current time step, hence breaking our WithStaff
+    % by applying our jianpu numbers to the 5-line staff too.
+    % Obvious workaround is to make our function check that
+    % the context it's called with matches our jianpu voice,
+    % but I'm not sure how to do this other than by setting a
+    % property that's not otherwise used, which we can test
+    % for in the function.  So I'm 'commandeering' the
+    % "chordChanges" property (there since at least 2.15 and
+    % used by Lilypond only when it's in chord mode, which we
+    % don't use, and if someone adds a chord-mode staff then
+    % it won't print noteheads anyway): we will substitute
+    % jianpu numbers for noteheads only if chordChanges = #t.
+    
     """
 def jianpu_staff_end(): return "} }\n% === END JIANPU STAFF ===\n" # \bar "|." is added separately if there's not a DC etc
 def midi_staff_start(voiceName="midi"):
@@ -155,6 +174,7 @@ def western_staff_start(voiceName="5line"):
     \new Staff { \new Voice="%s" {
     #(set-accidental-style 'modern-cautionary)
     \override Staff.TimeSignature #'style = #'numbered
+    \set Voice.chordChanges = ##f %% for 2.19.82 bug workaround
 """ % (voiceName,)
 def western_staff_end(): return "} }\n% === END 5-LINE STAFF ===\n"
 
@@ -240,8 +260,9 @@ class notehead_markup:
             figure2=u"\u2013".encode('utf-8')
         else: figure2 = figure
         ret = """#(define (%s grob grob-origin context)
-  (if (or (grob::has-interface grob 'note-head-interface)
-        (grob::has-interface grob 'rest-interface))
+  (if (and (eq? (ly:context-property context 'chordChanges) #t)
+      (or (grob::has-interface grob 'note-head-interface)
+        (grob::has-interface grob 'rest-interface)))
     (begin
       (ly:grob-set-property! grob 'stencil
         (grob-interpret-markup grob
@@ -500,7 +521,7 @@ def getLY(score):
                 if notehead_markup.onePage: sys.stderr.write("WARNING: Duplicate OnePage, did you miss out a NextScore?\n")
                 notehead_markup.onePage=1
             elif word=="WithStaff":
-                if notehead_markup.withStaff: sys.stderr.write("WARNING: Duplicate OnePage, did you miss out a NextScore?\n")
+                if notehead_markup.withStaff: sys.stderr.write("WARNING: Duplicate WithStaff, did you miss out a NextScore?\n")
                 notehead_markup.withStaff=1
             elif word=="R{":
                 repeatStack.append((1,0,0))
