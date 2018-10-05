@@ -367,6 +367,7 @@ def parseNote(word):
     elif "s" in word: nBeams=2
     elif "d" in word: nBeams=3
     elif "h" in word: nBeams=4
+    elif "\\" in word: nBeams=len(word.split("\\"))-1 # requested by a user who found British note-length names hard to remember; won't work if the \ is placed at the start, as that'll be a Lilypond command, so to save confusion we won't put this in the docstring
     else: nBeams=0
     octave = ""
     for o in ["''","'",",,",","]:
