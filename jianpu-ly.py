@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python2
 
 # Jianpu (numbered musical notaion) for Lilypond
 # v1.157 (c) 2012-2018 Silas S. Brown
