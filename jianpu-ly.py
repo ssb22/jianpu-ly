@@ -1,7 +1,7 @@
 #!/usr/bin/env python2
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.157 (c) 2012-2018 Silas S. Brown
+# v1.158 (c) 2012-2019 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -92,7 +92,7 @@ def score_start():
     ret = "\\score {\n"
     if midi: ret += "\\unfoldRepeats\n"
     ret += r"<< "
-    if not midi: ret += ("\\override Score.BarNumber #'break-visibility = #end-of-line-invisible\n\\set Score.barNumberVisibility = #(every-nth-bar-number-visible %d)" % bar_number_every)
+    if not midi: ret += ("\\override Score.BarNumber #'break-visibility = #end-of-line-invisible\n\\override Score.BarNumber #'Y-offset = -1\n\\set Score.barNumberVisibility = #(every-nth-bar-number-visible %d)" % bar_number_every)
     return ret
 bar_number_every = 5 # TODO customise?  (anyway don't leave it numbering at start of system, doesn't work well in jianpu+lyrics)
 
@@ -110,11 +110,11 @@ def score_end(**headers):
 
 tempCount = 0
 def jianpu_voice_start(voiceName="tmp"):
+    stemLenFrac = "0" # unless overridden to 0.5 below
     if voiceName=="tmp": # make it unique just in case
         global tempCount
         voiceName += str(tempCount) ; tempCount += 1
-    if maxBeams >= 2: stemLenFrac = "0.5" # sometimes needed if the semiquavers occur in isolation rather than in groups (TODO do we need to increase this for 3+ beams in some cases?)
-    else: stemLenFrac = "0"
+    elif maxBeams >= 2: stemLenFrac = "0.5" # sometimes needed if the semiquavers occur in isolation rather than in groups (TODO do we need to increase this for 3+ beams in some cases?)
     return r"""\new Voice="%s" {
     \override Beam #'transparent = ##f %% (needed for LilyPond 2.18 or the above switch will also hide beams)
     \override Stem #'direction = #DOWN
@@ -126,7 +126,8 @@ def jianpu_voice_start(voiceName="tmp"):
     \override Tie #'staff-position = #2.5
     \override TupletBracket #'bracket-visibility = ##t
     \tupletUp
-""" % (voiceName,stemLenFrac)
+    \set Voice.chordChanges = ##t %% 2.19 bug workaround
+%%} """ % (voiceName,stemLenFrac) # chordChanges: This is to work around a bug in LilyPond 2.19.82.  \applyOutput docs say "called for every layout object found in the context Context at the current time step" but 2.19.x breaks this by calling it for ALL contexts in the current time step, hence breaking our WithStaff by applying our jianpu numbers to the 5-line staff too.  Obvious workaround is to make our function check that the context it's called with matches our jianpu voice, but I'm not sure how to do this other than by setting a property that's not otherwise used, which we can test for in the function.  So I'm 'commandeering' the "chordChanges" property (there since at least 2.15 and used by Lilypond only when it's in chord mode, which we don't use, and if someone adds a chord-mode staff then it won't print noteheads anyway): we will substitute jianpu numbers for noteheads only if chordChanges = #t.
 def jianpu_staff_start(voiceName="jianpu"):
     # (we add "BEGIN JIANPU STAFF" and "END JIANPU STAFF" comments to make it easier to copy/paste into other Lilypond files)
     return r"""
@@ -142,25 +143,6 @@ def jianpu_staff_start(voiceName="jianpu"):
     { """+jianpu_voice_start(voiceName)+r"""
     \override Staff.TimeSignature #'style = #'numbered
     \override Staff.Stem #'transparent = ##t
-    
-    \set Voice.chordChanges = ##t
-    % This is to work around a bug in LilyPond 2.19.82.
-    % \applyOutput docs say "called for every layout object
-    % found in the context Context at the current time step"
-    % but 2.19.x breaks this by calling it for ALL contexts
-    % in the current time step, hence breaking our WithStaff
-    % by applying our jianpu numbers to the 5-line staff too.
-    % Obvious workaround is to make our function check that
-    % the context it's called with matches our jianpu voice,
-    % but I'm not sure how to do this other than by setting a
-    % property that's not otherwise used, which we can test
-    % for in the function.  So I'm 'commandeering' the
-    % "chordChanges" property (there since at least 2.15 and
-    % used by Lilypond only when it's in chord mode, which we
-    % don't use, and if someone adds a chord-mode staff then
-    % it won't print noteheads anyway): we will substitute
-    % jianpu numbers for noteheads only if chordChanges = #t.
-    
     """
 def jianpu_staff_end(): return "} }\n% === END JIANPU STAFF ===\n" # \bar "|." is added separately if there's not a DC etc
 def midi_staff_start(voiceName="midi"):
@@ -186,6 +168,8 @@ def lyrics_end(): return "} }"
 
 dashes_as_ties = True # Implement dash (-) continuations as invisible ties rather than rests; sometimes works better in awkward beaming situations
 use_rest_hack = True # Implement short rests as notes (and if there are lyrics, creates temporary voices so the lyrics miss them); sometimes works better for beaming (at least in 2.15, 2.16 and 2.18)
+if '--noRestHack' in sys.argv: # TODO: document
+    use_rest_hack=False ; sys.argv.remove('--noRestHack')
 assert not (use_rest_hack and not dashes_as_ties), "This combination has not been tested"
 
 def errExit(msg): sys.stderr.write("ERROR: "+msg+"\n"),sys.exit(1)
@@ -199,7 +183,7 @@ class notehead_markup:
       self.current_accidentals = {}
       self.barNo = 1
       self.tuplet = (1,1)
-      self.last_figure = None
+      self.last_figure = None ; self.last_was_rest = False
       self.notesHad = []
   def endScore(self):
       if not self.barPos == self.startBarPos: errExit("Incomplete bar at end of score %d (pos %d, should be %d)" % (scoreNo,self.barPos,self.startBarPos))
@@ -242,7 +226,8 @@ class notehead_markup:
         '7':'b',
         '-':'r'}
     placeholder_note = placeholders[figure]
-    invisTieLast = dashes_as_ties and self.last_figure and figure=="-"
+    invisTieLast = dashes_as_ties and self.last_figure and figure=="-" and not self.last_was_rest
+    self.last_was_rest = (figure=='0' or (figure=='-' and self.last_was_rest))
     name = names[figure]
     if invisTieLast:
         figure += self.last_figure
@@ -277,6 +262,7 @@ class notehead_markup:
     if self.barPos==0 and self.barNo > 1:
         ret += "| " # barline in Lilypond file: not strictly necessary but may help readability
         if self.onePage and not midi: ret += r"\noPageBreak "
+        ret += "%{ bar "+str(self.barNo)+": %} "
     if not octave in self.current_accidentals: self.current_accidentals[octave] = [""]*7
     if figure=="-" or ('1'<=figure<='7' and not accidental==self.current_accidentals[octave][int(figure)-1]) and nBeams > self.lastNBeams: leftBeams = nBeams # beam needs to fit under the new accidental (or the dash which might be slightly to the left of where digits are), but if it's no more than last note's beams then we'll hang it only if in same beat.  (TODO: the current_accidentals logic may need revising if other accidental styles are used, e.g. modern-cautionary, although then would need to check anyway if our \consists "Accidental_engraver" is sufficient)
     # TODO: if figure=="0" then that might be typeset a bit to the left as well (because it's also a rest), however extending the line TOO far left in this case could be counterproductive
