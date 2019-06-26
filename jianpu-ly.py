@@ -370,24 +370,35 @@ def parseNote(word):
             accidental = acc ; break
     return figure,nBeams,dot,octave,accidental
 
-if "--html" in sys.argv:
-    # Write an HTML version of the doc string
-    def htmlify(l): return l.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+if "--html" in sys.argv or "--markdown" in sys.argv:
+    # Write an HTML or Markdown version of the doc string
+    def htmlify(l):
+        if "--html" in sys.argv:
+            return l.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+        else: return l
     inTable = 0 ; justStarted=1
     for line in __doc__.split("\n"):
         if not line.strip(): continue
         if ":" in line and line.split(":",1)[1].strip():
             toGet,shouldType = line.split(":",1)
             if not inTable:
-                print "<table border>" # "<tr><th>To get:</th><th>Type:</th></tr>"
+                if "--html" in sys.argv:
+                    print "<table border>" # "<tr><th>To get:</th><th>Type:</th></tr>"
+                else: print
                 inTable = 1
-            print "<tr><td>"+toGet.strip()+"</td><td><kbd>"+shouldType.strip()+"</kbd></td>"
+            if re.match(r".*[A-Za-z]\)$",shouldType):
+                shouldType,note = shouldType.rsplit("(",1)
+                note = " ("+note
+            else: note = ""
+            if "--html" in sys.argv: print "<tr><td>"+toGet.strip()+"</td><td><kbd>"+shouldType.strip()+"</kbd>"+note+"</td>"
+            else: print toGet.strip()+": `"+shouldType.strip()+"`"+note+"\n"
         else:
-            if inTable: print "</table>"
+            if "--markdown" in sys.argv: print
+            elif inTable: print "</table>"
             elif not justStarted: print "<br>"
             inTable=justStarted=0
             print htmlify(line)
-    if inTable: print "</table>"
+    if inTable and "--html" in sys.argv: print "</table>"
     raise SystemExit
 inDat = []
 for f in sys.argv[1:]:
