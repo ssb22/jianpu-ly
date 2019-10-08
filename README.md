@@ -1,8 +1,8 @@
 # jianpu-ly
 
-Jianpu in Lilypond, from http://people.ds.cam.ac.uk/ssb22/mwrhome/jianpu-ly.html
+Jianpu in Lilypond, from http://ssb22.user.srcf.net/mwrhome/jianpu-ly.html
 
-(also mirrored at http://ssb22.gitlab.io/mwrhome/jianpu-ly.html as the Cambridge "DS-Web" server sometimes gets taken down for several days of maintenance)
+(also mirrored at http://ssb22.gitlab.io/mwrhome/jianpu-ly.html just in case)
 
 jianpu-ly is a Python 2 program to assist with printing jianpu (numbered musical notation) in the GNU Lilypond music typesetter. The jianpu is written on a modiﬁed-appearance “stave” in Lilypond, which means Lilypond’s typesetting capabilities (lyric spacing, slurs, beams etc) will apply to the jianpu without needing to add a 5-line stave. If you prefer, the generated code for the jianpu stave may also be placed in a score with other types of stave. _Chords in jianpu are not supported_ by this script, unless written out as one note to a part. If you have problems, try a later Lilypond version (2.15.40-1 and 2.18.2-1 should work).
 
@@ -72,3 +72,11 @@ Other 1-word Lilypond \ commands: `\fermata \> \! \( \) etc`
 
 Other Lilypond code: `LP: (block of code) :LP` (each delimeter at start of its line)
 
+
+Copyright and Trademarks
+------------------------
+
+(c) Silas S. Brown, licensed under the GPL.
+
+Python is a trademark of the Python Software Foundation.
+Any other trademarks I mentioned without realising are trademarks of their respective holders.

@@ -13,7 +13,7 @@
 # MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 # GNU General Public License for more details.
 
-# Homepage: http://people.ds.cam.ac.uk/ssb22/mwrhome/jianpu-ly.py
+# Homepage: http://ssb22.user.srcf.net/mwrhome/jianpu-ly.py
 # Git repository: https://github.com/ssb22/jianpu-ly
 # or on GitLab: https://gitlab.com/ssb22/jianpu-ly
 # or Bitbucket: https://bitbucket.org/ssb22/jianpu-ly
