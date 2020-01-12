@@ -1,7 +1,8 @@
-#!/usr/bin/env python2
+#!/usr/bin/env python
+# (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.158 (c) 2012-2019 Silas S. Brown
+# v1.3 (c) 2012-2020 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -54,10 +55,14 @@ Other 1-word Lilypond \ commands: \fermata \> \! \( \) etc
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
 """
 
-import sys,os,re,string
-if not sys.version_info[0]==2:
-    sys.stderr.write("Sorry, jianpu-ly cannot run on Python "+repr(sys.version_info[0])+"\nPlease use Python 2.x\n")
-    sys.exit(1)
+import sys,os,re
+if type(u"")==type(""): # Python 3
+    unichr,xrange = chr,range
+    from string import ascii_letters as letters
+else: from string import letters # Python 2
+def asUnicode(l):
+    if type(l)==type(u""): return l
+    return l.decode('utf-8')
 
 def all_scores_start(staff_size = 20):
     # staff_size is the 5-line size in points; jianpu is smaller
@@ -163,7 +168,7 @@ def western_staff_end(): return "} }\n% === END 5-LINE STAFF ===\n"
 lyricsPtr = 0
 def lyrics_start(voiceName="jianpu"):
     global lyricsPtr ; lyricsPtr += 1 # TODO: encapsulate
-    return r'\new Lyrics = "I%s" { \lyricsto "%s" { ' % (str(lyricsPtr).translate((string.letters*5)[:256]),voiceName)
+    return r'\new Lyrics = "I%s" { \lyricsto "%s" { ' % (str(lyricsPtr).translate((letters*5)[:256]),voiceName)
 def lyrics_end(): return "} }"
 
 dashes_as_ties = True # Implement dash (-) continuations as invisible ties rather than rests; sometimes works better in awkward beaming situations
@@ -242,7 +247,8 @@ class notehead_markup:
         # Define a notehead graphical object for the figure
         self.defines_done[figure] = "note-"+name
         if figure.startswith("-"):
-            figure2=u"\u2013".encode('utf-8')
+            figure2=u"\u2013"
+            if not type(u"")==type(""): figure2=figure2.encode('utf-8')
         else: figure2 = figure
         ret = """#(define (%s grob grob-origin context)
   (if (and (eq? (ly:context-property context 'chordChanges) #t)
@@ -383,22 +389,22 @@ if "--html" in sys.argv or "--markdown" in sys.argv:
             toGet,shouldType = line.split(":",1)
             if not inTable:
                 if "--html" in sys.argv:
-                    print "<table border>" # "<tr><th>To get:</th><th>Type:</th></tr>"
+                    print ("<table border>") # "<tr><th>To get:</th><th>Type:</th></tr>"
                 else: print
                 inTable = 1
             if re.match(r".*[A-Za-z]\)$",shouldType):
                 shouldType,note = shouldType.rsplit("(",1)
                 note = " ("+note
             else: note = ""
-            if "--html" in sys.argv: print "<tr><td>"+toGet.strip()+"</td><td><kbd>"+shouldType.strip()+"</kbd>"+note+"</td>"
-            else: print toGet.strip()+": `"+shouldType.strip()+"`"+note+"\n"
+            if "--html" in sys.argv: print ("<tr><td>"+toGet.strip()+"</td><td><kbd>"+shouldType.strip()+"</kbd>"+note+"</td>")
+            else: print (toGet.strip()+": `"+shouldType.strip()+"`"+note+"\n")
         else:
             if "--markdown" in sys.argv: print
-            elif inTable: print "</table>"
-            elif not justStarted: print "<br>"
+            elif inTable: print ("</table>")
+            elif not justStarted: print ("<br>")
             inTable=justStarted=0
-            print htmlify(line)
-    if inTable and "--html" in sys.argv: print "</table>"
+            print (htmlify(line))
+    if inTable and "--html" in sys.argv: print ("</table>")
     raise SystemExit
 inDat = []
 for f in sys.argv[1:]:
@@ -411,14 +417,17 @@ if not inDat:
     inDat=[sys.stdin.read()]
 
 def fix_fullwidth(t):
-    utext = t.decode('utf-8')
+    if type(u"")==type(""): utext = t
+    else: utext = t.decode('utf-8')
     r = []
     for c in utext:
         if 0xff01<=ord(c)<=0xff5e: r.append(unichr(ord(c)-0xfee0))
         elif c==unichr(0x201a): r.append(",") # sometimes used as comma (incorrectly)
         elif c==unichr(0xff61): r.append(".")
         else: r.append(c)
-    return u"".join(r).encode('utf-8')
+    utext = u"".join(r)
+    if type(u"")==type(""): return utext
+    else: return utext.encode('utf-8')
 
 def intor0(w):
     try: return int(w)
@@ -460,18 +469,19 @@ def getLY(score):
         line = line[2:].strip()
         lyrics += lyrics_start()
         toAdd = ""
-        if line and '1' <= line[0] <= '9' and (line[1]=='.' or line.decode('utf-8')[1]==u"\uff0e"):
+        if line and '1' <= line[0] <= '9' and (line[1]=='.' or asUnicode(line)[1]==u"\uff0e"):
             # a verse number
             toAdd = r'\set stanza = #"%s." ' % line[:1]
             if line[1]=='.': line=line[2:]
-            else: line=line[4:] # for utf-8 full-width dot
+            elif not type(line)==type(u""): line=line[4:] # for utf-8 full-width dot in Python 2
+            else: line = line[2:] # for full-width dot in Python 3
             line = line.strip()
         if do_hanzi_spacing: # this is not 100% perfect...
             l2 = [r"\override LyricText #'self-alignment-X = #LEFT "] # for overhanging commas etc to work
             if toAdd:
                 l2.append(toAdd) ; toAdd = ""
             needSpace = 0
-            for c in list(line.decode('utf-8')):
+            for c in list(asUnicode(line)):
                 if needSpace and (0x4e00 <= ord(c) < 0xa700 or c in u"\u2018\u201c"):
                     l2.append(' ') ; needSpace = 0
                     if c in u"\u2018\u201c":
@@ -479,7 +489,8 @@ def getLY(score):
                         l2.append(r"\once \override LyricText #'self-alignment-X = #CENTER ") # or RIGHT if there's no punctuation after
                 if 0x4e00 <= ord(c) < 0xa700: needSpace=1
                 l2.append(c)
-            line = u"".join(l2).encode('utf-8')
+            line = u"".join(l2)
+            if not type("")==type(u""): line = line.encode('utf-8') # Python 2
         lyrics += toAdd+line.replace(" -- "," --\n")+" "+lyrics_end()+" "
     elif line.replace(' =','=').split()[0].find('=') >= 2:
         # not (e.g.) 1=C, so assume it's a Lilypond header
@@ -542,7 +553,7 @@ def getLY(score):
                 out.append(r'\alternative { {')
             elif word=="|":
                 if not (repeatStack and repeatStack[-1][0]==2):
-                    sys.stderr.write("| should be in an A{ .. } block (scoreNo=%d barNo=%d)" % (scoreNo,notehead_markup.barNo))
+                    sys.stderr.write("| should be in an A{ .. } block (scoreNo=%d barNo=%d)\n" % (scoreNo,notehead_markup.barNo))
                 out.append("} {")
             elif word.endswith('[') and intor0(word[:-1]):
                 # tuplet start, e.g. 3[
@@ -589,7 +600,7 @@ def getLY(score):
        out = out.replace(r"\new RhythmicStaff \with {",r"\new RhythmicStaff \with { \override VerticalAxisGroup.default-staff-staff-spacing = #'((basic-distance . 6) (minimum-distance . 6) (stretchability . 0)) ") # don't let it hang too far up in the air
    return out,maxBeams,lyrics,headers
 
-print all_scores_start() ; scoreNo = 0 # incr'd to 1 below
+print (all_scores_start()) ; scoreNo = 0 # incr'd to 1 below
 western = False
 for score in re.split(r"\sNextScore\s"," "+inDat+" "):
   if not score.strip(): continue
@@ -597,14 +608,14 @@ for score in re.split(r"\sNextScore\s"," "+inDat+" "):
   wordSet = set(score.split())
   has_lyrics = "L:" in wordSet or "H:" in wordSet # the occasional false positive doesn't matter: has_lyrics==False is only an optimisation
   for midi in [0,1]:
-   print score_start()
+   print (score_start())
    out,maxBeams,lyrics,headers = getLY(score)
    if midi:
-       print midi_staff_start(),out,midi_staff_end()
+       print (midi_staff_start()+" "+out+" "+midi_staff_end())
    else:
-       print jianpu_staff_start(),out,jianpu_staff_end()
+       print (jianpu_staff_start()+" "+out+" "+jianpu_staff_end())
        if notehead_markup.withStaff:
-           western=True ; print western_staff_start(),getLY(score)[0],western_staff_end() ; western = False
+           western=True ; print (western_staff_start()+" "+getLY(score)[0]+" "+western_staff_end()) ; western = False
            lyrics = lyrics.replace(r'\lyricsto "jianpu"',r'\lyricsto "5line"')
-       if lyrics: print lyrics
-   print score_end(**headers)
+       if lyrics: print (lyrics)
+   print (score_end(**headers))
