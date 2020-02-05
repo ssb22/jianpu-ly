@@ -326,7 +326,7 @@ class notehead_markup:
         ret += ']'
         self.inBeamGroup = 'restHack'
     self.lastNBeams = nBeams
-    if self.barPos == self.barLength:
+    if abs(self.barLength - self.barPos) < 0.001:
         self.barPos = 0 ; self.barNo += 1
         self.current_accidentals = {}
     # Octave dots:
