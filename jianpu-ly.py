@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.31 (c) 2012-2020 Silas S. Brown
+# v1.32 (c) 2012-2020 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -56,6 +56,7 @@ Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its lin
 """
 
 import sys,os,re
+from fractions import Fraction as F # requires Python 2.6+
 if type(u"")==type(""): # Python 3
     unichr,xrange = chr,range
     from string import ascii_letters as letters
@@ -132,7 +133,7 @@ def jianpu_voice_start(voiceName="tmp"):
     \override TupletBracket #'bracket-visibility = ##t
     \tupletUp
     \set Voice.chordChanges = ##t %% 2.19 bug workaround
-%%} """ % (voiceName,stemLenFrac) # chordChanges: This is to work around a bug in LilyPond 2.19.82.  \applyOutput docs say "called for every layout object found in the context Context at the current time step" but 2.19.x breaks this by calling it for ALL contexts in the current time step, hence breaking our WithStaff by applying our jianpu numbers to the 5-line staff too.  Obvious workaround is to make our function check that the context it's called with matches our jianpu voice, but I'm not sure how to do this other than by setting a property that's not otherwise used, which we can test for in the function.  So I'm 'commandeering' the "chordChanges" property (there since at least 2.15 and used by Lilypond only when it's in chord mode, which we don't use, and if someone adds a chord-mode staff then it won't print noteheads anyway): we will substitute jianpu numbers for noteheads only if chordChanges = #t.
+""" % (voiceName,stemLenFrac) # chordChanges: This is to work around a bug in LilyPond 2.19.82.  \applyOutput docs say "called for every layout object found in the context Context at the current time step" but 2.19.x breaks this by calling it for ALL contexts in the current time step, hence breaking our WithStaff by applying our jianpu numbers to the 5-line staff too.  Obvious workaround is to make our function check that the context it's called with matches our jianpu voice, but I'm not sure how to do this other than by setting a property that's not otherwise used, which we can test for in the function.  So I'm 'commandeering' the "chordChanges" property (there since at least 2.15 and used by Lilypond only when it's in chord mode, which we don't use, and if someone adds a chord-mode staff then it won't print noteheads anyway): we will substitute jianpu numbers for noteheads only if chordChanges = #t.
 def jianpu_staff_start(voiceName="jianpu"):
     # (we add "BEGIN JIANPU STAFF" and "END JIANPU STAFF" comments to make it easier to copy/paste into other Lilypond files)
     return r"""
@@ -184,7 +185,8 @@ class notehead_markup:
       self.defines_done = {} ; self.initOneScore()
   def initOneScore(self):
       self.barLength = 64 ; self.beatLength = 16 # in 64th notes
-      self.barPos = self.startBarPos = self.inBeamGroup = self.lastNBeams = self.onePage = self.withStaff = 0
+      self.barPos = self.startBarPos = F(0)
+      self.inBeamGroup = self.lastNBeams = self.onePage = self.withStaff = 0
       self.current_accidentals = {}
       self.barNo = 1
       self.tuplet = (1,1)
@@ -197,8 +199,8 @@ class notehead_markup:
       if denom>4 and num%3==0: self.beatLength = 24 # compound time
       else: self.beatLength = 16
   def setAnac(self,denom,dotted):
-      self.barPos = self.barLength-int(64/denom)
-      if dotted: self.barPos -= int(int(64/denom)/2)
+      self.barPos = F(self.barLength)-F(64)/denom
+      if dotted: self.barPos -= F(64)/denom/2
       if not self.barPos: errExit("Anacrusis should be shorter than bar in score %d" % scoreNo)
       self.startBarPos = self.barPos
   def __call__(self,figure,nBeams,dot,octave,accidental):
@@ -304,16 +306,16 @@ class notehead_markup:
     ret += placeholder_note
     ret += {"":"", "#":"is", "b":"es"}[accidental]
     if not placeholder_note=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI + Western, put it so no-mark starts near middle C
-    length = 4 ; b = 0 ; toAdd = 16 # crotchet
-    while b < nBeams: b,length,toAdd = b+1,length*2,int(toAdd/2)
-    if dot: toAdd += int(toAdd/2)
+    length = 4 ; b = 0 ; toAdd = F(16) # crotchet
+    while b < nBeams: b,length,toAdd = b+1,length*2,toAdd/2
+    if dot: toAdd += toAdd/2
     ret += ("%d" % length) + dot
     if nBeams and (not self.inBeamGroup or self.inBeamGroup=="restHack" or inRestHack) and not midi and not western:
         # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
         ret += '['
         self.inBeamGroup = 1
     if not self.tuplet[0]==self.tuplet[1]:
-        toAdd = 1.0*toAdd*self.tuplet[0]/self.tuplet[1] # and hope it rounds OK (otherwise should get barcheck fail)
+        toAdd = toAdd*self.tuplet[0]/self.tuplet[1]
     self.barPos += toAdd
     # sys.stderr.write(accidental+figure+octave+dot+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
     if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figure,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
