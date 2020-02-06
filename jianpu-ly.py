@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.3 (c) 2012-2020 Silas S. Brown
+# v1.31 (c) 2012-2020 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -193,12 +193,12 @@ class notehead_markup:
   def endScore(self):
       if not self.barPos == self.startBarPos: errExit("Incomplete bar at end of score %d (pos %d, should be %d)" % (scoreNo,self.barPos,self.startBarPos))
   def setTime(self,num,denom):
-      self.barLength = 64*num/denom
+      self.barLength = int(64*num/denom)
       if denom>4 and num%3==0: self.beatLength = 24 # compound time
       else: self.beatLength = 16
   def setAnac(self,denom,dotted):
-      self.barPos = self.barLength-64/denom
-      if dotted: self.barPos -= 64/denom/2
+      self.barPos = self.barLength-int(64/denom)
+      if dotted: self.barPos -= int(int(64/denom)/2)
       if not self.barPos: errExit("Anacrusis should be shorter than bar in score %d" % scoreNo)
       self.startBarPos = self.barPos
   def __call__(self,figure,nBeams,dot,octave,accidental):
@@ -305,8 +305,8 @@ class notehead_markup:
     ret += {"":"", "#":"is", "b":"es"}[accidental]
     if not placeholder_note=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI + Western, put it so no-mark starts near middle C
     length = 4 ; b = 0 ; toAdd = 16 # crotchet
-    while b < nBeams: b,length,toAdd = b+1,length*2,toAdd/2
-    if dot: toAdd += toAdd/2
+    while b < nBeams: b,length,toAdd = b+1,length*2,int(toAdd/2)
+    if dot: toAdd += int(toAdd/2)
     ret += ("%d" % length) + dot
     if nBeams and (not self.inBeamGroup or self.inBeamGroup=="restHack" or inRestHack) and not midi and not western:
         # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
@@ -560,8 +560,8 @@ def getLY(score):
                 fitIn = int(word[:-1])
                 i=2
                 while i<fitIn: i*=2
-                if i==fitIn: num=fitIn*3/2
-                else: num=i/2
+                if i==fitIn: num=int(fitIn*3/2)
+                else: num=int(i/2)
                 out.append("\\times %d/%d {" % (num,fitIn))
                 notehead_markup.tuplet = (num,fitIn)
             elif word==']': # tuplet end
