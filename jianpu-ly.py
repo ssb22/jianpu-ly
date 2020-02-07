@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.32 (c) 2012-2020 Silas S. Brown
+# v1.33 (c) 2012-2020 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -392,7 +392,7 @@ if "--html" in sys.argv or "--markdown" in sys.argv:
             if not inTable:
                 if "--html" in sys.argv:
                     print ("<table border>") # "<tr><th>To get:</th><th>Type:</th></tr>"
-                else: print
+                else: print ("")
                 inTable = 1
             if re.match(r".*[A-Za-z]\)$",shouldType):
                 shouldType,note = shouldType.rsplit("(",1)
@@ -401,7 +401,7 @@ if "--html" in sys.argv or "--markdown" in sys.argv:
             if "--html" in sys.argv: print ("<tr><td>"+toGet.strip()+"</td><td><kbd>"+shouldType.strip()+"</kbd>"+note+"</td>")
             else: print (toGet.strip()+": `"+shouldType.strip()+"`"+note+"\n")
         else:
-            if "--markdown" in sys.argv: print
+            if "--markdown" in sys.argv: print ("")
             elif inTable: print ("</table>")
             elif not justStarted: print ("<br>")
             inTable=justStarted=0
@@ -410,13 +410,21 @@ if "--html" in sys.argv or "--markdown" in sys.argv:
     raise SystemExit
 inDat = []
 for f in sys.argv[1:]:
-    try: inDat.append(open(f).read())
+    try:
+        try: inDat.append(open(f,encoding="utf-8").read()) # Python 3: try UTF-8 first
+        except: inDat.append(open(f).read()) # Python 2, or Python 3 with locale-default encoding in case it's not UTF-8
     except: errExit("Unable to read file "+f)
+if type("")==type(u""): # Python 3: please use UTF-8 for Lilypond, even if the system locale says something else
+    import codecs
+    stdin=codecs.getreader("utf-8")(sys.stdin.buffer)
+    stdout=codecs.getwriter("utf-8")(sys.stdout.buffer)
+    old_stdout, sys.stdout = sys.stdout, stdout # for print() (and keep a reference to the old one in case of overzealous gc)
+else: stdin = sys.stdin
 if not inDat:
     if sys.stdin.isatty():
         sys.stderr.write(__doc__)
         raise SystemExit
-    inDat=[sys.stdin.read()]
+    inDat=[stdin.read()]
 
 def fix_fullwidth(t):
     if type(u"")==type(""): utext = t
