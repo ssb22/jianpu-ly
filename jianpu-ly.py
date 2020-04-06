@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.33 (c) 2012-2020 Silas S. Brown
+# v1.4 (c) 2012-2020 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -45,6 +45,9 @@ Multiple movements: NextScore
 Prohibit page breaks until end of this movement: OnePage
 Add a Western staff doubling the jianpu: WithStaff
 Tuplets: 3[ q1 q1 q1 ]
+Grace notes before: g[#45] 1
+Grace notes after: 1 ['1]g
+Simple chords: 135 1 13 1
 Da capo: 1 1 Fine 1 1 1 1 1 1 DC
 Repeat (with alternate endings): R{ 1 1 1 } A{ 2 | 3 }
 Short repeats (percent): R4{ 1 2 }
@@ -180,6 +183,20 @@ assert not (use_rest_hack and not dashes_as_ties), "This combination has not bee
 
 def errExit(msg): sys.stderr.write("ERROR: "+msg+"\n"),sys.exit(1)
 
+placeholders = {
+    # for accidentals and word-fitting to work
+    # (we make them relative to the actual key later
+    # so that MIDI pitches are correct)
+    '0':'r',
+    '1':'c',
+    '2':'d',
+    '3':'e',
+    '4':'f',
+    '5':'g',
+    '6':'a',
+    '7':'b',
+    '-':'r'}
+
 class notehead_markup:
   def __init__(self):
       self.defines_done = {} ; self.initOneScore()
@@ -190,7 +207,8 @@ class notehead_markup:
       self.current_accidentals = {}
       self.barNo = 1
       self.tuplet = (1,1)
-      self.last_figure = None ; self.last_was_rest = False
+      self.last_figures = None
+      self.last_was_rest = False
       self.notesHad = []
   def endScore(self):
       if not self.barPos == self.startBarPos: errExit("Incomplete bar at end of score %d (pos %d, should be %d)" % (scoreNo,self.barPos,self.startBarPos))
@@ -203,13 +221,14 @@ class notehead_markup:
       if dotted: self.barPos -= F(64)/denom/2
       if not self.barPos: errExit("Anacrusis should be shorter than bar in score %d" % scoreNo)
       self.startBarPos = self.barPos
-  def __call__(self,figure,nBeams,dot,octave,accidental):
-    # figure is '1'-'7' or '0' or '-'
+  def __call__(self,figures,nBeams,dot,octave,accidental):
+    # figures is a chord string of '1'-'7', or '0' or '-'
     # nBeams is 0, 1, 2 .. etc (number of beams for this note)
     # dot is "" or "." (dotted length)
     # octave is "", "'", "''", "," or ",,"
     # accidental is "", "#", "b"
-    self.notesHad.append(figure)
+    if len(figures)>1 and accidental: errExit("Accidentals in chords not yet implemented") # see TODOs below
+    self.notesHad.append(figures)
     names = {'0':'nought',
              '1':'one',
              '2':'two',
@@ -219,39 +238,33 @@ class notehead_markup:
              '6':'six',
              '7':'seven',
              '-':'dash'}
-    placeholders = {
-        # for accidentals and word-fitting to work
-        # (we make them relative to the actual key later
-        # so that MIDI pitches are correct)
-        '0':'r',
-        '1':'c',
-        '2':'d',
-        '3':'e',
-        '4':'f',
-        '5':'g',
-        '6':'a',
-        '7':'b',
-        '-':'r'}
-    placeholder_note = placeholders[figure]
-    invisTieLast = dashes_as_ties and self.last_figure and figure=="-" and not self.last_was_rest
-    self.last_was_rest = (figure=='0' or (figure=='-' and self.last_was_rest))
-    name = names[figure]
-    if invisTieLast:
-        figure += self.last_figure
-        name += names[self.last_figure]
-        placeholder_note = placeholders[self.last_figure]
+    def get_placeholder_chord(figures):
+        if len(figures)==1:
+            return placeholders[figures]
+        elif not midi and not western: return 'c' # we'll override its appearance
+        else: return "< "+" ".join(placeholders[f]+"'" for f in list(figures))+" >" # (assuming all in middle octave for now, TODO how to correctly interpret octaves w.chords)
+    placeholder_chord = get_placeholder_chord(figures)
+    invisTieLast = dashes_as_ties and self.last_figures and figures=="-" and not self.last_was_rest
+    self.last_was_rest = (figures=='0' or (figures=='-' and self.last_was_rest))
+    name = ''.join(names[f] for f in figures)
+    if invisTieLast: # (so figures == "-")
+        figures += self.last_figures # (so "-" + last)
+        name += ''.join(names[f] for f in self.last_figures)
+        placeholder_chord = get_placeholder_chord(self.last_figures)
         octave = self.last_octave # for MIDI or 5-line
         accidental = self.last_accidental # ditto
-    self.last_figure = figure[-1]
+    self.last_figures = figures
+    if len(self.last_figures)>1 and self.last_figures[0]=='-': self.last_figures = self.last_figures[1:]
     self.last_octave = octave
     self.last_accidental = accidental
-    if figure not in self.defines_done and not midi and not western:
-        # Define a notehead graphical object for the figure
-        self.defines_done[figure] = "note-"+name
-        if figure.startswith("-"):
-            figure2=u"\u2013"
-            if not type(u"")==type(""): figure2=figure2.encode('utf-8')
-        else: figure2 = figure
+    if figures not in self.defines_done and not midi and not western:
+        # Define a notehead graphical object for the figures
+        self.defines_done[figures] = "note-"+name
+        if figures.startswith("-"):
+            figuresNew=u"\u2013"
+            if not type(u"")==type(""):
+                figuresNew=figuresNew.encode('utf-8')
+        else: figuresNew = figures
         ret = """#(define (%s grob grob-origin context)
   (if (and (eq? (ly:context-property context 'chordChanges) #t)
       (or (grob::has-interface grob 'note-head-interface)
@@ -259,21 +272,22 @@ class notehead_markup:
     (begin
       (ly:grob-set-property! grob 'stencil
         (grob-interpret-markup grob
-          (make-lower-markup 0.5 (make-bold-markup "%s")))))))
-""" % (self.defines_done[figure],figure2)
-        # TODO: chords?  Could have something like
-        # (make-bold-markup (make-center-column-markup '("1" "3")))
-        # but would then need to take over accidentals from
-        # Lilypond, + make sure all notes aligned correctly
-        # (+ Tie's overriden position may need adjusting)
+          """ % self.defines_done[figures]
+        if len(figuresNew)==1 or figures.startswith("-"): ret += """(make-lower-markup 0.5 (make-bold-markup "%s")))))))
+""" % figuresNew
+        else: ret += """(markup (#:lower 0.5
+          (#:override (cons (quote direction) 1)
+          (#:override (cons (quote baseline-skip) 1.8)
+          (#:dir-column (\n""" + "".join('    #:line (#:bold "'+f+'")\n' for f in figuresNew) + """)))))))))))
+""" # TODO: can do accidentals e.g. #:halign 1 #:line ((#:fontsize -5 (#:raise 0.7 (#:flat))) (#:bold "3")) but might cause the beam not to extend its full length if this chord occurs at the end of a beamed group, + accidentals won't be tracked by Lilypond and would have be taken care of by jianpu-ly (which might mean if any chord has an accidental on one of its notes we'd have to do all notes in that bar like this, whether they are chords or not)
     else: ret = ""
     if self.barPos==0 and self.barNo > 1:
         ret += "| " # barline in Lilypond file: not strictly necessary but may help readability
         if self.onePage and not midi: ret += r"\noPageBreak "
         ret += "%{ bar "+str(self.barNo)+": %} "
     if not octave in self.current_accidentals: self.current_accidentals[octave] = [""]*7
-    if figure=="-" or ('1'<=figure<='7' and not accidental==self.current_accidentals[octave][int(figure)-1]) and nBeams > self.lastNBeams: leftBeams = nBeams # beam needs to fit under the new accidental (or the dash which might be slightly to the left of where digits are), but if it's no more than last note's beams then we'll hang it only if in same beat.  (TODO: the current_accidentals logic may need revising if other accidental styles are used, e.g. modern-cautionary, although then would need to check anyway if our \consists "Accidental_engraver" is sufficient)
-    # TODO: if figure=="0" then that might be typeset a bit to the left as well (because it's also a rest), however extending the line TOO far left in this case could be counterproductive
+    if figures=="-" or all('1'<=figure<='7' and not accidental==self.current_accidentals[octave][int(figure)-1] for figure in list(figures)) and nBeams > self.lastNBeams: leftBeams = nBeams # beam needs to fit under the new accidental (or the dash which might be slightly to the left of where digits are), but if it's no more than last note's beams then we'll hang it only if in same beat.  (TODO: the current_accidentals logic may need revising if other accidental styles are used, e.g. modern-cautionary, although then would need to check anyway if our \consists "Accidental_engraver" is sufficient)
+    # TODO: if figures=="0" then that might be typeset a bit to the left as well (because it's also a rest), however extending the line TOO far left in this case could be counterproductive
     elif self.inBeamGroup:
         if nBeams < self.lastNBeams: leftBeams = nBeams
         else: leftBeams = self.lastNBeams
@@ -288,13 +302,18 @@ class notehead_markup:
         # TODO: is there any version of Lilypond that will need this lot done even if leftBeams==nBeams==0 ?
         ret += (r"\set stemLeftBeamCount = #%d"+"\n") % leftBeams
         ret += (r"\set stemRightBeamCount = #%d"+"\n") % nBeams
-    if '1'<=figure<='7': self.current_accidentals[octave][int(figure)-1] = accidental
+    need_space_for_accidental = False
+    for figure in list(figures):
+        if '1'<=figure<='7':
+            if not accidental==self.current_accidentals[octave][int(figure)-1]:
+                need_space_for_accidental = True
+            self.current_accidentals[octave][int(figure)-1] = accidental # TODO: not sensible (assumes accidental applies to EVERY note in the chord, see above)
     inRestHack = 0
     if not midi and not western:
         if ret: ret = ret.rstrip()+"\n" # try to keep the .ly code vaguely readable
-        ret += r"  \applyOutput #'Voice #"+self.defines_done[figure]+" "
-        if placeholder_note == "r" and use_rest_hack and nBeams:
-            placeholder_note = "c"
+        ret += r"  \applyOutput #'Voice #"+self.defines_done[figures]+" "
+        if placeholder_chord == "r" and use_rest_hack and nBeams:
+            placeholder_chord = "c"
             # C to work around diagonal-tail problem with
             # some isolated quaver rests in some Lilypond
             # versions (usually at end of bar); new voice
@@ -303,9 +322,9 @@ class notehead_markup:
                 ret = jianpu_voice_start() + ret
                 inRestHack = 1
                 if self.inBeamGroup and not self.inBeamGroup=="restHack": aftrlast0 = "] "
-    ret += placeholder_note
-    ret += {"":"", "#":"is", "b":"es"}[accidental]
-    if not placeholder_note=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI + Western, put it so no-mark starts near middle C
+    ret += placeholder_chord
+    ret += {"":"", "#":"is", "b":"es"}[accidental] # TODO: this will fail if use accidental with chord (see accidentals-in-chords TODOs above)
+    if len(placeholder_chord)==1 and not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI + Western, put it so no-mark starts near middle C (TODO: how to interpret octaves with chords?  octave applies to ALL notes in the chord?  for now we just assume all chord-notes are middle octave for the MIDI)
     length = 4 ; b = 0 ; toAdd = F(16) # crotchet
     while b < nBeams: b,length,toAdd = b+1,length*2,toAdd/2
     if dot: toAdd += toAdd/2
@@ -318,7 +337,7 @@ class notehead_markup:
         toAdd = toAdd*self.tuplet[0]/self.tuplet[1]
     self.barPos += toAdd
     # sys.stderr.write(accidental+figure+octave+dot+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
-    if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figure,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
+    if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figures,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
     if self.barPos%self.beatLength == 0 and self.inBeamGroup: # (self.inBeamGroup is set only if not midi/western)
         # jianpu printouts tend to restart beams every beat
         # (but if there are no beams running anyway, it occasionally helps typesetting to keep the logical group running, e.g. to work around bugs involving beaming a dash-and-rest beat in 6/8) (TODO: what if there's a dash-and-rest BAR?  [..]-notated beams don't usually work across barlines
@@ -346,15 +365,13 @@ class notehead_markup:
         else: b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
     else: b4last,aftrlast = "",""
     if inRestHack: ret += " } "
-    return b4last,aftrlast0+aftrlast,ret
+    return b4last,aftrlast0+aftrlast,ret, need_space_for_accidental
 
 notehead_markup = notehead_markup()
 
 def parseNote(word):
-    figure = None
-    for fig in list("01234567-"):
-        if fig in word:
-            figure = fig ; break
+    word = word.replace("8","1'").replace("9","2'")
+    figures = ''.join(re.findall('[01234567-]',word))
     if "." in word: dot="."
     else: dot=""
     if "q" in word: nBeams=1
@@ -367,16 +384,11 @@ def parseNote(word):
     for o in ["''","'",",,",","]:
         if o in word:
             octave = o ; break
-    if not figure and not "," in octave and not octave=="''":
-        if "8" in word: # 8 = 1'  8' = 1''
-            figure = "1" ; octave += "'"
-        elif "9" in word: # 9 = 2'  9' = 2''
-            figure = "2" ; octave += "'"
     accidental = ""
     for acc in ["#","b"]:
         if acc in word:
             accidental = acc ; break
-    return figure,nBeams,dot,octave,accidental
+    return figures,nBeams,dot,octave,accidental
 
 if "--html" in sys.argv or "--markdown" in sys.argv:
     # Write an HTML or Markdown version of the doc string
@@ -450,12 +462,73 @@ for i in xrange(len(inDat)):
 
 inDat = " NextScore ".join(inDat)
 
+def graceNotes_markup(notes,isAfter):
+    if isAfter: cmd = "jianpu-grace-after"
+    else: cmd = "jianpu-grace"
+    r = [] ; aftrNext = None
+    thinspace = unichr(0x2009)
+    if not type("")==type(u""): thinspace = thinspace.encode('utf-8')
+    notes = grace_octave_fix(notes)
+    for i in xrange(len(notes)):
+        n = notes[i]
+        if n=='#': r.append(r'\fontsize #-4 { \raise #0.6 { \sharp } }')
+        elif n=='b': r.append(r'\fontsize #-4 { \raise #0.4 { \flat } }')
+        elif n=="'":
+            if i and notes[i-1]==notes[i]: continue
+            if notes[i:i+2]=="''": above = ":"
+            else: above = "."
+            r.append(r"\override #'(direction . 1) \override #'(baseline-skip . 1.2) \dir-column { \line {")
+            aftrNext = r"} \line { "+'"'+thinspace+above+'" } }'
+        elif n==',':
+            if i and notes[i-1]==notes[i]: continue
+            if notes[i:i+2]==",,": below = ":"
+            else: below = "."
+            r.append(r"\override #'(baseline-skip . 1.0) \center-column { \line { ")
+            aftrNext = r"} \line { \pad-to-box #'(0 . 0) #'(-0.2 . 0) "+'"'+below+'" } }'
+        else:
+            if r and r[-1].endswith('"'):
+                r[-1] = r[-1][:-1] + n + '"'
+            else: r.append('"%s"' % n)
+            if aftrNext:
+                r.append(aftrNext) ; aftrNext = None
+    return r'^\tweak outside-staff-priority ##f ^\markup \%s { \line { %s } }' % (cmd,' '.join(r))
+def grace_octave_fix(notes):
+    if notes.endswith(',,') or notes.endswith("''"):
+        # oops, should write this BEFORE the affected note
+        return notes[:-3]+notes[-2:]+notes[-3]
+    elif notes.endswith(',') or notes.endswith("'"):
+        return notes[:-2]+notes[-1]+notes[-2]
+    else: return notes
+def gracenotes_western(notes):
+    # for western and MIDI staffs
+    notes = grace_octave_fix(notes)
+    nextAcc = "" ; next8ve = "'" ; current_accidentals = [0]*7
+    r = []
+    for i in xrange(len(notes)):
+        n = notes[i]
+        if n=='#': nextAcc = "is"
+        elif n=='b': nextAcc = "es"
+        elif n=="'":
+            if i and notes[i-1]==notes[i]: continue
+            if notes[i:i+2]=="''": next8ve = "'''"
+            else: next8ve = "''"
+        elif n==',':
+            if i and notes[i-1]==notes[i]: continue
+            if notes[i:i+2]==",,": next8ve = ","
+            else: next8ve = ""
+        else:
+            if not n in placeholders: continue # TODO: errExit ?
+            r.append(placeholders[n]+nextAcc+next8ve+"16")
+            nextAcc = "" ; next8ve = "'"
+    return ' '.join(r)
+
 def getLY(score):
    lyrics = "" ; headers = {}
    notehead_markup.initOneScore()
    out = [] ; maxBeams = 0 ; need_final_barline = 0
    repeatStack = [] ; lastPtr = 0
    escaping = inTranspose = 0
+   aftrnext = defined_jianpuGrace = defined_JGR = None
    for line in score.split("\n"):
     line = fix_fullwidth(line).strip()
     if line.startswith("LP:"):
@@ -534,7 +607,7 @@ def getLY(score):
                     else: a2,anacDotted = anac,0
                     notehead_markup.setAnac(int(a2),anacDotted)
                     out.append(r'\partial '+anac)
-            elif word.startswith("\\") or word in ["~","(",")"]:
+            elif word.startswith("\\") or word in ["(",")","~"]:
                 out.append(word) # Lilypond command, \p etc
             elif word=="OnePage":
                 if notehead_markup.onePage: sys.stderr.write("WARNING: Duplicate OnePage, did you miss out a NextScore?\n")
@@ -577,6 +650,67 @@ def getLY(score):
             elif word==']': # tuplet end
                 out.append("}")
                 notehead_markup.tuplet = (1,1)
+            elif word.startswith("g[") and word.endswith("]"):
+                if midi or western: out.append(r"\grace { " + gracenotes_western(word[2:-1]) + " }")
+                else:
+                    aftrnext = graceNotes_markup(word[2:-1],0)
+                    out.append(r"\once \textLengthOn ")
+                    if not defined_jianpuGrace:
+                        defined_jianpuGrace = True
+                        out.append(r"""#(define-markup-command (jianpu-grace layout props text)
+(markup?) "Draw right-pointing jianpu grace under text."
+(let ((textWidth (cdr (ly:stencil-extent (interpret-markup layout props (markup (#:fontsize -4 text))) 0))))
+(interpret-markup layout props
+(markup
+  #:line
+  (#:right-align
+   (#:override
+    (cons (quote baseline-skip) 0.2)
+    (#:column
+     (#:line
+      (#:fontsize -4 text)
+      #:line
+      (#:pad-to-box
+       (cons -0.1 0)  ; X padding before grace
+       (cons -1.6 0)  ; affects height of grace
+       (#:path
+        0.1
+        (list (list (quote moveto) 0 0)
+              (list (quote lineto) textWidth 0)
+              (list (quote moveto) 0 -0.3)
+              (list (quote lineto) textWidth -0.3)
+              (list (quote moveto) (* textWidth 0.5) -0.3)
+              (list (quote curveto) (* textWidth 0.5) -1 (* textWidth 0.5) -1 textWidth -1)))))))))))) """)
+            elif word.startswith("[") and word.endswith("]g"):
+                if midi or western: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + gracenotes_western(word[1:-2]) + " }"
+                else:
+                    out[lastPtr] = r"\once \textLengthOn " + out[lastPtr]
+                    out.insert(lastPtr+1,graceNotes_markup(word[1:-2],1))
+                    if not defined_JGR:
+                        defined_JGR = True
+                        out[lastPtr] = r"""#(define-markup-command (jianpu-grace-after layout props text)
+(markup?) "Draw left-pointing jianpu grace under text."
+(let ((textWidth (cdr (ly:stencil-extent (interpret-markup layout props (markup (#:fontsize -4 text))) 0))))
+(interpret-markup layout props
+(markup
+  #:line
+  (#:halign -4
+   (#:override
+    (cons (quote baseline-skip) 0.2)
+    (#:column
+     (#:line
+      (#:fontsize -4 text)
+      #:line
+      (#:pad-to-box (cons 0 0)
+       (cons -1.6 0)  ; affects height of grace
+      (#:path
+       0.1
+       (list (list (quote moveto) 0 0)
+             (list (quote lineto) textWidth 0)
+             (list (quote moveto) 0 -0.3)
+             (list (quote lineto) textWidth -0.3)
+             (list (quote moveto) (* textWidth 0.5) -0.3)
+             (list (quote curveto) (* textWidth 0.5) -1 (* textWidth 0.5) -1 0 -1)))))))))))) """ + out[lastPtr]
             elif word=="Fine":
                 need_final_barline = 0
                 out.append(r'''\once \override Score.RehearsalMark #'break-visibility = #begin-of-line-invisible \once \override Score.RehearsalMark #'self-alignment-X = #RIGHT \mark "Fine" \bar "|."''')
@@ -584,14 +718,18 @@ def getLY(score):
                 need_final_barline = 0
                 out.append(r'''\once \override Score.RehearsalMark #'break-visibility = #begin-of-line-invisible \once \override Score.RehearsalMark #'self-alignment-X = #RIGHT \mark "D.C. al Fine" \bar "||"''')
             else:
-                figure,nBeams,dot,octave,accidental = parseNote(word)
-                if figure:
+                figures,nBeams,dot,octave,accidental = parseNote(word)
+                if figures:
                     need_final_barline = 1
-                    b4last,aftrlast,this = notehead_markup(figure,nBeams,dot,octave,accidental)
+                    b4last,aftrlast,this,need_space_for_accidental = notehead_markup(figures,nBeams,dot,octave,accidental)
                     if b4last: out[lastPtr]=b4last+out[lastPtr]
-                    if aftrlast: out[lastPtr] += aftrlast
+                    if aftrlast: out.insert(lastPtr+1,aftrlast)
                     lastPtr = len(out)
                     out.append(this)
+                    if aftrnext:
+                        if need_space_for_accidental: aftrnext = aftrnext.replace(r"\markup",r"\markup \halign #2 ",1)
+                        out.append(aftrnext)
+                        aftrnext = None
                     if nBeams > maxBeams: maxBeams = nBeams
                 else: errExit("Unrecognised command "+word+" in score "+str(scoreNo))
    if notehead_markup.barPos == 0 and notehead_markup.barNo == 1: errExit("No jianpu in score %d" % scoreNo)
