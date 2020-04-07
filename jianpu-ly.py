@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.4 (c) 2012-2020 Silas S. Brown
+# v1.401 (c) 2012-2020 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -654,7 +654,7 @@ def getLY(score):
                 if midi or western: out.append(r"\grace { " + gracenotes_western(word[2:-1]) + " }")
                 else:
                     aftrnext = graceNotes_markup(word[2:-1],0)
-                    out.append(r"\once \textLengthOn ")
+                    if not self.withStaff: out.append(r"\once \textLengthOn ")
                     if not defined_jianpuGrace:
                         defined_jianpuGrace = True
                         out.append(r"""#(define-markup-command (jianpu-grace layout props text)
@@ -684,7 +684,8 @@ def getLY(score):
             elif word.startswith("[") and word.endswith("]g"):
                 if midi or western: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + gracenotes_western(word[1:-2]) + " }"
                 else:
-                    out[lastPtr] = r"\once \textLengthOn " + out[lastPtr]
+                    if not self.withStaff:
+                        out[lastPtr] = r"\once \textLengthOn " + out[lastPtr]
                     out.insert(lastPtr+1,graceNotes_markup(word[1:-2],1))
                     if not defined_JGR:
                         defined_JGR = True
