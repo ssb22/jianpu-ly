@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.402 (c) 2012-2020 Silas S. Brown
+# v1.403 (c) 2012-2020 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -491,7 +491,7 @@ def graceNotes_markup(notes,isAfter):
             else: r.append('"%s"' % n)
             if aftrNext:
                 r.append(aftrNext) ; aftrNext = None
-    return r'^\tweak outside-staff-priority ##f ^\markup \%s { \line { %s } }' % (cmd,' '.join(r))
+    return r"^\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside ^\markup \%s { \line { %s } }" % (cmd,' '.join(r))
 def grace_octave_fix(notes):
     if notes.endswith(',,') or notes.endswith("''"):
         # oops, should write this BEFORE the affected note
