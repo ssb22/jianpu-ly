@@ -52,6 +52,10 @@ Multiple movements: `NextScore`
 
 Prohibit page breaks until end of this movement: `OnePage`
 
+Suppress bar numbers: `NoBarNums`
+
+Old-style time signature: `SeparateTimesig 1=C 4/4`
+
 Add a Western staff doubling the jianpu: `WithStaff`
 
 Tuplets: `3[ q1 q1 q1 ]`

@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.403 (c) 2012-2020 Silas S. Brown
+# v1.41 (c) 2012-2020 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -43,6 +43,8 @@ Hanzi lyrics (auto space): H: hanzi (with or without spaces)
 Lilypond headers: title=the title (on a line of its own)
 Multiple movements: NextScore
 Prohibit page breaks until end of this movement: OnePage
+Suppress bar numbers: NoBarNums
+Old-style time signature: SeparateTimesig 1=C 4/4
 Add a Western staff doubling the jianpu: WithStaff
 Tuplets: 3[ q1 q1 q1 ]
 Grace notes before: g[#45] 1
@@ -101,7 +103,7 @@ def score_start():
     ret = "\\score {\n"
     if midi: ret += "\\unfoldRepeats\n"
     ret += r"<< "
-    if not midi: ret += ("\\override Score.BarNumber #'break-visibility = #end-of-line-invisible\n\\override Score.BarNumber #'Y-offset = -1\n\\set Score.barNumberVisibility = #(every-nth-bar-number-visible %d)" % bar_number_every)
+    if not notehead_markup.noBarNums and not midi: ret += ("\\override Score.BarNumber #'break-visibility = #end-of-line-invisible\n\\override Score.BarNumber #'Y-offset = -1\n\\set Score.barNumberVisibility = #(every-nth-bar-number-visible %d)" % bar_number_every)
     return ret
 bar_number_every = 5 # TODO customise?  (anyway don't leave it numbering at start of system, doesn't work well in jianpu+lyrics)
 
@@ -114,6 +116,7 @@ def score_end(**headers):
         for k,v in headers.items(): ret+=k+'="'+v+'"\n'
         ret += "}\n"
     if midi: ret += r"\midi { \context { \Score tempoWholesPerMinute = #(ly:make-moment 84 4)}}" # TODO: make this customisable (and/or check how to print BPMs in jianpu)
+    elif notehead_markup.noBarNums: ret += r'\layout { \context { \Score \remove "Bar_number_engraver" } }'
     else: ret += r"\layout{}"
     return ret + " }"
 
@@ -203,7 +206,7 @@ class notehead_markup:
   def initOneScore(self):
       self.barLength = 64 ; self.beatLength = 16 # in 64th notes
       self.barPos = self.startBarPos = F(0)
-      self.inBeamGroup = self.lastNBeams = self.onePage = self.withStaff = 0
+      self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.separateTimesig = self.withStaff = 0
       self.current_accidentals = {}
       self.barNo = 1
       self.tuplet = (1,1)
@@ -598,6 +601,7 @@ def getLY(score):
                 if ',' in word: # anacrusis
                     word,anac = word.split(",",1)
                 else: anac=""
+                if notehead_markup.separateTimesig and not midi: out.append(r'\mark \markup{'+word+'}')
                 out.append(r'\time '+word)
                 num,denom = word.split('/')
                 notehead_markup.setTime(int(num),int(denom))
@@ -612,6 +616,13 @@ def getLY(score):
             elif word=="OnePage":
                 if notehead_markup.onePage: sys.stderr.write("WARNING: Duplicate OnePage, did you miss out a NextScore?\n")
                 notehead_markup.onePage=1
+            elif word=="NoBarNums":
+                if notehead_markup.noBarNums: sys.stderr.write("WARNING: Duplicate NoBarNums, did you miss out a NextScore?\n")
+                notehead_markup.noBarNums=1
+            elif word=="SeparateTimesig":
+                if notehead_markup.separateTimesig: sys.stderr.write("WARNING: Duplicate SeparateTimesig, did you miss out a NextScore?\n")
+                notehead_markup.separateTimesig=1
+                out.append(r"\override Staff.TimeSignature #'stencil = ##f")
             elif word=="WithStaff":
                 if notehead_markup.withStaff: sys.stderr.write("WARNING: Duplicate WithStaff, did you miss out a NextScore?\n")
                 notehead_markup.withStaff=1
@@ -740,6 +751,16 @@ def getLY(score):
    if escaping: errExit("Unterminated LP: in score %d" % scoreNo)
    notehead_markup.endScore() # perform checks
    if need_final_barline and not midi: out.append(r'\bar "|."')
+   i=0
+   while i < len(out)-1:
+       while i<len(out)-1 and out[i].startswith(r'\mark \markup{') and out[i].endswith('}') and out[i+1].startswith(r'\mark \markup{') and out[i+1].endswith('}'):
+           # merge time/key signatures
+           nbsp = unichr(0xA0)
+           if not type(u"")==type(""): # Python 2
+               nbsp = nbsp.encode('utf-8')
+           out[i]=out[i][:-1]+nbsp+' '+out[i+1][len(r'\mark \markup{'):]
+           del out[i+1]
+       i += 1
    if midi or western: out = ' '.join(out)
    else: out = '\n'.join(out)
    if western: # collapse tied notes into longer notes
@@ -757,8 +778,9 @@ for score in re.split(r"\sNextScore\s"," "+inDat+" "):
   wordSet = set(score.split())
   has_lyrics = "L:" in wordSet or "H:" in wordSet # the occasional false positive doesn't matter: has_lyrics==False is only an optimisation
   for midi in [0,1]:
-   print (score_start())
    out,maxBeams,lyrics,headers = getLY(score)
+   if notehead_markup.withStaff and notehead_markup.separateTimesig: errExit("Use of both WithStaff and SeparateTimesig in the same piece is not yet implemented")
+   print (score_start())
    if midi:
        print (midi_staff_start()+" "+out+" "+midi_staff_end())
    else:
