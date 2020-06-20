@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.41 (c) 2012-2020 Silas S. Brown
+# v1.42 (c) 2012-2020 Silas S. Brown
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -72,7 +72,7 @@ def asUnicode(l):
 
 def all_scores_start(staff_size = 20):
     # staff_size is the 5-line size in points; jianpu is smaller
-    return r"""\version "2.12.2"
+    return r"""\version "2.18.0"
 #(set-global-staff-size %d)
 
 %% un-comment the next line to remove Lilypond tagline:
@@ -146,10 +146,8 @@ def jianpu_staff_start(voiceName="jianpu"):
 %% === BEGIN JIANPU STAFF ===
     \new RhythmicStaff \with {
     \consists "Accidental_engraver"
-    %% Get rid of the stave but not the barlines.
-    %% This changes between Lilypond versions.
-    %% \remove Staff_symbol_engraver %% worked pre-2.18, but 2.18 results in missing barlines (adding Barline_engraver won't help). Do this instead:
-    \override StaffSymbol #'line-count = #0 %% tested in 2.15.40, 2.16.2, 2.18.0 and 2.18.2
+    %% Get rid of the stave but not the barlines:
+    \override StaffSymbol #'line-count = #0 %% tested in 2.15.40, 2.16.2, 2.18.0, 2.18.2 and 2.20.0
     \override BarLine #'bar-extent = #'(-2 . 2) %% LilyPond 2.18: please make barlines as high as the time signature even though we're on a RhythmicStaff (2.16 and 2.15 don't need this although its presence doesn't hurt; Issue 3685 seems to indicate they'll fix it post-2.18)
     }
     { """+jianpu_voice_start(voiceName)+r"""
@@ -302,7 +300,6 @@ class notehead_markup:
             aftrlast0 = "] "
         self.inBeamGroup = 0
     if nBeams and not midi and not western: # must set these unconditionally regardless of what we think their current values are (Lilypond's own beamer can change them from note to note)
-        # TODO: is there any version of Lilypond that will need this lot done even if leftBeams==nBeams==0 ?
         ret += (r"\set stemLeftBeamCount = #%d"+"\n") % leftBeams
         ret += (r"\set stemRightBeamCount = #%d"+"\n") % nBeams
     need_space_for_accidental = False
