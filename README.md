@@ -86,7 +86,8 @@ Other Lilypond code: `LP: (block of code) :LP` (each delimeter at start of its l
 Copyright and Trademarks
 ------------------------
 
-(c) Silas S. Brown, licensed under the GPL.
+(c) Silas S. Brown, licensed under Apache 2.
 
+Apache is a registered trademark of The Apache Software Foundation.
 Python is a trademark of the Python Software Foundation.
 Any other trademarks I mentioned without realising are trademarks of their respective holders.
