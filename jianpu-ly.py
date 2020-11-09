@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.43 (c) 2012-2020 Silas S. Brown
+# v1.44 (c) 2012-2020 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -612,7 +612,11 @@ def getLY(score):
                     notehead_markup.setAnac(int(a2),anacDotted)
                     out.append(r'\partial '+anac)
             elif word.startswith("\\") or word in ["(",")","~"]:
-                out.append(word) # Lilypond command, \p etc
+                # Lilypond command, \p etc
+                if out and "afterGrace" in out[lastPtr]:
+                    # apply to inside afterGrace in midi/western
+                    out[lastPtr] = out[lastPtr][:-1] + word + " }"
+                else: out.append(word)
             elif word=="OnePage":
                 if notehead_markup.onePage: sys.stderr.write("WARNING: Duplicate OnePage, did you miss out a NextScore?\n")
                 notehead_markup.onePage=1
@@ -729,7 +733,7 @@ def getLY(score):
             elif word=="DC":
                 need_final_barline = 0
                 out.append(r'''\once \override Score.RehearsalMark #'break-visibility = #begin-of-line-invisible \once \override Score.RehearsalMark #'self-alignment-X = #RIGHT \mark "D.C. al Fine" \bar "||"''')
-            else:
+            else: # note (or unrecognised)
                 figures,nBeams,dot,octave,accidental = parseNote(word)
                 if figures:
                     need_final_barline = 1
