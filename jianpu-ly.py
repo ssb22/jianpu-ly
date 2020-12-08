@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.44 (c) 2012-2020 Silas S. Brown
+# v1.45 (c) 2012-2020 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -577,7 +577,7 @@ def getLY(score):
                 l2.append(c)
             line = u"".join(l2)
             if not type("")==type(u""): line = line.encode('utf-8') # Python 2
-        lyrics += toAdd+line.replace(" -- "," --\n")+" "+lyrics_end()+" "
+        lyrics += toAdd+re.sub("(?<=[^- ])- "," -- ",line).replace(" -- "," --\n")+" "+lyrics_end()+" "
     elif line.replace(' =','=').split()[0].find('=') >= 2:
         # not (e.g.) 1=C, so assume it's a Lilypond header
         hName,hValue = line.split("=",1)
