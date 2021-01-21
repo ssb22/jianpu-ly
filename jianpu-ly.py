@@ -21,6 +21,9 @@
 # and on GitLab: https://gitlab.com/ssb22/jianpu-ly
 # and on Bitbucket: https://bitbucket.org/ssb22/jianpu-ly
 # and at https://gitlab.developers.cam.ac.uk/ssb22/jianpu-ly
+# and in China at:
+# Gitee https://gitee.com/ssb22/jianpu-ly
+# Gitea https://gitea.com/ssb22/jianpu-ly
 
 # (The following doc string's format is fixed, see --html)
 r"""Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file)
