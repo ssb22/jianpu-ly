@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.45 (c) 2012-2020 Silas S. Brown
+# v1.46 (c) 2012-2021 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -769,9 +769,11 @@ def getLY(score):
    if midi or western: out = ' '.join(out)
    else: out = '\n'.join(out)
    if western: # collapse tied notes into longer notes
-       out = re.sub(r"(?P<note>[^ ]*)4 ~ (?P=note)4 ~ (?P=note)4 ~ (?P=note)4",r"\g<1>1",out)
-       out = re.sub(r"(?P<note>[^ ]*)4 ~ (?P=note)4 ~ (?P=note)4",r"\g<1>2.",out)
-       out = re.sub(r"(?P<note>[^ ]*)4 ~ (?P=note)4",r"\g<1>2",out)
+       out = re.sub(r"(?P<note>[^ ]*)4 +~ (?P=note)4 +~ (?P=note)4 +~ (?P=note)4",r"\g<1>1",out)
+       out = re.sub(r"(?P<note>[^ ]*)4 +~ (?P=note)4 +~ (?P=note)4",r"\g<1>2.",out)
+       out = re.sub(r"(?P<note>[^ ]*)4 +~ (?P=note)4",r"\g<1>2",out)
+       out = out.replace("r4 r4 r4 r4","r1").replace("r4 r4 r4","r2.").replace("r4 r4","r2")
+       out = re.sub(r"(%\{ bar [0-9]*: %\} )r([^ ]* \\bar)",r"\g<1>R\g<2>",out)
        out = out.replace(r"\new RhythmicStaff \with {",r"\new RhythmicStaff \with { \override VerticalAxisGroup.default-staff-staff-spacing = #'((basic-distance . 6) (minimum-distance . 6) (stretchability . 0)) ") # don't let it hang too far up in the air
    return out,maxBeams,lyrics,headers
 
