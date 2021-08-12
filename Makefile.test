@@ -1,0 +1,4 @@
+# -*- mode: makefile -*-
+test:
+	echo WithStaff 1 - 0 - | python3 jianpu-ly.py | grep r2 >/dev/null # check collapsing regexes still work
+	echo WithStaff 1 - 0 - | python2 jianpu-ly.py | grep r2 >/dev/null
