@@ -586,7 +586,7 @@ def getLY(score):
         headers[hName.strip()] = hValue.strip()
     else:
         for word in line.split():
-            if word.startswith('%'): continue # a comment
+            if word.startswith('%'): break # a comment
             elif '=' in word: # e.g. 1=C; mark
                 # Must use \transpose because \transposition doesn't always work.
                 # However, don't use \transpose if printing - it adds extra accidentals to the rhythm staff.
