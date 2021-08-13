@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.46 (c) 2012-2021 Silas S. Brown
+# v1.47 (c) 2012-2021 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -62,6 +62,7 @@ Slurs (like Lilypond's): 1 ( 2 )
 Dynamics (applies to previous note): \p \mp \f
 Other 1-word Lilypond \ commands: \fermata \> \! \( \) etc
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
+Ignored: % a comment
 """
 
 import sys,os,re
@@ -585,7 +586,8 @@ def getLY(score):
         headers[hName.strip()] = hValue.strip()
     else:
         for word in line.split():
-            if '=' in word: # e.g. 1=C; mark
+            if word.startswith('%'): continue # a comment
+            elif '=' in word: # e.g. 1=C; mark
                 # Must use \transpose because \transposition doesn't always work.
                 # However, don't use \transpose if printing - it adds extra accidentals to the rhythm staff.
                 # So we have to do separate runs of \layout and \midi (hence the outer loop).

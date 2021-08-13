@@ -86,6 +86,8 @@ Other 1-word Lilypond \ commands: `\fermata \> \! \( \) etc`
 
 Other Lilypond code: `LP: (block of code) :LP` (each delimeter at start of its line)
 
+Ignored: `% a comment`
+
 
 Copyright and Trademarks
 ------------------------
