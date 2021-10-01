@@ -60,7 +60,9 @@ Suppress bar numbers: `NoBarNums`
 
 Old-style time signature: `SeparateTimesig 1=C 4/4`
 
-Add a Western staff doubling the jianpu: `WithStaff`
+Indonesian 'not angka' style: `angka`
+
+Add a Western staff doubling the tune: `WithStaff`
 
 Tuplets: `3[ q1 q1 q1 ]`
 
