@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.5 (c) 2012-2021 Silas S. Brown
+# v1.51 (c) 2012-2021 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -586,11 +586,11 @@ def getLY(score):
         # R1*5
         # :LP
         escaping = 1
-        if len(line)>3: out.append(line[3:]) # remainder of current line
+        if len(line)>3: out.append(line[3:]+"\n") # remainder of current line
     elif line.startswith(":LP"):
         escaping = 0 # TODO: and process the rest of the line?  (assume on line of own for now)
     elif escaping:
-        out.append(line)
+        out.append(line+"\n")
     elif not line: pass
     elif line.startswith("L:") or line.startswith("H:"):
         # lyrics
@@ -814,8 +814,12 @@ def getLY(score):
            out[i]=out[i][:-1]+nbsp+' '+out[i+1][len(r'\mark \markup{'):]
            del out[i+1]
        i += 1
-   if midi or western: out = ' '.join(out)
-   else: out = '\n'.join(out)
+   for i in xrange(len(out)-1):
+       if not out[i].endswith('\n'):
+           if '\n' in out[i] or len(out[i])>60:
+               out[i] += '\n'
+           else: out[i]+=' '
+   out = ''.join(out)
    if western: # collapse tied notes into longer notes
        out = re.sub(r"(?P<note>[^ ]*)4 +~ (?P=note)4 +~ (?P=note)4 +~ (?P=note)4",r"\g<1>1",out)
        out = re.sub(r"(?P<note>[^ ]*)4 +~ (?P=note)4 +~ (?P=note)4",r"\g<1>2.",out)
