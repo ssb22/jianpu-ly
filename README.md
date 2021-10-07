@@ -42,6 +42,8 @@ Key signature (major): `1=Bb`
 
 Key signature (minor): `6=F#`
 
+Tempo: `4=85`
+
 Lyrics: `L: here are the syl- la- bles` (all on one line)
 
 Lyrics (verse 1): `L: 1. Here is verse one`

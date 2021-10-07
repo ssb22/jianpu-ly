@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.51 (c) 2012-2021 Silas S. Brown
+# v1.52 (c) 2012-2021 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -40,6 +40,7 @@ Time signature: 4/4
 Time signature with quaver anacrusis (8th-note pickup): 4/4,8
 Key signature (major): 1=Bb
 Key signature (minor): 6=F#
+Tempo: 4=85
 Lyrics: L: here are the syl- la- bles (all on one line)
 Lyrics (verse 1): L: 1. Here is verse one
 Lyrics (verse 2): L: 2. Here is verse two
@@ -121,7 +122,7 @@ def score_end(**headers):
         ret += r"\header{"+'\n'
         for k,v in headers.items(): ret+=k+'="'+v+'"\n'
         ret += "}\n"
-    if midi: ret += r"\midi { \context { \Score tempoWholesPerMinute = #(ly:make-moment 84 4)}}" # TODO: make this customisable (and/or check how to print BPMs in jianpu)
+    if midi: ret += r"\midi { \context { \Score tempoWholesPerMinute = #(ly:make-moment 84 4)}}" # will be overridden by any \tempo command used later
     elif notehead_markup.noBarNums: ret += r'\layout { \context { \Score \remove "Bar_number_engraver" } }'
     else: ret += r"\layout{}"
     return ret + " }"
@@ -577,6 +578,7 @@ def getLY(score):
    aftrnext = defined_jianpuGrace = defined_JGR = None
    for line in score.split("\n"):
     line = fix_fullwidth(line).strip()
+    line=re.sub(r"^%%\s*tempo:\s*(\S+)\s*$",r"\1",line) # to provide an upgrade path for jihuan-tian's fork
     if line.startswith("LP:"):
         # Escaped LilyPond block.  Thanks to James Harkins for this suggestion.
         # (Our internal barcheck does not understand code in LP blocks, so keep it to complete bars.)
@@ -621,14 +623,15 @@ def getLY(score):
             line = u"".join(l2)
             if not type("")==type(u""): line = line.encode('utf-8') # Python 2
         lyrics += toAdd+re.sub("(?<=[^- ])- "," -- ",line).replace(" -- "," --\n")+" "+lyrics_end()+" "
-    elif line.replace(' =','=').split()[0].find('=') >= 2:
-        # not (e.g.) 1=C, so assume it's a Lilypond header
+    elif re.match(r"\s*[A-Za-z]+\s*=",line):
+        # Lilypond header
         hName,hValue = line.split("=",1)
         headers[hName.strip()] = hValue.strip()
     else:
         for word in line.split():
             if word.startswith('%'): break # a comment
-            elif '=' in word: # e.g. 1=C; mark
+            elif re.match("[1-8]+[.]*=[1-9][0-9]*",word): out.append(r'\tempo '+word) # TODO: reduce size a little?
+            elif re.match("[16]=[A-G]",word): #key
                 # Must use \transpose because \transposition doesn't always work.
                 # However, don't use \transpose if printing - it adds extra accidentals to the rhythm staff.
                 # So we have to do separate runs of \layout and \midi (hence the outer loop).
