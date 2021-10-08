@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.52 (c) 2012-2021 Silas S. Brown
+# v1.53 (c) 2012-2021 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -269,7 +269,7 @@ class notehead_markup:
         if len(figures)==1:
             return placeholders[figures]
         elif not midi and not western: return 'c' # we'll override its appearance
-        else: return "< "+" ".join(placeholders[f]+"'" for f in list(figures))+" >" # (assuming all in middle octave for now, TODO how to correctly interpret octaves w.chords)
+        else: return "< "+" ".join(placeholders[f] for f in list(figures))+" >"
     placeholder_chord = get_placeholder_chord(figures)
     invisTieLast = dashes_as_ties and self.last_figures and figures=="-" and not self.last_was_rest
     self.last_was_rest = (figures=='0' or (figures=='-' and self.last_was_rest))
@@ -368,9 +368,16 @@ class notehead_markup:
                 ret = jianpu_voice_start() + ret
                 inRestHack = 1
                 if self.inBeamGroup and not self.inBeamGroup=="restHack": aftrlast0 = "] "
-    ret += placeholder_chord
-    ret += {"":"", "#":"is", "b":"es"}[accidental] # TODO: this will fail if use accidental with chord (see accidentals-in-chords TODOs above)
-    if len(placeholder_chord)==1 and not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI + Western, put it so no-mark starts near middle C (TODO: how to interpret octaves with chords?  octave applies to ALL notes in the chord?  for now we just assume all chord-notes are middle octave for the MIDI)
+    if placeholder_chord.startswith("<"):
+        # Octave with chords: apply to last note if up, 1st note if down
+        notes = placeholder_chord.split()[1:-1]
+        assert len(notes) >= 2
+        notes[0] += {",":"",",,":","}.get(octave,"'")
+        notes[-1] += {"'":"''","''":"'''"}.get(octave,"'")
+        ret += "< "+" ".join(notes)+" >"
+    else: # single note or rest
+        ret += placeholder_chord + {"":"", "#":"is", "b":"es"}[accidental]
+        if not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI + Western, put it so no-mark starts near middle C
     ret += ("%d" % length) + dot
     if nBeams and (not self.inBeamGroup or self.inBeamGroup=="restHack" or inRestHack) and not midi and not western:
         # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
