@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.53 (c) 2012-2021 Silas S. Brown
+# v1.54 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -425,6 +425,8 @@ notehead_markup = notehead_markup()
 def parseNote(word):
     if word==".": word = "-" # (for not angka, TODO: document that this is now acceptable as an input word?)
     word = word.replace("8","1'").replace("9","2'")
+    if type(u"")==type(""): word = word.replace(u"\u2019","'")
+    else: word=word.replace(u"\u2019".encode('utf-8'),"'")
     figures = ''.join(re.findall('[01234567-]',word))
     if "." in word: dot="."
     else: dot=""
@@ -840,7 +842,7 @@ def getLY(score):
    if not_angka: out=out.replace("make-bold-markup","make-simple-markup")
    return out,maxBeams,lyrics,headers
 
-print (all_scores_start()) ; scoreNo = 0 # incr'd to 1 below
+scoreNo = 0 # incr'd to 1 below
 western = False
 for score in re.split(r"\sNextScore\s"," "+inDat+" "):
   if not score.strip(): continue
@@ -851,6 +853,7 @@ for score in re.split(r"\sNextScore\s"," "+inDat+" "):
    not_angka = False # may be set by getLY
    out,maxBeams,lyrics,headers = getLY(score)
    if notehead_markup.withStaff and notehead_markup.separateTimesig: errExit("Use of both WithStaff and SeparateTimesig in the same piece is not yet implemented")
+   if scoreNo==1 and not midi: print (all_scores_start()) # not before here, so as not to confuse beginners who don't input a valid score 1
    print (score_start())
    if midi:
        print (midi_staff_start()+" "+out+" "+midi_staff_end())
