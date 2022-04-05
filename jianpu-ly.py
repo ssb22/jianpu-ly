@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.54 (c) 2012-2022 Silas S. Brown
+# v1.55 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -808,7 +808,14 @@ def getLY(score):
                         aftrnext = None
                     if not_angka and "'" in octave: maxBeams=max(maxBeams,len(octave)*.8+nBeams)
                     else: maxBeams=max(maxBeams,nBeams)
-                else: errExit("Unrecognised command "+word+" in score "+str(scoreNo))
+                else:
+                    msg = "Unrecognised command "+word+" in score "+str(scoreNo)
+                    if "xterm" in os.environ.get("TERM",""): msg += "\n"+re.sub(r"(\s|^)"+re.escape(word)+r"(?=\s|$)",lambda m:m.group()[:1]+"\x1b[4m"+m.group()[1:]+"\x1b[m",line)
+                    elif re.match('[ -~]*$',line): # all ASCII: we can underline the word with ^^s
+                        msg += "\n"+line+"\n"+re.sub('[^^]',' ',re.sub(r"(\s|^)"+re.escape(word)+r"(?=\s|$)",lambda m:' '+'^'*(len(m.group())-1),line))
+                    else: # don't try to underline the word (at least not without ANSI): don't know how the terminal will handle character widths
+                        msg += "\nin this line: "+line
+                    errExit(msg)
    if notehead_markup.barPos == 0 and notehead_markup.barNo == 1: errExit("No jianpu in score %d" % scoreNo)
    if notehead_markup.inBeamGroup and not midi and not western and not notehead_markup.inBeamGroup=="restHack": out[lastPtr] += ']' # needed if ending on an incomplete beat
    if inTranspose: out.append("}")
