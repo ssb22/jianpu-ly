@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.56 (c) 2012-2022 Silas S. Brown
+# v1.57 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -208,7 +208,7 @@ if '--noRestHack' in sys.argv: # TODO: document
     use_rest_hack=False ; sys.argv.remove('--noRestHack')
 assert not (use_rest_hack and not dashes_as_ties), "This combination has not been tested"
 
-def errExit(msg): sys.stderr.write("ERROR: "+msg+"\n"),sys.exit(1)
+def errExit(msg): sys.stderr.write("Error: "+msg+"\n"),sys.exit(1)
 
 placeholders = {
     # for accidentals and word-fitting to work
@@ -427,7 +427,8 @@ def parseNote(word):
     word = word.replace("8","1'").replace("9","2'")
     if type(u"")==type(""): word = word.replace(u"\u2019","'")
     else: word=word.replace(u"\u2019".encode('utf-8'),"'")
-    figures = ''.join(re.findall('[01234567-]',word))
+    if not re.match("[0-7.,'qsdh\\#b-]+$",word): figures = None # unrecognised stuff in it: flag as error, rather than ignoring and possibly getting a puzzling barsync fail
+    else: figures = ''.join(re.findall('[01234567-]',word))
     if "." in word: dot="."
     else: dot=""
     if "q" in word: nBeams=1
@@ -549,6 +550,7 @@ def graceNotes_markup(notes,isAfter):
                 r.append(aftrNext) ; aftrNext = None
     return r"^\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside ^\markup \%s { \line { %s } }" % (cmd,' '.join(r))
 def grace_octave_fix(notes):
+    notes = notes.replace("8","'1").replace("9","'2")
     if notes.endswith(',,') or notes.endswith("''"):
         # oops, should write this BEFORE the affected note
         return notes[:-3]+notes[-2:]+notes[-3]
@@ -639,8 +641,8 @@ def getLY(score):
     else:
         for word in line.split():
             if word.startswith('%'): break # a comment
-            elif re.match("[1-8]+[.]*=[1-9][0-9]*",word): out.append(r'\tempo '+word) # TODO: reduce size a little?
-            elif re.match("[16]=[A-Ga-g]",word): #key
+            elif re.match("[1-8]+[.]*=[1-9][0-9]*$",word): out.append(r'\tempo '+word) # TODO: reduce size a little?
+            elif re.match("[16]=[A-Ga-g]$",word): #key
                 # Must use \transpose because \transposition doesn't always work.
                 # However, don't use \transpose if printing - it adds extra accidentals to the rhythm staff.
                 # So we have to do separate runs of \layout and \midi (hence the outer loop).
@@ -653,7 +655,7 @@ def getLY(score):
                     out.append(r"\transpose c "+transposeTo+r" { \key c \major ") # so that MIDI or Western pitches are correct
                     inTranspose = 1
                 else: out.append(r'\mark \markup{%s}' % word.replace("b",r"\flat").replace("#",r"\sharp"))
-            elif '/' in word: # time signature
+            elif re.match("[1-9]+/[1-9]+(,[1-9]+[.]?)?$",word): # time signature
                 if ',' in word: # anacrusis
                     word,anac = word.split(",",1)
                 else: anac=""
@@ -693,7 +695,7 @@ def getLY(score):
             elif word=="R{":
                 repeatStack.append((1,0,0))
                 out.append(r'\repeat volta 2 {')
-            elif word.startswith("R") and word.endswith("{"):
+            elif re.match("R[1-9][0-9]*{$",word):
                 times = int(word[1:-1])
                 repeatStack.append((1,notehead_markup.barPos,times-1))
                 out.append(r'\repeat percent %d {' % times)
@@ -713,7 +715,7 @@ def getLY(score):
                 if not (repeatStack and repeatStack[-1][0]==2):
                     sys.stderr.write("| should be in an A{ .. } block (scoreNo=%d barNo=%d)\n" % (scoreNo,notehead_markup.barNo))
                 out.append("} {")
-            elif word.endswith('[') and intor0(word[:-1]):
+            elif re.match("[1-9][0-9]*[[]$",word):
                 # tuplet start, e.g. 3[
                 fitIn = int(word[:-1])
                 i=2
@@ -725,7 +727,7 @@ def getLY(score):
             elif word==']': # tuplet end
                 out.append("}")
                 notehead_markup.tuplet = (1,1)
-            elif word.startswith("g[") and word.endswith("]"):
+            elif re.match("g[[][#b',1-9]+[]]$",word):
                 if midi or western: out.append(r"\grace { " + gracenotes_western(word[2:-1]) + " }")
                 else:
                     aftrnext = graceNotes_markup(word[2:-1],0)
@@ -756,7 +758,7 @@ def getLY(score):
               (list (quote lineto) textWidth -0.3)
               (list (quote moveto) (* textWidth 0.5) -0.3)
               (list (quote curveto) (* textWidth 0.5) -1 (* textWidth 0.5) -1 textWidth -1)))))))))))) """)
-            elif word.startswith("[") and word.endswith("]g"):
+            elif re.match("[[][#b',1-9]+[]]g$",word):
                 if midi or western: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + gracenotes_western(word[1:-2]) + " }"
                 else:
                     if not notehead_markup.withStaff:
