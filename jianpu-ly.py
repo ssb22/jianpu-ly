@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.571 (c) 2012-2022 Silas S. Brown
+# v1.572 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -811,8 +811,11 @@ def getLY(score):
                     if not_angka and "'" in octave: maxBeams=max(maxBeams,len(octave)*.8+nBeams)
                     else: maxBeams=max(maxBeams,nBeams)
                 else:
-                    msg = "Unrecognised command "+word+" in score "+str(scoreNo)
-                    if "xterm" in os.environ.get("TERM",""): msg += "\n"+re.sub(r"(\s|^)"+re.escape(word)+r"(?=\s|$)",lambda m:m.group()[:1]+"\x1b[4m"+m.group()[1:]+"\x1b[m",line)
+                    if len(word)>60: word=word[:50]+"..."
+                    msg = "Unrecognised command %s in score %d" % (word,scoreNo)
+                    if len(line)>600: line=line[:500]+"..."
+                    if not word in line: pass # above truncations caused problems
+                    elif "xterm" in os.environ.get("TERM",""): msg += "\n"+re.sub(r"(\s|^)"+re.escape(word)+r"(?=\s|$)",lambda m:m.group()[:1]+"\x1b[4m"+m.group()[1:]+"\x1b[m",line)
                     elif re.match('[ -~]*$',line): # all ASCII: we can underline the word with ^^s
                         msg += "\n"+line+"\n"+re.sub('[^^]',' ',re.sub(r"(\s|^)"+re.escape(word)+r"(?=\s|$)",lambda m:' '+'^'*(len(m.group())-1),line))
                     else: # don't try to underline the word (at least not without ANSI): don't know how the terminal will handle character widths
