@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.58 (c) 2012-2022 Silas S. Brown
+# v1.573 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -204,15 +204,11 @@ def lyrics_end(): return "} }"
 
 dashes_as_ties = True # Implement dash (-) continuations as invisible ties rather than rests; sometimes works better in awkward beaming situations
 use_rest_hack = True # Implement short rests as notes (and if there are lyrics, creates temporary voices so the lyrics miss them); sometimes works better for beaming (at least in 2.15, 2.16 and 2.18)
-if __name__=="__main__" and '--noRestHack' in sys.argv: # TODO: document
+if '--noRestHack' in sys.argv: # TODO: document
     use_rest_hack=False ; sys.argv.remove('--noRestHack')
 assert not (use_rest_hack and not dashes_as_ties), "This combination has not been tested"
 
-def errExit(msg):
-    if __name__=="__main__":
-        sys.stderr.write("Error: "+msg+"\n")
-        sys.exit(1)
-    else: raise Exception(msg)
+def errExit(msg): sys.stderr.write("Error: "+msg+"\n"),sys.exit(1)
 
 placeholders = {
     # for accidentals and word-fitting to work
@@ -451,7 +447,7 @@ def parseNote(word):
             accidental = acc ; break
     return figures,nBeams,dot,octave,accidental
 
-def write_docs():
+if "--html" in sys.argv or "--markdown" in sys.argv:
     # Write an HTML or Markdown version of the doc string
     def htmlify(l):
         if "--html" in sys.argv:
@@ -480,30 +476,24 @@ def write_docs():
             inTable=justStarted=0
             print (htmlify(line))
     if inTable and "--html" in sys.argv: print ("</table>")
-
-def get_input():
-  inDat = []
-  for f in sys.argv[1:]:
+    raise SystemExit
+inDat = []
+for f in sys.argv[1:]:
     try:
         try: inDat.append(open(f,encoding="utf-8").read()) # Python 3: try UTF-8 first
         except: inDat.append(open(f).read()) # Python 2, or Python 3 with locale-default encoding in case it's not UTF-8
     except: errExit("Unable to read file "+f)
-  if type("")==type(u""): # Python 3: please use UTF-8 for Lilypond, even if the system locale says something else
+if type("")==type(u""): # Python 3: please use UTF-8 for Lilypond, even if the system locale says something else
     import codecs
     stdin=codecs.getreader("utf-8")(sys.stdin.buffer)
     stdout=codecs.getwriter("utf-8")(sys.stdout.buffer)
     old_stdout, sys.stdout = sys.stdout, stdout # for print() (and keep a reference to the old one in case of overzealous gc)
-  else: stdin = sys.stdin
-  if not inDat:
+else: stdin = sys.stdin
+if not inDat:
     if sys.stdin.isatty():
         sys.stderr.write(__doc__)
         raise SystemExit
-  inDat=[stdin.read()]
-  for i in xrange(len(inDat)):
-    if inDat[i].startswith('\xef\xbb\xbf'):
-      inDat[i] = inDat[i][3:]
-    if inDat[i].startswith(r'\version'): errExit("jianpu-ly does not READ Lilypond code.\nPlease see the instructions.")
-  return " NextScore ".join(inDat)
+    inDat=[stdin.read()]
 
 def fix_fullwidth(t):
     if type(u"")==type(""): utext = t
@@ -517,6 +507,17 @@ def fix_fullwidth(t):
     utext = u"".join(r)
     if type(u"")==type(""): return utext
     else: return utext.encode('utf-8')
+
+def intor0(w):
+    try: return int(w)
+    except: return 0
+
+for i in xrange(len(inDat)):
+    if inDat[i].startswith('\xef\xbb\xbf'):
+        inDat[i] = inDat[i][3:]
+    if inDat[i].startswith(r'\version'): errExit("jianpu-ly does not READ Lilypond code.\nPlease see the instructions.")
+
+inDat = " NextScore ".join(inDat)
 
 def graceNotes_markup(notes,isAfter):
     if isAfter: cmd = "jianpu-grace-after"
@@ -641,7 +642,7 @@ def getLY(score):
         for word in line.split():
             if word.startswith('%'): break # a comment
             elif re.match("[1-468]+[.]*=[1-9][0-9]*$",word): out.append(r'\tempo '+word) # TODO: reduce size a little?
-            elif re.match("[16]=[A-Ga-g]$",word): #key
+            elif re.match("[16]=[A-Ga-g][#b]?$",word): # key
                 # Must use \transpose because \transposition doesn't always work.
                 # However, don't use \transpose if printing - it adds extra accidentals to the rhythm staff.
                 # So we have to do separate runs of \layout and \midi (hence the outer loop).
@@ -714,7 +715,7 @@ def getLY(score):
                 if not (repeatStack and repeatStack[-1][0]==2):
                     sys.stderr.write("| should be in an A{ .. } block (scoreNo=%d barNo=%d)\n" % (scoreNo,notehead_markup.barNo))
                 out.append("} {")
-            elif re.match(r"[1-9][0-9]*\[$",word):
+            elif re.match("[1-9][0-9]*[[]$",word):
                 # tuplet start, e.g. 3[
                 fitIn = int(word[:-1])
                 i=2
@@ -726,7 +727,7 @@ def getLY(score):
             elif word==']': # tuplet end
                 out.append("}")
                 notehead_markup.tuplet = (1,1)
-            elif re.match(r"g\[[#b',1-9]+\]$",word):
+            elif re.match("g[[][#b',1-9]+[]]$",word):
                 if midi or western: out.append(r"\grace { " + gracenotes_western(word[2:-1]) + " }")
                 else:
                     aftrnext = graceNotes_markup(word[2:-1],0)
@@ -757,7 +758,7 @@ def getLY(score):
               (list (quote lineto) textWidth -0.3)
               (list (quote moveto) (* textWidth 0.5) -0.3)
               (list (quote curveto) (* textWidth 0.5) -1 (* textWidth 0.5) -1 textWidth -1)))))))))))) """)
-            elif re.match(r"\[[#b',1-9]+\]g$",word):
+            elif re.match("[[][#b',1-9]+[]]g$",word):
                 if midi or western: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + gracenotes_western(word[1:-2]) + " }"
                 else:
                     if not notehead_markup.withStaff:
@@ -853,12 +854,9 @@ def getLY(score):
    if not_angka: out=out.replace("make-bold-markup","make-simple-markup")
    return out,maxBeams,lyrics,headers
 
-def process_input(inDat):
- ret = []
- global scoreNo, western, has_lyrics, midi, not_angka, maxBeams
- scoreNo = 0 # incr'd to 1 below
- western = False
- for score in re.split(r"\sNextScore\s"," "+inDat+" "):
+scoreNo = 0 # incr'd to 1 below
+western = False
+for score in re.split(r"\sNextScore\s"," "+inDat+" "):
   if not score.strip(): continue
   scoreNo += 1
   wordSet = set(score.split())
@@ -867,24 +865,14 @@ def process_input(inDat):
    not_angka = False # may be set by getLY
    out,maxBeams,lyrics,headers = getLY(score)
    if notehead_markup.withStaff and notehead_markup.separateTimesig: errExit("Use of both WithStaff and SeparateTimesig in the same piece is not yet implemented")
-   if scoreNo==1 and not midi: ret.append(all_scores_start()) # not before here, so as not to confuse beginners who don't input a valid score 1
-   ret.append(score_start())
+   if scoreNo==1 and not midi: print (all_scores_start()) # not before here, so as not to confuse beginners who don't input a valid score 1
+   print (score_start())
    if midi:
-       ret.append(midi_staff_start()+" "+out+" "+midi_staff_end())
+       print (midi_staff_start()+" "+out+" "+midi_staff_end())
    else:
-       ret.append(jianpu_staff_start()+" "+out+" "+jianpu_staff_end())
+       print (jianpu_staff_start()+" "+out+" "+jianpu_staff_end())
        if notehead_markup.withStaff:
-           western=True ; ret.append(western_staff_start()+" "+getLY(score)[0]+" "+western_staff_end()) ; western = False
+           western=True ; print (western_staff_start()+" "+getLY(score)[0]+" "+western_staff_end()) ; western = False
            lyrics = lyrics.replace(r'\lyricsto "jianpu"',r'\lyricsto "5line"')
-       if lyrics: ret.append(lyrics)
-   ret.append(score_end(**headers))
- return "".join(r+"\n" for r in ret)
-
-def main():
-    if "--html" in sys.argv or "--markdown" in sys.argv:
-        return write_docs()
-    inDat = get_input()
-    out = process_input(inDat) # <-- you can also call this if importing as a module
-    print (out)
-
-if __name__=="__main__": main()
+       if lyrics: print (lyrics)
+   print (score_end(**headers))
