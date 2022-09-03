@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.583 (c) 2012-2022 Silas S. Brown
+# v1.584 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -79,32 +79,39 @@ def asUnicode(l):
 
 def all_scores_start(staff_size = 20):
     # staff_size is the 5-line size in points; jianpu is smaller
-    return r"""\version "2.18.0"
-#(set-global-staff-size %d)
+    r = r"""\version "2.18.0"
+#(set-global-staff-size %d)""" % staff_size
+    r += r"""
 
-%% un-comment the next line to remove Lilypond tagline:
-%% \header { tagline="" }
+% un-comment the next line to remove Lilypond tagline:
+% \header { tagline="" }
 
 \pointAndClickOff
 
 \paper {
   print-all-headers = ##t %% allow per-score headers
 
-  %% un-comment the next line for A5:
-  %% #(set-default-paper-size "a5" )
+  % un-comment the next line for A5:
+  % #(set-default-paper-size "a5" )
 
-  %% un-comment the next line for no page numbers:
-  %% print-page-number = ##f
+  % un-comment the next line for no page numbers:
+  % print-page-number = ##f
 
-  %% un-comment the next 3 lines for a binding edge:
-  %% two-sided = ##t
-  %% inner-margin = 20\mm
-  %% outer-margin = 10\mm
+  % un-comment the next 3 lines for a binding edge:
+  % two-sided = ##t
+  % inner-margin = 20\mm
+  % outer-margin = 10\mm
 
-  %% un-comment the next line for a more space-saving header layout:
-  %% scoreTitleMarkup = \markup { \center-column { \fill-line { \magnify #1.5 { \bold { \fromproperty #'header:dedication } } \magnify #1.5 { \bold { \fromproperty #'header:title } } \fromproperty #'header:composer } \fill-line { \fromproperty #'header:instrument \fromproperty #'header:subtitle \smaller{\fromproperty #'header:subsubtitle } } } }
-}
-""" % staff_size
+  % un-comment the next line for a more space-saving header layout:
+  % scoreTitleMarkup = \markup { \center-column { \fill-line { \magnify #1.5 { \bold { \fromproperty #'header:dedication } } \magnify #1.5 { \bold { \fromproperty #'header:title } } \fromproperty #'header:composer } \fill-line { \fromproperty #'header:instrument \fromproperty #'header:subtitle \smaller{\fromproperty #'header:subsubtitle } } } }"""
+    if has_lyrics: r += r"""
+  % Might need to enforce a minimum spacing between systems, especially if lyrics are below the last staff in a system and numbers are on the top of the next
+  system-system-spacing = #'((basic-distance . 7) (padding . 5) (stretchability . 1e7))
+  score-markup-spacing = #'((basic-distance . 9) (padding . 5) (stretchability . 1e7))
+  score-system-spacing = #'((basic-distance . 9) (padding . 5) (stretchability . 1e7))
+  markup-system-spacing = #'((basic-distance . 2) (padding . 2) (stretchability . 0))
+"""
+    return r+"}\n"
 
 def score_start():
     ret = "\\score {\n"
