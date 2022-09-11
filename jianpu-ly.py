@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.584 (c) 2012-2022 Silas S. Brown
+# v1.585 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -180,7 +180,7 @@ def jianpu_staff_start(withStaff=False):
 """ # (whether this is needed or not depends on Lilypond version; 2.22 puts more space than 2.18,2.20.  Must set higher than 5, which sometimes gets collisions between beams in 2.20)
     r+=r"""
     %% Get rid of the stave but not the barlines:
-    \override StaffSymbol #'line-count = #0 %% tested in 2.15.40, 2.16.2, 2.18.0, 2.18.2 and 2.20.0
+    \override StaffSymbol #'line-count = #0 %% tested in 2.15.40, 2.16.2, 2.18.0, 2.18.2, 2.20.0 and 2.22.2
     \override BarLine #'bar-extent = #'(-2 . 2) %% LilyPond 2.18: please make barlines as high as the time signature even though we're on a RhythmicStaff (2.16 and 2.15 don't need this although its presence doesn't hurt; Issue 3685 seems to indicate they'll fix it post-2.18)
     }
     { """+jianpu_voice_start(voiceName)+r"""
@@ -200,7 +200,9 @@ def midi_staff_end(): return "} }\n% === END MIDI STAFF ===\n"
 def western_staff_start(voiceName="5line"):
     return r"""
 %% === BEGIN 5-LINE STAFF ===
-    \new Staff { \new Voice="%s" {
+    \new Staff {
+    \override Score.SystemStartBar.collapse-height = #11 %% (needed on 2.22)
+    \new Voice="%s" {
     #(set-accidental-style 'modern-cautionary)
     \override Staff.TimeSignature #'style = #'numbered
     \set Voice.chordChanges = ##f %% for 2.19.82 bug workaround
