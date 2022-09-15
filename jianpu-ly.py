@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.586 (c) 2012-2022 Silas S. Brown
+# v1.59 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -104,6 +104,20 @@ def all_scores_start(staff_size = 20):
 
   % un-comment the next line for a more space-saving header layout:
   % scoreTitleMarkup = \markup { \center-column { \fill-line { \magnify #1.5 { \bold { \fromproperty #'header:dedication } } \magnify #1.5 { \bold { \fromproperty #'header:title } } \fromproperty #'header:composer } \fill-line { \fromproperty #'header:instrument \fromproperty #'header:subtitle \smaller{\fromproperty #'header:subsubtitle } } } }"""
+    if os.path.exists("/Library/Fonts/Arial Unicode.ttf"): r += r"""
+  % As jianpu-ly was run on a Mac, we include a Mac fonts workaround.
+  % The Mac version of Lilypond 2.18 used Arial Unicode MS as a
+  % fallback even in the Serif font, but 2.20 drops this in Serif
+  % (using it only in Sans), which means any Serif text (titles,
+  % lyrics etc) that includes Chinese will likely fall back to
+  % Japanese fonts which don't support all Simplified hanzi.
+  % This brings back 2.18's behaviour on 2.20+:
+  #(define fonts
+    (set-global-fonts
+     #:roman "Times New Roman,Arial Unicode MS"
+     #:factor (/ staff-height pt 20)
+    ))
+"""
     if has_lyrics: r += r"""
   % Might need to enforce a minimum spacing between systems, especially if lyrics are below the last staff in a system and numbers are on the top of the next
   system-system-spacing = #'((basic-distance . 7) (padding . 5) (stretchability . 1e7))
