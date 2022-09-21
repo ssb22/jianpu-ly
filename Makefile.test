@@ -1,7 +1,11 @@
 # -*- mode: makefile -*-
+SHELL=/bin/bash
 test:
 	echo WithStaff 1 - 0 - | python3 jianpu-ly.py | grep r2 >/dev/null # check collapsing regexes still work
 	echo WithStaff 1 - 0 - | python2.7 jianpu-ly.py | grep r2 >/dev/null
+
+	python3 jianpu-ly.py <(echo WithStaff 1 - 0 -) </dev/null | grep r2 >/dev/null # check read from non-stdin still works
+	python2.7 jianpu-ly.py <(echo WithStaff 1 - 0 -) </dev/null | grep r2 >/dev/null
 
 	python3 test.py
 	python2.7 test.py

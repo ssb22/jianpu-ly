@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.59 (c) 2012-2022 Silas S. Brown
+# v1.591 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -525,7 +525,7 @@ def get_input():
     if sys.stdin.isatty():
         sys.stderr.write(__doc__)
         raise SystemExit
-  inDat=[stdin.read()]
+    inDat=[stdin.read()]
   for i in xrange(len(inDat)):
     if inDat[i].startswith('\xef\xbb\xbf'):
       inDat[i] = inDat[i][3:]
