@@ -93,6 +93,20 @@ Other Lilypond code: `LP: (block of code) :LP` (each delimeter at start of its l
 
 Ignored: `% a comment`
 
+Erhu fingering shorthand (appears over previous note): `Fr=0 Fr=1 Fr=2 Fr=3 Fr=4`
+
+Erhu expression symbols (appears over previous note):
+```
+# Souyin
+Fr=久
+
+# Harmonic
+Fr=○
+
+# Pitch bends
+Fr=⤻ Fr=𝀈 Fr=↗ Fr=↘
+```
+
 
 Copyright and Trademarks
 ------------------------

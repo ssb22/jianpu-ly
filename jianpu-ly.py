@@ -125,7 +125,7 @@ def all_scores_start(staff_size = 20):
   score-system-spacing = #'((basic-distance . 9) (padding . 5) (stretchability . 1e7))
   markup-system-spacing = #'((basic-distance . 2) (padding . 2) (stretchability . 0))
 """
-    return r+"}\n"
+    return r+"\n}\n"
 
 def score_start():
     ret = "\\score {\n"
@@ -681,6 +681,10 @@ def getLY(score):
                     out.append(r"\transpose c "+transposeTo+r" { \key c \major ") # so that MIDI or Western pitches are correct
                     inTranspose = 1
                 else: out.append(r'\mark \markup{%s}' % word.replace("b",r"\flat").replace("#",r"\sharp"))
+            elif word.startswith("Fr="):
+              finger = str(word.split("=")[1])
+              finger = {"1": "–", "2": "=", "3": "≡", "4": "四"}.get(finger, finger)
+              out.append(r'\finger "%s"' % finger)
             elif re.match("[1-9][0-9]*/[1-468]+(,[1-9][0-9]*[.]?)?$",word): # time signature
                 if ',' in word: # anacrusis
                     word,anac = word.split(",",1)
