@@ -85,6 +85,10 @@ Ties (like Lilypond's, if you don't want dashes): `1 ~ 1`
 
 Slurs (like Lilypond's): `1 ( 2 )`
 
+Erhu fingering (applies to previous note): `Fr=0 Fr=4`
+
+Erhu symbol (applies to previous note): `souyin harmonic up down bend tilde`
+
 Dynamics (applies to previous note): `\p \mp \f`
 
 Other 1-word Lilypond \ commands: `\fermata \> \! \( \) etc`
@@ -92,20 +96,6 @@ Other 1-word Lilypond \ commands: `\fermata \> \! \( \) etc`
 Other Lilypond code: `LP: (block of code) :LP` (each delimeter at start of its line)
 
 Ignored: `% a comment`
-
-Erhu fingering shorthand (appears over previous note): `Fr=0 Fr=1 Fr=2 Fr=3 Fr=4`
-
-Erhu expression symbols (appears over previous note):
-```
-# Souyin
-Fr=久
-
-# Harmonic
-Fr=○
-
-# Pitch bends
-Fr=⤻ Fr=𝀈 Fr=↗ Fr=↘
-```
 
 
 Copyright and Trademarks

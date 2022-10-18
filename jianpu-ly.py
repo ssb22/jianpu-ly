@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.591 (c) 2012-2022 Silas S. Brown
+# v1.592 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,6 +61,8 @@ Repeat (with alternate endings): R{ 1 1 1 } A{ 2 | 3 }
 Short repeats (percent): R4{ 1 2 }
 Ties (like Lilypond's, if you don't want dashes): 1 ~ 1
 Slurs (like Lilypond's): 1 ( 2 )
+Erhu fingering (applies to previous note): Fr=0 Fr=4
+Erhu symbol (applies to previous note): souyin harmonic up down bend tilde
 Dynamics (applies to previous note): \p \mp \f
 Other 1-word Lilypond \ commands: \fermata \> \! \( \) etc
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
@@ -103,7 +105,8 @@ def all_scores_start(staff_size = 20):
   % outer-margin = 10\mm
 
   % un-comment the next line for a more space-saving header layout:
-  % scoreTitleMarkup = \markup { \center-column { \fill-line { \magnify #1.5 { \bold { \fromproperty #'header:dedication } } \magnify #1.5 { \bold { \fromproperty #'header:title } } \fromproperty #'header:composer } \fill-line { \fromproperty #'header:instrument \fromproperty #'header:subtitle \smaller{\fromproperty #'header:subsubtitle } } } }"""
+  % scoreTitleMarkup = \markup { \center-column { \fill-line { \magnify #1.5 { \bold { \fromproperty #'header:dedication } } \magnify #1.5 { \bold { \fromproperty #'header:title } } \fromproperty #'header:composer } \fill-line { \fromproperty #'header:instrument \fromproperty #'header:subtitle \smaller{\fromproperty #'header:subsubtitle } } } }
+"""
     if os.path.exists("/Library/Fonts/Arial Unicode.ttf"): r += r"""
   % As jianpu-ly was run on a Mac, we include a Mac fonts workaround.
   % The Mac version of Lilypond 2.18 used Arial Unicode MS as a
@@ -125,7 +128,7 @@ def all_scores_start(staff_size = 20):
   score-system-spacing = #'((basic-distance . 9) (padding . 5) (stretchability . 1e7))
   markup-system-spacing = #'((basic-distance . 2) (padding . 2) (stretchability . 0))
 """
-    return r+"\n}\n"
+    return r+"}\n"
 
 def score_start():
     ret = "\\score {\n"
@@ -666,6 +669,7 @@ def getLY(score):
         headers[hName.strip()] = hValue.strip()
     else:
         for word in line.split():
+            if word in ["souyin","harmonic","up","down","bend","tilde"]: word="Fr="+word # (Fr= before these is optional)
             if word.startswith('%'): break # a comment
             elif re.match("[1-468]+[.]*=[1-9][0-9]*$",word): out.append(r'\tempo '+word) # TODO: reduce size a little?
             elif re.match("[16]=[A-Ga-g][#b]?$",word): #key
@@ -682,8 +686,20 @@ def getLY(score):
                     inTranspose = 1
                 else: out.append(r'\mark \markup{%s}' % word.replace("b",r"\flat").replace("#",r"\sharp"))
             elif word.startswith("Fr="):
-              finger = str(word.split("=")[1])
-              finger = {"1": "–", "2": "=", "3": "≡", "4": "四"}.get(finger, finger)
+              finger = word.split("=")[1]
+              finger = {
+                  "1": u"\u2013", # en-dash (I'd have gone for u"\u4e00" hanzi one, but perhaps this is more common in fonts)
+                  "2": u"=", # rather than u"\u4c8c" hanzi two
+                  "3": u"\u2261", # identical-to sign, rather than u"\u4e09" hanzi three
+                  "4": u"\u56db", # hanzi four
+                  "souyin": u"\u4e45", # jiu3
+                  "harmonic": u"\u25cb", # white circle: TODO: can we use Lilypond's ^\flageolet command (not in a \finger{}) which doesn't require a font with 25CB in it? or would that get wrong size? (can be tweaked)
+                  "up": u"\u2197", # NE arrow
+                  "down": u"\u2198", # SE arrow
+                  "bend": u"\u293b", # bottom arc anticlockwise arrow
+                  "tilde": u"\u223c", # full-width tilde.  Could also use U+1D008 "Byzantine musical symbol syrmatiki" but that (a) won't display on macOS (as of 12.6) and (b) needs special consideration for old versions of Python 2 on narrow Unicode builds
+                  }.get(finger, finger)
+              if not type("")==type(u""): finger = finger.encode('utf-8') # Python 2
               out.append(r'\finger "%s"' % finger)
             elif re.match("[1-9][0-9]*/[1-468]+(,[1-9][0-9]*[.]?)?$",word): # time signature
                 if ',' in word: # anacrusis
