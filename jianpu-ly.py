@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.592 (c) 2012-2022 Silas S. Brown
+# v1.593 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -688,10 +688,8 @@ def getLY(score):
             elif word.startswith("Fr="):
               finger = word.split("=")[1]
               finger = {
-                  "1": u"\u2013", # en-dash (I'd have gone for u"\u4e00" hanzi one, but perhaps this is more common in fonts)
-                  "2": u"=", # rather than u"\u4c8c" hanzi two
-                  "3": u"\u2261", # identical-to sign, rather than u"\u4e09" hanzi three
-                  "4": u"\u56db", # hanzi four
+                  "1": u"\u4e00", "2": u"\u4c8c",
+                  "3": u"\u4e09", "4": u"\u56db",
                   "souyin": u"\u4e45", # jiu3
                   "harmonic": u"\u25cb", # white circle: TODO: can we use Lilypond's ^\flageolet command (not in a \finger{}) which doesn't require a font with 25CB in it? or would that get wrong size? (can be tweaked)
                   "up": u"\u2197", # NE arrow
