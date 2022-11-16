@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.593 (c) 2012-2022 Silas S. Brown
+# v1.594 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -713,8 +713,8 @@ def getLY(score):
                     else: a2,anacDotted = anac,0
                     notehead_markup.setAnac(int(a2),anacDotted)
                     out.append(r'\partial '+anac)
-            elif word.startswith("\\") or word in ["(",")","~"]:
-                # Lilypond command, \p etc
+            elif word.startswith("\\") or word in ["(",")","~","->"] or word.startswith('^"') or word.startswith('_"'):
+                # Lilypond command, \p, ^"text" etc (must be one word though)
                 if out and "afterGrace" in out[lastPtr]:
                     # apply to inside afterGrace in midi/western
                     out[lastPtr] = out[lastPtr][:-1] + word + " }"
