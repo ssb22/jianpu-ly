@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.594 (c) 2012-2022 Silas S. Brown
+# v1.595 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -895,7 +895,7 @@ def getLY(score):
                (3,"","2."), # 3 crotchets = dotted minim
                (2,r"\.","2."), # in 6/8, 2 dotted crotchets = dotted minim
                (2,"","2")]: # 2 crotchets = minim
-           out = re.sub(" +~ ".join(["(?P<note>[^ ]*)4"+dot]+["(?P=note)4"+dot]*(numNotes-1)),r"\g<1>"+result,out).replace(" ".join(["r4"+dot]*numNotes),"r"+result)
+           out = re.sub("(?P<note>[^ ]*)4"+dot+r" +~((?: \\[^ ]+)*) "+" +~ ".join(["(?P=note)4"+dot]*(numNotes-1)),r"\g<1>"+result+r"\g<2>",out).replace(" ".join(["r4"+dot]*numNotes),"r"+result)
        out = re.sub(r"(%\{ bar [0-9]*: %\} )r([^ ]* \\bar)",r"\g<1>R\g<2>",out)
        out = out.replace(r"\new RhythmicStaff \with {",r"\new RhythmicStaff \with { \override VerticalAxisGroup.default-staff-staff-spacing = #'((basic-distance . 6) (minimum-distance . 6) (stretchability . 0)) ") # don't let it hang too far up in the air
    if not_angka: out=out.replace("make-bold-markup","make-simple-markup")
