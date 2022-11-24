@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.596 (c) 2012-2022 Silas S. Brown
+# v1.597 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -79,10 +79,14 @@ def asUnicode(l):
     if type(l)==type(u""): return l
     return l.decode('utf-8')
 
-def all_scores_start(staff_size = 20):
-    # staff_size is the 5-line size in points; jianpu is smaller
+def all_scores_start():
+    staff_size = float(os.environ.get("j2ly_staff_size",20))
+    # Normal: j2ly_staff_size=20
+    # Large: j2ly_staff_size=25.2
+    # Small: j2ly_staff_size=17.82
+    # Tiny: j2ly_staff_size=15.87
     r = r"""\version "2.18.0"
-#(set-global-staff-size %d)""" % staff_size
+#(set-global-staff-size %g)""" % staff_size
     r += r"""
 
 % un-comment the next line to remove Lilypond tagline:
