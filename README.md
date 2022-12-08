@@ -89,6 +89,8 @@ Erhu fingering (applies to previous note): `Fr=0 Fr=4`
 
 Erhu symbol (applies to previous note): `souyin harmonic up down bend tilde`
 
+Tremolo (must use Lilypond 2.20): `1/// - 1///5 -`
+
 Dynamics (applies to previous note): `\p \mp \f`
 
 Other 1-word Lilypond \ commands: `\fermata \> \! \( \) etc`

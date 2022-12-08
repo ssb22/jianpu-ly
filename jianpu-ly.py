@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.597 (c) 2012-2022 Silas S. Brown
+# v1.6 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -63,6 +63,7 @@ Ties (like Lilypond's, if you don't want dashes): 1 ~ 1
 Slurs (like Lilypond's): 1 ( 2 )
 Erhu fingering (applies to previous note): Fr=0 Fr=4
 Erhu symbol (applies to previous note): souyin harmonic up down bend tilde
+Tremolo (must use Lilypond 2.20): 1/// - 1///5 -
 Dynamics (applies to previous note): \p \mp \f
 Other 1-word Lilypond \ commands: \fermata \> \! \( \) etc
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
@@ -286,12 +287,13 @@ class notehead_markup:
       if dotted: self.barPos -= F(64)/denom/2
       if not self.barPos: errExit("Anacrusis should be shorter than bar in score %d" % scoreNo)
       self.startBarPos = self.barPos
-  def __call__(self,figures,nBeams,dot,octave,accidental):
+  def __call__(self,figures,nBeams,dot,octave,accidental,tremolo):
     # figures is a chord string of '1'-'7', or '0' or '-'
     # nBeams is 0, 1, 2 .. etc (number of beams for this note)
     # dot is "" or "." (dotted length)
     # octave is "", "'", "''", "," or ",,"
     # accidental is "", "#", "b"
+    # tremolo is "" or ":32"
     if len(figures)>1 and accidental: errExit("Accidentals in chords not yet implemented") # see TODOs below
     self.notesHad.append(figures)
     names = {'0':'nought',
@@ -377,6 +379,7 @@ class notehead_markup:
     length = 4 ; b = 0 ; toAdd = F(16) # crotchet
     while b < nBeams: b,length,toAdd = b+1,length*2,toAdd/2
     if dot: toAdd += toAdd/2
+    toAdd_preTuplet = toAdd
     if not self.tuplet[0]==self.tuplet[1]:
         toAdd = toAdd*self.tuplet[0]/self.tuplet[1]
     if nBeams and not midi and not western: # must set these unconditionally regardless of what we think their current values are (Lilypond's own beamer can change them from note to note)
@@ -417,6 +420,15 @@ class notehead_markup:
         ret += placeholder_chord + {"":"", "#":"is", "b":"es"}[accidental]
         if not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI + Western, put it so no-mark starts near middle C
     ret += ("%d" % length) + dot
+    if tremolo:
+        if midi or western:
+            if placeholder_chord.startswith("<") and len(placeholder_chord.split())==4:
+                previous,n1,n2,gtLenDot = ret.rsplit(None,3)
+                previous=previous[:-1] # drop <
+                ret = r"%s\repeat tremolo %d { %s32 %s32 }" % (previous,int(toAdd_preTuplet/4),n1,n2)
+            else: ret += tremolo
+        elif dot: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.8 . 2.6) \postscript "1.4 1.6 moveto 2.4 2.6 lineto 1.6 1.4 moveto 2.6 2.4 lineto 1.8 1.2 moveto 2.8 2.2 lineto stroke" }"""
+        else: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.5 . 2.6) \postscript "1.1 1.6 moveto 2.1 2.6 lineto 1.3 1.4 moveto 2.3 2.4 lineto 1.5 1.2 moveto 2.5 2.2 lineto stroke" }"""
     if nBeams and (not self.inBeamGroup or self.inBeamGroup=="restHack" or inRestHack) and not midi and not western:
         # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
         ret += '['
@@ -465,6 +477,8 @@ def parseNote(word):
     word = word.replace("8","1'").replace("9","2'")
     if type(u"")==type(""): word = word.replace(u"\u2019","'")
     else: word=word.replace(u"\u2019".encode('utf-8'),"'")
+    if "///" in word: tremolo,word=":32",word.replace("///","",1)
+    else: tremolo = ""
     if not re.match("[0-7.,'qsdh\\#b-]+$",word): figures = None # unrecognised stuff in it: flag as error, rather than ignoring and possibly getting a puzzling barsync fail
     else: figures = ''.join(re.findall('[01234567-]',word))
     if "." in word: dot="."
@@ -483,7 +497,7 @@ def parseNote(word):
     for acc in ["#","b"]:
         if acc in word:
             accidental = acc ; break
-    return figures,nBeams,dot,octave,accidental
+    return figures,nBeams,dot,octave,accidental,tremolo
 
 def write_docs():
     # Write an HTML or Markdown version of the doc string
@@ -844,10 +858,10 @@ def getLY(score):
                 need_final_barline = 0
                 out.append(r'''\once \override Score.RehearsalMark #'break-visibility = #begin-of-line-invisible \once \override Score.RehearsalMark #'self-alignment-X = #RIGHT \mark "D.C. al Fine" \bar "||"''')
             else: # note (or unrecognised)
-                figures,nBeams,dot,octave,accidental = parseNote(word)
+                figures,nBeams,dot,octave,accidental,tremolo = parseNote(word)
                 if figures:
                     need_final_barline = 1
-                    b4last,aftrlast,this,need_space_for_accidental = notehead_markup(figures,nBeams,dot,octave,accidental)
+                    b4last,aftrlast,this,need_space_for_accidental = notehead_markup(figures,nBeams,dot,octave,accidental,tremolo)
                     if b4last: out[lastPtr]=b4last+out[lastPtr]
                     if aftrlast: out.insert(lastPtr+1,aftrlast)
                     lastPtr = len(out)
@@ -892,14 +906,19 @@ def getLY(score):
                out[i] += '\n'
            else: out[i]+=' '
    out = ''.join(out)
-   if western: # collapse/combine tied notes into longer notes
+   if midi or western: # collapse/combine tied notes into longer notes (even in MIDI, for 2-note tremolo extension)
        for numNotes,dot,result in [
                (4,r"\.","1."), # in 12/8, 4 dotted crotchets = dotted semibreve
                (4,"","1"), # 4 crotchets = semibreve
                (3,"","2."), # 3 crotchets = dotted minim
                (2,r"\.","2."), # in 6/8, 2 dotted crotchets = dotted minim
                (2,"","2")]: # 2 crotchets = minim
-           out = re.sub("(?P<note>[^ ]*|<[^>]*>)4"+dot+r" +~((?: \\[^ ]+)*) "+" +~ ".join(["(?P=note)4"+dot]*(numNotes-1)),r"\g<1>"+result+r"\g<2>",out).replace(" ".join(["r4"+dot]*numNotes),"r"+result)
+           out = re.sub("(?P<note>[^<][^ ]*|<[^>]*>)4"+dot+r"((?::32)?) +~(( \\[^ ]+)*) "+" +~ ".join(["(?P=note)4"+dot]*(numNotes-1)),r"\g<1>"+result+r"\g<2>\g<3>",out)
+           if dot: chkLen=6
+           else: chkLen = 4
+           out = re.sub(r"\\repeat tremolo "+str(chkLen)+r" { (?P<note1>[^ ]+)32 (?P<note2>[^ ]+)32 } +~(( \\[^ ]+)*) "+" +~ ".join(["< (?P=note1) (?P=note2) >4"+dot]*(numNotes-1)),r"\\repeat tremolo "+str(chkLen*numNotes)+" { \g<1>32 \g<2>32 }\g<3>",out)
+           out = out.replace(" ".join(["r4"+dot]*numNotes),"r"+result)
+       out = re.sub(r"(\\repeat tremolo [^{]+{ [^ ]+)( [^}]+ })(( +\\[^b][^ ]*)+)",r"\g<1>\g<3>\g<2>",out) # dynamics need to attach inside the tremolo (but \bar doesn't)
        out = re.sub(r"(%\{ bar [0-9]*: %\} )r([^ ]* \\bar)",r"\g<1>R\g<2>",out)
        out = out.replace(r"\new RhythmicStaff \with {",r"\new RhythmicStaff \with { \override VerticalAxisGroup.default-staff-staff-spacing = #'((basic-distance . 6) (minimum-distance . 6) (stretchability . 0)) ") # don't let it hang too far up in the air
    if not_angka: out=out.replace("make-bold-markup","make-simple-markup")
