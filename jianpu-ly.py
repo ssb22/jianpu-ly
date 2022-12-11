@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.6 (c) 2012-2022 Silas S. Brown
+# v1.61 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -536,22 +536,23 @@ def get_input():
         try: inDat.append(open(f,encoding="utf-8").read()) # Python 3: try UTF-8 first
         except: inDat.append(open(f).read()) # Python 2, or Python 3 with locale-default encoding in case it's not UTF-8
     except: errExit("Unable to read file "+f)
-  if type("")==type(u""): # Python 3: please use UTF-8 for Lilypond, even if the system locale says something else
-    import codecs
-    stdin=codecs.getreader("utf-8")(sys.stdin.buffer)
-    stdout=codecs.getwriter("utf-8")(sys.stdout.buffer)
-    old_stdout, sys.stdout = sys.stdout, stdout # for print() (and keep a reference to the old one in case of overzealous gc)
-  else: stdin = sys.stdin
   if not inDat:
     if sys.stdin.isatty():
         sys.stderr.write(__doc__)
         raise SystemExit
-    inDat=[stdin.read()]
+    inDat=[fix_utf8(sys.stdin,'r').read()]
   for i in xrange(len(inDat)):
     if inDat[i].startswith('\xef\xbb\xbf'):
       inDat[i] = inDat[i][3:]
     if inDat[i].startswith(r'\version'): errExit("jianpu-ly does not READ Lilypond code.\nPlease see the instructions.")
   return " NextScore ".join(inDat)
+
+def fix_utf8(stream,mode):
+    if type("")==type(u""): # Python 3: please use UTF-8 for Lilypond, even if the system locale says something else
+        import codecs
+        if mode=='r': return codecs.getreader("utf-8")(stream.buffer)
+        else: return codecs.getwriter("utf-8")(stream.buffer)
+    else: return stream
 
 def fix_fullwidth(t):
     if type(u"")==type(""): utext = t
@@ -951,11 +952,43 @@ def process_input(inDat):
    ret.append(score_end(**headers))
  return "".join(r+"\n" for r in ret)
 
+def write_output(outDat):
+    if sys.stdout.isatty():
+        # They didn't redirect our output.
+        # Try to be a little more 'user friendly'
+        # and see if we can put it in a temporary
+        # Lilypond file and run Lilypond for them.
+        # New in jianpu-ly v1.61.
+        if len(sys.argv)>1: fn=os.path.split(sys.argv[1])[1]
+        else: fn = 'jianpu'
+        if os.extsep in fn: fn=fn[:-fn.rindex(os.extsep)]
+        fn += ".ly"
+        import tempfile,shutil,shlex
+        cwd = os.getcwd()
+        os.chdir(tempfile.gettempdir())
+        print("Outputting to "+os.getcwd()+"/"+fn)
+        o = open(fn,'w')
+        fix_utf8(o,'w').write(outDat)
+        o.close()
+        try_PDF = True
+        if hasattr(shutil,'which') and shutil.which('lilypond'): os.system("lilypond "+shlex.quote(fn))
+        elif os.path.exists('/Applications/LilyPond.app/Contents/Resources/bin/lilypond'): os.system('/Applications/LilyPond.app/Contents/Resources/bin/lilypond '+shlex.quote(fn))
+        else: try_PDF = False # because we can't find Lilypond
+        if try_PDF:
+            fn = fn[:-3]+'.pdf'
+            if sys.platform=='darwin': os.system("open "+shlex.quote(fn))
+            elif sys.platform.startswith('win'):
+                import subprocess
+                subprocess.Popen([fn],shell=True)
+            elif hasattr(shutil,'which') and shutil.which('evince'): os.system("evince "+shlex.quote(fn))
+        os.chdir(cwd)
+    else: fix_utf8(sys.stdout,'w').write(outDat)
+
 def main():
     if "--html" in sys.argv or "--markdown" in sys.argv:
         return write_docs()
     inDat = get_input()
     out = process_input(inDat) # <-- you can also call this if importing as a module
-    print (out)
+    write_output(out)
 
 if __name__=="__main__": main()
