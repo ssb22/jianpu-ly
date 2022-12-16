@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.61 (c) 2012-2022 Silas S. Brown
+# v1.62 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -529,18 +529,29 @@ def write_docs():
             print (htmlify(line))
     if inTable and "--html" in sys.argv: print ("</table>")
 
-def get_input():
+def getInput0():
   inDat = []
   for f in sys.argv[1:]:
     try:
         try: inDat.append(open(f,encoding="utf-8").read()) # Python 3: try UTF-8 first
         except: inDat.append(open(f).read()) # Python 2, or Python 3 with locale-default encoding in case it's not UTF-8
     except: errExit("Unable to read file "+f)
-  if not inDat:
-    if sys.stdin.isatty():
-        sys.stderr.write(__doc__)
-        raise SystemExit
-    inDat=[fix_utf8(sys.stdin,'r').read()]
+  if inDat: return inDat
+  if not sys.stdin.isatty():
+    return [fix_utf8(sys.stdin,'r').read()]
+  # They didn't give us any input.  Try to use a
+  # file chooser.  If that fails, just print the
+  # help text.
+  if os.path.exists('/usr/bin/osascript'):
+    f = os.popen("osascript -e $'tell application \"System Events\"\\nactivate\\nset f to choose file\\nend tell\\nPOSIX path of f'").read().rstrip()
+    if f:
+      try: return [open(f,encoding="utf-8").read()]
+      except: return [open(f).read()]
+  sys.stderr.write(__doc__)
+  raise SystemExit
+
+def get_input():
+  inDat = getInput0()
   for i in xrange(len(inDat)):
     if inDat[i].startswith('\xef\xbb\xbf'):
       inDat[i] = inDat[i][3:]
