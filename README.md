@@ -91,6 +91,10 @@ Erhu symbol (applies to previous note): `souyin harmonic up down bend tilde`
 
 Tremolo (must use Lilypond 2.20): `1/// - 1///5 -`
 
+Rehearsal letters: `letterA letterB`
+
+Multibar rest: `R*8`
+
 Dynamics (applies to previous note): `\p \mp \f`
 
 Other 1-word Lilypond \ commands: `\fermata \> \! \( \) etc`

@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.62 (c) 2012-2022 Silas S. Brown
+# v1.63 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -64,6 +64,8 @@ Slurs (like Lilypond's): 1 ( 2 )
 Erhu fingering (applies to previous note): Fr=0 Fr=4
 Erhu symbol (applies to previous note): souyin harmonic up down bend tilde
 Tremolo (must use Lilypond 2.20): 1/// - 1///5 -
+Rehearsal letters: letterA letterB
+Multibar rest: R*8
 Dynamics (applies to previous note): \p \mp \f
 Other 1-word Lilypond \ commands: \fermata \> \! \( \) etc
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
@@ -287,6 +289,7 @@ class notehead_markup:
       if dotted: self.barPos -= F(64)/denom/2
       if not self.barPos: errExit("Anacrusis should be shorter than bar in score %d" % scoreNo)
       self.startBarPos = self.barPos
+  def wholeBarRestLen(self): return {96:"1.",48:"2.",32:"2",24:"4.",16:"4",12:"8.",8:"8"}.get(self.barLength,"1") # TODO: what if irregular?
   def __call__(self,figures,nBeams,dot,octave,accidental,tremolo):
     # figures is a chord string of '1'-'7', or '0' or '-'
     # nBeams is 0, 1, 2 .. etc (number of beams for this note)
@@ -652,11 +655,6 @@ def getLY(score):
     if line.startswith("LP:"):
         # Escaped LilyPond block.  Thanks to James Harkins for this suggestion.
         # (Our internal barcheck does not understand code in LP blocks, so keep it to complete bars.)
-        # E.g. for multibar rests:
-        # LP:
-        # \compressFullBarRests \override MultiMeasureRest #'expand-limit = #1
-        # R1*5
-        # :LP
         escaping = 1
         if len(line)>3: out.append(line[3:]+"\n") # remainder of current line
     elif line.startswith(":LP"):
@@ -729,6 +727,11 @@ def getLY(score):
                   }.get(finger, finger)
               if not type("")==type(u""): finger = finger.encode('utf-8') # Python 2
               out.append(r'\finger "%s"' % finger)
+            elif re.match("letter[A-Z]$",word):
+                out.append(r'\mark \markup { \box { "%s" } }' % word[-1]) # TODO: not compatible with key change at same point, at least not in lilypond 2.20 (2nd mark mentioned will be dropped)
+            elif re.match(r"R\*[1-9][0-9]*$",word):
+                if not western: out.append(r"\set Score.skipBars = ##t \override MultiMeasureRest #'expand-limit = #1 ") # \compressFullBarRests on Lilypond 2.20, \compressEmptyMeasures on 2.22, both map to \set Score.skipBars
+                out.append(r"R"+notehead_markup.wholeBarRestLen()+word[1:])
             elif re.match("[1-9][0-9]*/[1-468]+(,[1-9][0-9]*[.]?)?$",word): # time signature
                 if ',' in word: # anacrusis
                     word,anac = word.split(",",1)
