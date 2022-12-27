@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.63 (c) 2012-2022 Silas S. Brown
+# v1.64 (c) 2012-2022 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -68,6 +68,7 @@ Rehearsal letters: letterA letterB
 Multibar rest: R*8
 Dynamics (applies to previous note): \p \mp \f
 Other 1-word Lilypond \ commands: \fermata \> \! \( \) etc
+Text: ^"above note" _"below note"
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
 Ignored: % a comment
 """
@@ -121,7 +122,8 @@ def all_scores_start():
   % (using it only in Sans), which means any Serif text (titles,
   % lyrics etc) that includes Chinese will likely fall back to
   % Japanese fonts which don't support all Simplified hanzi.
-  % This brings back 2.18's behaviour on 2.20+:
+  % This brings back 2.18's behaviour on 2.20+
+  % (you might have to comment it out if you still have 2.18)
   #(define fonts
     (set-global-fonts
      #:roman "Times New Roman,Arial Unicode MS"
@@ -432,6 +434,7 @@ class notehead_markup:
             else: ret += tremolo
         elif dot: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.8 . 2.6) \postscript "1.4 1.6 moveto 2.4 2.6 lineto 1.6 1.4 moveto 2.6 2.4 lineto 1.8 1.2 moveto 2.8 2.2 lineto stroke" }"""
         else: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.5 . 2.6) \postscript "1.1 1.6 moveto 2.1 2.6 lineto 1.3 1.4 moveto 2.3 2.4 lineto 1.5 1.2 moveto 2.5 2.2 lineto stroke" }"""
+        if not (midi or western): ret += "%{ TODO: tremolo marks require Lilypond 2.20 (2.18 won't work and 2.22 puts them too high) %}"
     if nBeams and (not self.inBeamGroup or self.inBeamGroup=="restHack" or inRestHack) and not midi and not western:
         # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
         ret += '['
@@ -696,7 +699,9 @@ def getLY(score):
         hName,hValue = line.split("=",1)
         headers[hName.strip()] = hValue.strip()
     else:
+        line=re.sub('(?<= )[_^]"[^" ]* [^"]*"(?= |$)',lambda m:m.group().replace(' ',chr(0))," "+line)[1:] # multi-word text above/below stave
         for word in line.split():
+            word=word.replace(chr(0)," ")
             if word in ["souyin","harmonic","up","down","bend","tilde"]: word="Fr="+word # (Fr= before these is optional)
             if word.startswith('%'): break # a comment
             elif re.match("[1-468]+[.]*=[1-9][0-9]*$",word): out.append(r'\tempo '+word) # TODO: reduce size a little?
@@ -747,7 +752,7 @@ def getLY(score):
                     notehead_markup.setAnac(int(a2),anacDotted)
                     out.append(r'\partial '+anac)
             elif word.startswith("\\") or word in ["(",")","~","->"] or word.startswith('^"') or word.startswith('_"'):
-                # Lilypond command, \p, ^"text" etc (must be one word though)
+                # Lilypond command, \p, ^"text" etc
                 if out and "afterGrace" in out[lastPtr]:
                     # apply to inside afterGrace in midi/western
                     out[lastPtr] = out[lastPtr][:-1] + word + " }"
@@ -978,23 +983,28 @@ def write_output(outDat):
         if os.extsep in fn: fn=fn[:-fn.rindex(os.extsep)]
         fn += ".ly"
         import tempfile,shutil,shlex
+        try: from shlex import quote
+        except:
+            def quote(f): return "'"+f.replace("'","'\"'\"'")+"'"
         cwd = os.getcwd()
         os.chdir(tempfile.gettempdir())
         print("Outputting to "+os.getcwd()+"/"+fn)
         o = open(fn,'w')
         fix_utf8(o,'w').write(outDat)
         o.close()
-        try_PDF = True
-        if hasattr(shutil,'which') and shutil.which('lilypond'): os.system("lilypond "+shlex.quote(fn))
-        elif os.path.exists('/Applications/LilyPond.app/Contents/Resources/bin/lilypond'): os.system('/Applications/LilyPond.app/Contents/Resources/bin/lilypond '+shlex.quote(fn))
-        else: try_PDF = False # because we can't find Lilypond
-        if try_PDF:
-            fn = fn[:-3]+'.pdf'
-            if sys.platform=='darwin': os.system("open "+shlex.quote(fn))
+        pdf = fn[:-3]+'.pdf'
+        try: os.remove(pdf) # so won't show old one if lilypond fails
+        except: pass
+        if hasattr(shutil,'which') and shutil.which('lilypond'): os.system("lilypond "+quote(fn))
+        elif os.path.exists('/Applications/LilyPond-2.20.0.app/Contents/Resources/bin/lilypond'): os.system('/Applications/LilyPond-2.20.0.app/Contents/Resources/bin/lilypond -dstrokeadjust '+quote(fn)) # -dstrokeadjust for 2.20+ if will be viewed on-screen rather than printed, and it's not a Retina display
+        elif os.path.exists('/Applications/LilyPond.app/Contents/Resources/bin/lilypond'): os.system('/Applications/LilyPond.app/Contents/Resources/bin/lilypond '+quote(fn))
+        else: pdf = None # because we can't find Lilypond
+        if pdf:
+            if sys.platform=='darwin': os.system("open "+quote(pdf))
             elif sys.platform.startswith('win'):
                 import subprocess
-                subprocess.Popen([fn],shell=True)
-            elif hasattr(shutil,'which') and shutil.which('evince'): os.system("evince "+shlex.quote(fn))
+                subprocess.Popen([quote(pdf)],shell=True)
+            elif hasattr(shutil,'which') and shutil.which('evince'): os.system("evince "+quote(pdf))
         os.chdir(cwd)
     else: fix_utf8(sys.stdout,'w').write(outDat)
 

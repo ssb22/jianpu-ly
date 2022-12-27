@@ -99,6 +99,8 @@ Dynamics (applies to previous note): `\p \mp \f`
 
 Other 1-word Lilypond \ commands: `\fermata \> \! \( \) etc`
 
+Text: `^"above note" _"below note"`
+
 Other Lilypond code: `LP: (block of code) :LP` (each delimeter at start of its line)
 
 Ignored: `% a comment`
