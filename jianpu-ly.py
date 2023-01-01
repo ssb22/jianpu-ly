@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.64 (c) 2012-2022 Silas S. Brown
+# v1.65 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ Ties (like Lilypond's, if you don't want dashes): 1 ~ 1
 Slurs (like Lilypond's): 1 ( 2 )
 Erhu fingering (applies to previous note): Fr=0 Fr=4
 Erhu symbol (applies to previous note): souyin harmonic up down bend tilde
-Tremolo (must use Lilypond 2.20): 1/// - 1///5 -
+Tremolo: 1/// - 1///5 -
 Rehearsal letters: letterA letterB
 Multibar rest: R*8
 Dynamics (applies to previous note): \p \mp \f
@@ -73,7 +73,7 @@ Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its lin
 Ignored: % a comment
 """
 
-import sys,os,re
+import sys,os,re,shutil
 from fractions import Fraction as F # requires Python 2.6+
 if type(u"")==type(""): # Python 3
     unichr,xrange = chr,range
@@ -82,6 +82,29 @@ else: from string import letters # Python 2
 def asUnicode(l):
     if type(l)==type(u""): return l
     return l.decode('utf-8')
+try: from commands import getoutput
+except: from subprocess import getoutput
+
+def lilypond_minor_version():
+    global _lilypond_minor_version
+    try: return _lilypond_minor_version
+    except: pass
+    cmd = lilypond_command()
+    if cmd:
+        m=re.match(r".*ond-2\.([1-9][0-9])\.",cmd)
+        if m: _lilypond_minor_version = int(m.group(1))
+        else: _lilypond_minor_version = int(getoutput(cmd+" --version").split()[2].split('.')[1])
+    else: _lilypond_minor_version = 20 # 2.20
+    return _lilypond_minor_version
+
+def lilypond_command():
+    if hasattr(shutil,'which'):
+        if shutil.which('lilypond'): return 'lilypond'
+    elif not sys.platform.startswith("win"):
+        cmd = getoutput('which lilypond 2>/dev/null')
+        if os.path.exists(cmd): return 'lilypond'
+        for t in ['/Applications/LilyPond-2.22.2.app/Contents/Resources/bin/lilypond','/Applications/LilyPond-2.20.0.app/Contents/Resources/bin/lilypond','/Applications/LilyPond.app/Contents/Resources/bin/lilypond']:
+            if os.path.exists(t): return t
 
 def all_scores_start():
     staff_size = float(os.environ.get("j2ly_staff_size",20))
@@ -115,7 +138,7 @@ def all_scores_start():
   % un-comment the next line for a more space-saving header layout:
   % scoreTitleMarkup = \markup { \center-column { \fill-line { \magnify #1.5 { \bold { \fromproperty #'header:dedication } } \magnify #1.5 { \bold { \fromproperty #'header:title } } \fromproperty #'header:composer } \fill-line { \fromproperty #'header:instrument \fromproperty #'header:subtitle \smaller{\fromproperty #'header:subsubtitle } } } }
 """
-    if os.path.exists("/Library/Fonts/Arial Unicode.ttf"): r += r"""
+    if os.path.exists("/Library/Fonts/Arial Unicode.ttf") and lilypond_minor_version()>=20: r += r"""
   % As jianpu-ly was run on a Mac, we include a Mac fonts workaround.
   % The Mac version of Lilypond 2.18 used Arial Unicode MS as a
   % fallback even in the Serif font, but 2.20 drops this in Serif
@@ -123,7 +146,7 @@ def all_scores_start():
   % lyrics etc) that includes Chinese will likely fall back to
   % Japanese fonts which don't support all Simplified hanzi.
   % This brings back 2.18's behaviour on 2.20+
-  % (you might have to comment it out if you still have 2.18)
+  % (you might have to comment it out to run this on 2.18)
   #(define fonts
     (set-global-fonts
      #:roman "Times New Roman,Arial Unicode MS"
@@ -426,15 +449,18 @@ class notehead_markup:
         if not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI + Western, put it so no-mark starts near middle C
     ret += ("%d" % length) + dot
     if tremolo:
+        if lilypond_minor_version()<20: errExit("tremolo requires Lilypond 2.20+, we found 2."+str(lilypond_minor_version()))
         if midi or western:
             if placeholder_chord.startswith("<") and len(placeholder_chord.split())==4:
                 previous,n1,n2,gtLenDot = ret.rsplit(None,3)
                 previous=previous[:-1] # drop <
                 ret = r"%s\repeat tremolo %d { %s32 %s32 }" % (previous,int(toAdd_preTuplet/4),n1,n2)
             else: ret += tremolo
-        elif dot: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.8 . 2.6) \postscript "1.4 1.6 moveto 2.4 2.6 lineto 1.6 1.4 moveto 2.6 2.4 lineto 1.8 1.2 moveto 2.8 2.2 lineto stroke" }"""
-        else: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.5 . 2.6) \postscript "1.1 1.6 moveto 2.1 2.6 lineto 1.3 1.4 moveto 2.3 2.4 lineto 1.5 1.2 moveto 2.5 2.2 lineto stroke" }"""
-        if not (midi or western): ret += "%{ TODO: tremolo marks require Lilypond 2.20 (2.18 won't work and 2.22 puts them too high) %}"
+        elif lilypond_minor_version()>=22:
+            if dot: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.8 . 2.1) \postscript "1.6 -0.2 moveto 2.6 0.8 lineto 1.8 -0.4 moveto 2.8 0.6 lineto 2.0 -0.6 moveto 3.0 0.4 lineto stroke" } %{ requires Lilypond 2.22+ %} """
+            else: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.5 . 2.1) \postscript "1.1 0.4 moveto 2.1 1.4 lineto 1.3 0.2 moveto 2.3 1.2 lineto 1.5 0.0 moveto 2.5 1.0 lineto stroke" } %{ requires Lilypond 2.22+ %} """
+        elif dot: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.8 . 2.6) \postscript "1.4 1.6 moveto 2.4 2.6 lineto 1.6 1.4 moveto 2.6 2.4 lineto 1.8 1.2 moveto 2.8 2.2 lineto stroke" } %{ requires Lilypond 2.20 %} """
+        else: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.5 . 2.6) \postscript "1.1 1.6 moveto 2.1 2.6 lineto 1.3 1.4 moveto 2.3 2.4 lineto 1.5 1.2 moveto 2.5 2.2 lineto stroke" } %{ requires Lilypond 2.20 %} """
     if nBeams and (not self.inBeamGroup or self.inBeamGroup=="restHack" or inRestHack) and not midi and not western:
         # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
         ret += '['
@@ -982,7 +1008,7 @@ def write_output(outDat):
         else: fn = 'jianpu'
         if os.extsep in fn: fn=fn[:-fn.rindex(os.extsep)]
         fn += ".ly"
-        import tempfile,shutil,shlex
+        import tempfile,shlex
         try: from shlex import quote
         except:
             def quote(f): return "'"+f.replace("'","'\"'\"'")+"'"
@@ -995,11 +1021,10 @@ def write_output(outDat):
         pdf = fn[:-3]+'.pdf'
         try: os.remove(pdf) # so won't show old one if lilypond fails
         except: pass
-        if hasattr(shutil,'which') and shutil.which('lilypond'): os.system("lilypond "+quote(fn))
-        elif os.path.exists('/Applications/LilyPond-2.20.0.app/Contents/Resources/bin/lilypond'): os.system('/Applications/LilyPond-2.20.0.app/Contents/Resources/bin/lilypond -dstrokeadjust '+quote(fn)) # -dstrokeadjust for 2.20+ if will be viewed on-screen rather than printed, and it's not a Retina display
-        elif os.path.exists('/Applications/LilyPond.app/Contents/Resources/bin/lilypond'): os.system('/Applications/LilyPond.app/Contents/Resources/bin/lilypond '+quote(fn))
-        else: pdf = None # because we can't find Lilypond
-        if pdf:
+        cmd = lilypond_command()
+        if cmd:
+            if lilypond_minor_version() >= 20: cmd += ' -dstrokeadjust' # if will be viewed on-screen rather than printed, and it's not a Retina display
+            os.system(cmd+" "+quote(fn))
             if sys.platform=='darwin': os.system("open "+quote(pdf))
             elif sys.platform.startswith('win'):
                 import subprocess
