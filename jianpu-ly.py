@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.65 (c) 2012-2023 Silas S. Brown
+# v1.66 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,6 +46,8 @@ Lyrics (verse 1): L: 1. Here is verse one
 Lyrics (verse 2): L: 2. Here is verse two
 Hanzi lyrics (auto space): H: hanzi (with or without spaces)
 Lilypond headers: title=the title (on a line of its own)
+Multiple parts: NextPart
+Instrument of current part: instrument=Flute (on a line of its own)
 Multiple movements: NextScore
 Prohibit page breaks until end of this movement: OnePage
 Suppress bar numbers: NoBarNums
@@ -212,8 +214,9 @@ def jianpu_voice_start(voiceName="tmp"):
     \override TupletBracket #'bracket-visibility = ##t""" % stemLenFrac)
     r += "\n"+r"""\set Voice.chordChanges = ##t %% 2.19 bug workaround""" # LilyPond 2.19.82: \applyOutput docs say "called for every layout object found in the context Context at the current time step" but 2.19.x breaks this by calling it for ALL contexts in the current time step, hence breaking our WithStaff by applying our jianpu numbers to the 5-line staff too.  Obvious workaround is to make our function check that the context it's called with matches our jianpu voice, but I'm not sure how to do this other than by setting a property that's not otherwise used, which we can test for in the function.  So I'm 'commandeering' the "chordChanges" property (there since at least 2.15 and used by Lilypond only when it's in chord mode, which we don't use, and if someone adds a chord-mode staff then it won't print noteheads anyway): we will substitute jianpu numbers for noteheads only if chordChanges = #t.
     return r+"\n"
-def jianpu_staff_start(withStaff=False):
+def jianpu_staff_start(inst=None,withStaff=False):
     # (we add "BEGIN JIANPU STAFF" and "END JIANPU STAFF" comments to make it easier to copy/paste into other Lilypond files)
+    if withStaff: inst = None # we'll put the label on the 5-line staff (TODO: use StaffGroup or something?)
     if not_angka: voiceName="notAngka"
     else: voiceName="jianpu"
     if not_angka: r=r"""
@@ -223,6 +226,7 @@ def jianpu_staff_start(withStaff=False):
 %% === BEGIN JIANPU STAFF ===
     \new RhythmicStaff \with {
     \consists "Accidental_engraver" """
+    if inst: r += 'instrumentName = "'+inst+'"'
     if withStaff: r+=r"""
    %% Limit space between Jianpu and corresponding-Western staff
    \override VerticalAxisGroup.staff-staff-spacing = #'((minimum-distance . 7) (basic-distance . 7) (stretchability . 0))
@@ -246,10 +250,12 @@ def midi_staff_start(voiceName="midi"):
 %% === BEGIN MIDI STAFF ===
     \new Staff { \new Voice="%s" {""" % (voiceName,)
 def midi_staff_end(): return "} }\n% === END MIDI STAFF ===\n"
-def western_staff_start(voiceName="5line"):
-    return r"""
+def western_staff_start(inst=None,voiceName="5line"):
+    r = r"""
 %% === BEGIN 5-LINE STAFF ===
-    \new Staff {
+    \new Staff """
+    if inst: r += r'\with { instrumentName = "'+inst+'" } '
+    return r+r"""{
     \override Score.SystemStartBar.collapse-height = #11 %% (needed on 2.22)
     \new Voice="%s" {
     #(set-accidental-style 'modern-cautionary)
@@ -671,8 +677,9 @@ def gracenotes_western(notes):
             nextAcc = "" ; next8ve = "'"
     return ' '.join(r)
 
-def getLY(score):
-   lyrics = "" ; headers = {}
+def getLY(score,headers=None):
+   if not headers: headers = {} # Python 2 persists this dict if it's in the default args
+   lyrics = ""
    notehead_markup.initOneScore()
    out = [] ; maxBeams = 0 ; need_final_barline = 0
    repeatStack = [] ; lastPtr = 0
@@ -723,7 +730,12 @@ def getLY(score):
     elif re.match(r"\s*[A-Za-z]+\s*=",line):
         # Lilypond header
         hName,hValue = line.split("=",1)
-        headers[hName.strip()] = hValue.strip()
+        hName,hValue = hName.strip().lower(),hValue.strip()
+        if not headers.get(hName,hValue)==hValue:
+            if hName=='instrument': missing='NextPart or NextScore'
+            else: missing='NextScore'
+            errExit("Changing header '%s' from '%s' to '%s' (is there a missing %s?)" % (hName,headers[hName],hValue,missing))
+        headers[hName] = hValue
     else:
         line=re.sub('(?<= )[_^]"[^" ]* [^"]*"(?= |$)',lambda m:m.group().replace(' ',chr(0))," "+line)[1:] # multi-word text above/below stave
         for word in line.split():
@@ -982,16 +994,22 @@ def process_input(inDat):
   has_lyrics = "L:" in wordSet or "H:" in wordSet # the occasional false positive doesn't matter: has_lyrics==False is only an optimisation
   for midi in [0,1]:
    not_angka = False # may be set by getLY
-   out,maxBeams,lyrics,headers = getLY(score)
-   if notehead_markup.withStaff and notehead_markup.separateTimesig: errExit("Use of both WithStaff and SeparateTimesig in the same piece is not yet implemented")
-   if scoreNo==1 and not midi: ret.append(all_scores_start()) # not before here, so as not to confuse beginners who don't input a valid score 1
-   ret.append(score_start())
-   if midi:
+   if scoreNo==1 and not midi: ret.append(all_scores_start())
+   ret.append(score_start()) ; headers = {}
+   parts = [p for p in re.split(r"\sNextPart\s"," "+score+" ") if p.strip()]
+   for part in parts:
+     out,maxBeams,lyrics,headers = getLY(part,headers)
+     if notehead_markup.withStaff and notehead_markup.separateTimesig: errExit("Use of both WithStaff and SeparateTimesig in the same piece is not yet implemented")
+     if len(parts)>1 and "instrument" in headers:
+         inst = headers["instrument"]
+         del headers["instrument"]
+     else: inst = None
+     if midi:
        ret.append(midi_staff_start()+" "+out+" "+midi_staff_end())
-   else:
-       ret.append(jianpu_staff_start(notehead_markup.withStaff)+" "+out+" "+jianpu_staff_end())
+     else:
+       ret.append(jianpu_staff_start(inst,notehead_markup.withStaff)+" "+out+" "+jianpu_staff_end())
        if notehead_markup.withStaff:
-           western=True ; ret.append(western_staff_start()+" "+getLY(score)[0]+" "+western_staff_end()) ; western = False
+           western=True ; ret.append(western_staff_start(inst)+" "+getLY(part)[0]+" "+western_staff_end()) ; western = False
            lyrics = lyrics.replace(r'\lyricsto "jianpu"',r'\lyricsto "5line"')
        if lyrics: ret.append(lyrics)
    ret.append(score_end(**headers))

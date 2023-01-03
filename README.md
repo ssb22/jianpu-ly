@@ -55,6 +55,10 @@ Hanzi lyrics (auto space): `H: hanzi` (with or without spaces)
 
 Lilypond headers: `title=the title` (on a line of its own)
 
+Multiple parts: `NextPart`
+
+Instrument of current part: `instrument=Flute` (on a line of its own)
+
 Multiple movements: `NextScore`
 
 Prohibit page breaks until end of this movement: `OnePage`
