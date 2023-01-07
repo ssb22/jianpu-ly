@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.66 (c) 2012-2023 Silas S. Brown
+# v1.67 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -310,7 +310,10 @@ class notehead_markup:
       self.last_was_rest = False
       self.notesHad = []
   def endScore(self):
-      if not self.barPos == self.startBarPos: errExit("Incomplete bar at end of score %d (pos %d, should be %d)" % (scoreNo,self.barPos,self.startBarPos))
+      if self.barPos == self.startBarPos: pass
+      elif os.environ.get("j2ly_sloppy_bars",""): sys.stderr.write("Wrong bar length at end of score %d ignored (j2ly_sloppy_bars set)\n" % scoreNo)
+      elif self.startBarPos and not self.barPos: errExit("Final bar of score %d does not make up for anacrusis bar.  Set j2ly_sloppy_bars environment variable if you really want to break the rules." % scoreNo)
+      else: errExit("Incomplete bar at end of score %d (pos %d)" % (scoreNo,self.barPos))
   def setTime(self,num,denom):
       self.barLength = int(64*num/denom)
       if denom>4 and num%3==0: self.beatLength = 24 # compound time
@@ -318,7 +321,7 @@ class notehead_markup:
   def setAnac(self,denom,dotted):
       self.barPos = F(self.barLength)-F(64)/denom
       if dotted: self.barPos -= F(64)/denom/2
-      if not self.barPos: errExit("Anacrusis should be shorter than bar in score %d" % scoreNo)
+      if self.barPos<0: errExit("Anacrusis is longer than bar in score %d" % scoreNo) # but anacrusis being exactly equal to bar is OK: we'll just interpret that as no anacrusis
       self.startBarPos = self.barPos
   def wholeBarRestLen(self): return {96:"1.",48:"2.",32:"2",24:"4.",16:"4",12:"8.",8:"8"}.get(self.barLength,"1") # TODO: what if irregular?
   def __call__(self,figures,nBeams,dot,octave,accidental,tremolo):
@@ -570,10 +573,12 @@ def write_docs():
 def getInput0():
   inDat = []
   for f in sys.argv[1:]:
-    try:
+    if f.endswith(".mxl"): inDat.append(re.sub(r"<[?]xml.*?/container>\s*","",getoutput("unzip -qc "+quote(f)).replace("application/vnd.recordare.musicxml","").strip(),flags=re.DOTALL))
+    else:
+      try:
         try: inDat.append(open(f,encoding="utf-8").read()) # Python 3: try UTF-8 first
         except: inDat.append(open(f).read()) # Python 2, or Python 3 with locale-default encoding in case it's not UTF-8
-    except: errExit("Unable to read file "+f)
+      except: errExit("Unable to read file "+f)
   if inDat: return inDat
   if not sys.stdin.isatty():
     return [fix_utf8(sys.stdin,'r').read()]
@@ -594,7 +599,93 @@ def get_input():
     if inDat[i].startswith('\xef\xbb\xbf'):
       inDat[i] = inDat[i][3:]
     if inDat[i].startswith(r'\version'): errExit("jianpu-ly does not READ Lilypond code.\nPlease see the instructions.")
+    elif inDat[i].startswith("<?xml"):
+        inDat[i] = xml2jianpu(inDat[i])
   return " NextScore ".join(inDat)
+
+def xml2jianpu(x):
+    from xml.parsers.expat import ParserCreate
+    xmlparser = ParserCreate()
+    ret = [] ; dat = ["",""]
+    partList=[""];time=["4","4"];tempo=["4","60"]
+    note=[[""]*10];naturalType=[""];note1=["C"]
+    tSig=[None,0];prevChord=[None]
+    types={"16th":"s","eighth":"q","quarter":"","half":" -","whole":" - - -"}
+    typesDot={"16th":"s.","eighth":"q.","quarter":".","half":" - -","whole":" - - - - -"}
+    typesMM={"16th":16,"eighth":"8","quarter":"4","half":"2","whole":"1"}
+    quavers={"16th":0.5,"eighth":1,"quarter":2,"half":4,"whole":8}
+    def s(name,attrs): dat[0],dat[1]="",attrs.get("type","")
+    def c(data): dat[0] += data
+    def e(name):
+        d0 = dat[0].strip()
+        if name=='work-title': ret.append('title='+d0)
+        elif name=='creator' and dat[1]=="composer": ret.append('composer='+d0)
+        elif name=="part-name" or name=="instrument-name": partList[-1]=d0
+        elif name=="score-part": partList.append("")
+        elif name=="part": # we're assuming score-partwise
+            if partList:
+                ret.append('instrument='+partList[0])
+                del partList[0]
+            ret.append("WithStaff NextPart")
+        elif name=="fifths":
+            if d0.startswith('-'): naturalType[0]='#'
+            else: naturalType[0]='b'
+            key = ["Gb","Db","Ab","Eb","Bb","F","C","G","D","A","E","B","F#"][int(d0)+6]
+            note1[0]=key[0]
+            ret.append("1="+key)
+        elif name=="beats": time[0]=d0
+        elif name=="beat-type": time[1]=d0
+        elif name=="time":
+            tSig[0] = len(ret) # for anacrusis
+            tSig[1] = 0
+            ret.append("/".join(time))
+        elif name=="backup" or name=="forward": errExit("MusicXML import: multiple voices per part not implemented")
+        elif name=="measure" and not tSig[0]==None:
+            ret[tSig[0]]+=","+{0.5:"16",0.75:"16.",1:"8",1.5:"8.",2:"4",3:"4.",4:"2",6:"2.",8:"1",12:"1."}[tSig[1]]
+            tSig[0]=None
+        elif name=="beat-unit": tempo[0]=typesMM.get(name,"4")
+        elif name=="beat-minute": tempo[1]=d0
+        elif name=="metronome": ret.append("=".join(tempo))
+        elif name=="step": note[0][0]=d0
+        elif name=="rest": note[0][0]="r"
+        elif name=="octave": note[0][1]=int(d0)
+        elif name=="accidental": note[0][2]={"flat":"b","sharp":"#","natural":naturalType[0]}.get(d0,"") # TODO: what if it's natural-ing something that wasn't sharp or flat in the key signature
+        elif name=="type": note[0][3]=d0
+        elif name=="dot": note[0][4]=1
+        elif name=="slur": note[0][5]={"start":"(","stop":")"}[dat[1]]
+        elif name=="tie": note[0][6]={"start":"~","stop":""}[dat[1]]
+        elif name=="actual-notes": note[0][7]=d0
+        elif name=="tuplet": note[0][8]=dat[1]
+        elif name=="chord": note[0][9]=True
+        elif name=="note":
+            step,octave,acc,nType,dot,slur,tie,tuplet,tState,chord = note[0]
+            note[0]=[""]*10
+            if step=="r": r="0"
+            else:
+                dTone=ord(step[0])-ord(note1[0])+7*(octave-4)
+                if step[0] < 'C': dTone += 7
+                r=str((dTone%7)+1)
+                while dTone<0:
+                    r+="," ; dTone+=7
+                while dTone>6:
+                    r+="'" ; dTone-=7
+            if chord:
+                ret[prevChord[0]] += r ; return
+            if tState=="start": ret.append(tuplet+"[")
+            if not tSig[0]==None: # we're counting the length of the first bar, for anacrusis
+                tSig[1] += quavers[nType]
+                if dot: tSig[1] += quavers[nType]/2.0
+            if dot: d=typesDot
+            else: d = types
+            r += acc+d[nType]+' '
+            prevChord[0]=len(ret)
+            ret.append(r[:r.index(' ')]+' '+tie+' '+slur+r[r.index(' '):])
+            if tState=="stop": ret.append("]")
+    xmlparser.StartElementHandler = s
+    xmlparser.CharacterDataHandler = c
+    xmlparser.EndElementHandler = e
+    xmlparser.Parse(x,True)
+    return '\n'.join(ret)
 
 def fix_utf8(stream,mode):
     if type("")==type(u""): # Python 3: please use UTF-8 for Lilypond, even if the system locale says something else
@@ -1015,6 +1106,10 @@ def process_input(inDat):
    ret.append(score_end(**headers))
  return "".join(r+"\n" for r in ret)
 
+try: from shlex import quote
+except:
+    def quote(f): return "'"+f.replace("'","'\"'\"'")+"'"
+
 def write_output(outDat):
     if sys.stdout.isatty():
         # They didn't redirect our output.
@@ -1026,10 +1121,7 @@ def write_output(outDat):
         else: fn = 'jianpu'
         if os.extsep in fn: fn=fn[:-fn.rindex(os.extsep)]
         fn += ".ly"
-        import tempfile,shlex
-        try: from shlex import quote
-        except:
-            def quote(f): return "'"+f.replace("'","'\"'\"'")+"'"
+        import tempfile
         cwd = os.getcwd()
         os.chdir(tempfile.gettempdir())
         print("Outputting to "+os.getcwd()+"/"+fn)
