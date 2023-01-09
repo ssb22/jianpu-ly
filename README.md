@@ -9,7 +9,7 @@ jianpu-ly is a Python program (compatible with both Python 2 and Python 3) tha
 Using jianpu-ly requires some technical knowledge.  If you don't know what a command line is, what a text editor is, what a directory is or what Python is, then please find out about these things before attempting to use jianpu-ly.  It is not an extension to Lilypond front-ends like Frescobaldi; it is a preprocessor that currently requires you to have command-line experience.
 
 If you have problems, try a different Lilypond version.
-jianpu-ly works with Lilypond 2.18, 2.20 and 2.22.
+jianpu-ly works with Lilypond 2.18, 2.20, 2.22 and 2.24.
 
 Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file)
 
