@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.671 (c) 2012-2023 Silas S. Brown
+# v1.672 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -454,6 +454,7 @@ class notehead_markup:
         notes = placeholder_chord.split()[1:-1]
         assert len(notes) >= 2
         notes[0] += {",":"",",,":","}.get(octave,"'")
+        for n in range(1,len(notes)-1): notes[n] += "'"
         notes[-1] += {"'":"''","''":"'''"}.get(octave,"'")
         ret += "< "+" ".join(notes)+" >"
     else: # single note or rest
