@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.672 (c) 2012-2023 Silas S. Brown
+# v1.68 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -306,6 +306,8 @@ class notehead_markup:
       self.barLength = 64 ; self.beatLength = 16 # in 64th notes
       self.barPos = self.startBarPos = F(0)
       self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.separateTimesig = self.withStaff = 0
+      self.keepOctave = self.keepLength = 0
+      self.last_octave = ""
       self.current_accidentals = {}
       self.barNo = 1
       self.tuplet = (1,1)
@@ -367,7 +369,17 @@ class notehead_markup:
         accidental = self.last_accidental # ditto
     self.last_figures = figures
     if len(self.last_figures)>1 and self.last_figures[0]=='-': self.last_figures = self.last_figures[1:]
-    self.last_octave = octave
+    if self.keepOctave:
+        while octave:
+            if octave.startswith("'"): # ' : go up
+                if ',' in self.last_octave: self.last_octave = self.last_octave[:-1]
+                else: self.last_octave += "'"
+            else: # , : go down
+                if "'" in self.last_octave: self.last_octave = self.last_octave[:-1]
+                else: self.last_octave += "'"
+            octave=octave[1:]
+        octave = self.last_octave
+    else: self.last_octave = octave
     self.last_accidental = accidental
     if figures not in self.defines_done and not midi and not western:
         # Define a notehead graphical object for the figures
@@ -404,6 +416,10 @@ class notehead_markup:
         if self.onePage and not midi: ret += r"\noPageBreak "
         ret += "%{ bar "+str(self.barNo)+": %} "
     if not octave in self.current_accidentals: self.current_accidentals[octave] = [""]*7
+    if nBeams==None: # unspecified
+        if self.keepLength:
+            nBeams = self.lastNBeams
+        else: nBeams = 0
     if figures=="-" or all('1'<=figure<='7' and not accidental==self.current_accidentals[octave][int(figure)-1] for figure in list(figures)) and nBeams > self.lastNBeams: leftBeams = nBeams # beam needs to fit under the new accidental (or the dash which might be slightly to the left of where digits are), but if it's no more than last note's beams then we'll hang it only if in same beat.  (TODO: the current_accidentals logic may need revising if other accidental styles are used, e.g. modern-cautionary, although then would need to check anyway if our \consists "Accidental_engraver" is sufficient)
     # TODO: if figures=="0" then that might be typeset a bit to the left as well (because it's also a rest), however extending the line TOO far left in this case could be counterproductive
     elif self.inBeamGroup:
@@ -513,18 +529,19 @@ class notehead_markup:
         else: b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
     else: b4last,aftrlast = "",""
     if inRestHack: ret += " } "
-    return b4last,aftrlast0+aftrlast,ret, need_space_for_accidental
+    return b4last,aftrlast0+aftrlast,ret, need_space_for_accidental, nBeams,octave
 
 notehead_markup = notehead_markup()
 
 def parseNote(word):
     if word==".": word = "-" # (for not angka, TODO: document that this is now acceptable as an input word?)
+    word = word.replace(">","'").replace("<",",") # for KeepOctave mode, accept SMX-like octave changing via > and < as an alternative to ' and , (TODO: document this somewhere?)
     word = word.replace("8","1'").replace("9","2'")
     if type(u"")==type(""): word = word.replace(u"\u2019","'")
     else: word=word.replace(u"\u2019".encode('utf-8'),"'")
     if "///" in word: tremolo,word=":32",word.replace("///","",1)
     else: tremolo = ""
-    if not re.match("[0-7.,'qsdh\\#b-]+$",word): figures = None # unrecognised stuff in it: flag as error, rather than ignoring and possibly getting a puzzling barsync fail
+    if not re.match("[0-7.,'<>cqsdh\\#b-]+$",word): figures = None # unrecognised stuff in it: flag as error, rather than ignoring and possibly getting a puzzling barsync fail
     else: figures = ''.join(re.findall('[01234567-]',word))
     if "." in word: dot="."
     else: dot=""
@@ -532,8 +549,9 @@ def parseNote(word):
     elif "s" in word: nBeams=2
     elif "d" in word: nBeams=3
     elif "h" in word: nBeams=4
+    elif "c" in word: nBeams = 0
     elif "\\" in word: nBeams=len(word.split("\\"))-1 # requested by a user who found British note-length names hard to remember; won't work if the \ is placed at the start, as that'll be a Lilypond command, so to save confusion we won't put this in the docstring
-    else: nBeams=0
+    else: nBeams=None # unspecified
     octave = ""
     for o in ["''","'",",,",","]:
         if o in word:
@@ -884,8 +902,8 @@ def getLY(score,headers=None):
                     else: a2,anacDotted = anac,0
                     notehead_markup.setAnac(int(a2),anacDotted)
                     out.append(r'\partial '+anac)
-            elif word.startswith("\\") or word in ["(",")","~","->"] or word.startswith('^"') or word.startswith('_"'):
-                # Lilypond command, \p, ^"text" etc
+            elif word.startswith("\\") or word in ["(",")","~","->","|"] or word.startswith('^"') or word.startswith('_"'):
+                # Lilypond command, \p, ^"text", barline check, etc
                 if out and "afterGrace" in out[lastPtr]:
                     # apply to inside afterGrace in midi/western
                     out[lastPtr] = out[lastPtr][:-1] + word + " }"
@@ -893,6 +911,10 @@ def getLY(score,headers=None):
             elif word=="OnePage":
                 if notehead_markup.onePage: sys.stderr.write("WARNING: Duplicate OnePage, did you miss out a NextScore?\n")
                 notehead_markup.onePage=1
+            elif word=="KeepOctave": # TODO: document this
+                notehead_markup.keepOctave=1
+            elif word=="KeepLength": # TODO: document this.  If this is on, you have to use c in a note to go back to crotchets.
+                notehead_markup.keepLength=1
             elif word=="NoBarNums":
                 if notehead_markup.noBarNums: sys.stderr.write("WARNING: Duplicate NoBarNums, did you miss out a NextScore?\n")
                 notehead_markup.noBarNums=1
@@ -1014,7 +1036,7 @@ def getLY(score,headers=None):
                 figures,nBeams,dot,octave,accidental,tremolo = parseNote(word)
                 if figures:
                     need_final_barline = 1
-                    b4last,aftrlast,this,need_space_for_accidental = notehead_markup(figures,nBeams,dot,octave,accidental,tremolo)
+                    b4last,aftrlast,this,need_space_for_accidental,nBeams,octave = notehead_markup(figures,nBeams,dot,octave,accidental,tremolo)
                     if b4last: out[lastPtr]=b4last+out[lastPtr]
                     if aftrlast: out.insert(lastPtr+1,aftrlast)
                     lastPtr = len(out)
