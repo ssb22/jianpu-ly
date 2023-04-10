@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.68 (c) 2012-2023 Silas S. Brown
+# v1.69 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -188,13 +188,15 @@ def score_end(**headers):
     else: ret += r"\layout{}"
     return ret + " }"
 
-tempCount = 0
-def jianpu_voice_start(voiceName="tmp"):
-    stemLenFrac = "0" # unless overridden to 0.5 below
-    if voiceName=="tmp": # make it unique just in case
-        global tempCount
-        voiceName += str(tempCount) ; tempCount += 1
-    elif maxBeams >= 2: stemLenFrac = "0.5" # sometimes needed if the semiquavers occur in isolation rather than in groups (TODO do we need to increase this for 3+ beams in some cases?)
+uniqCount = 0
+def uniqName():
+    global uniqCount
+    r = str(uniqCount) ; uniqCount += 1
+    return r.translate((letters*5)[:256])
+def jianpu_voice_start(isTemp=0):
+    if not isTemp and maxBeams >= 2: stemLenFrac = "0.5" # sometimes needed if the semiquavers occur in isolation rather than in groups (TODO do we need to increase this for 3+ beams in some cases?)
+    else: stemLenFrac = "0"
+    voiceName = uniqName()
     r = (r"""\new Voice="%s" {"""%voiceName)+"\n"
     r += r"""
     \override Beam #'transparent = ##f % (needed for LilyPond 2.18 or the above switch will also hide beams)
@@ -216,12 +218,10 @@ def jianpu_voice_start(voiceName="tmp"):
     \override Accidental #'font-size = #-4
     \override TupletBracket #'bracket-visibility = ##t""" % stemLenFrac)
     r += "\n"+r"""\set Voice.chordChanges = ##t %% 2.19 bug workaround""" # LilyPond 2.19.82: \applyOutput docs say "called for every layout object found in the context Context at the current time step" but 2.19.x breaks this by calling it for ALL contexts in the current time step, hence breaking our WithStaff by applying our jianpu numbers to the 5-line staff too.  Obvious workaround is to make our function check that the context it's called with matches our jianpu voice, but I'm not sure how to do this other than by setting a property that's not otherwise used, which we can test for in the function.  So I'm 'commandeering' the "chordChanges" property (there since at least 2.15 and used by Lilypond only when it's in chord mode, which we don't use, and if someone adds a chord-mode staff then it won't print noteheads anyway): we will substitute jianpu numbers for noteheads only if chordChanges = #t.
-    return r+"\n"
+    return r+"\n", voiceName
 def jianpu_staff_start(inst=None,withStaff=False):
     # (we add "BEGIN JIANPU STAFF" and "END JIANPU STAFF" comments to make it easier to copy/paste into other Lilypond files)
     if withStaff: inst = None # we'll put the label on the 5-line staff (TODO: use StaffGroup or something?)
-    if not_angka: voiceName="notAngka"
-    else: voiceName="jianpu"
     if not_angka: r=r"""
 %% === BEGIN NOT ANGKA STAFF ===
     \new RhythmicStaff \with {"""
@@ -239,38 +239,39 @@ def jianpu_staff_start(inst=None,withStaff=False):
     \override StaffSymbol #'line-count = #0 %% tested in 2.15.40, 2.16.2, 2.18.0, 2.18.2, 2.20.0 and 2.22.2
     \override BarLine #'bar-extent = #'(-2 . 2) %% LilyPond 2.18: please make barlines as high as the time signature even though we're on a RhythmicStaff (2.16 and 2.15 don't need this although its presence doesn't hurt; Issue 3685 seems to indicate they'll fix it post-2.18)
     }
-    { """+jianpu_voice_start(voiceName)+r"""
+    { """
+    j,voiceName = jianpu_voice_start()
+    r += j+r"""
     \override Staff.TimeSignature #'style = #'numbered
     \override Staff.Stem #'transparent = ##t
     """
-    return r
+    return r, voiceName
 def jianpu_staff_end():
      # \bar "|." is added separately if there's not a DC etc
     if not_angka: return "} }\n% === END NOT ANGKA STAFF ===\n"
     else: return "} }\n% === END JIANPU STAFF ===\n"
-def midi_staff_start(voiceName="midi"):
+def midi_staff_start():
     return r"""
 %% === BEGIN MIDI STAFF ===
-    \new Staff { \new Voice="%s" {""" % (voiceName,)
+    \new Staff { \new Voice="%s" {""" % (uniqName(),)
 def midi_staff_end(): return "} }\n% === END MIDI STAFF ===\n"
-def western_staff_start(inst=None,voiceName="5line"):
+def western_staff_start(inst=None):
     r = r"""
 %% === BEGIN 5-LINE STAFF ===
     \new Staff """
     if inst: r += r'\with { instrumentName = "'+inst+'" } '
-    return r+r"""{
+    voiceName = uniqName()
+    return (r+r"""{
     \override Score.SystemStartBar.collapse-height = #11 %% (needed on 2.22)
     \new Voice="%s" {
     #(set-accidental-style 'modern-cautionary)
     \override Staff.TimeSignature #'style = #'numbered
     \set Voice.chordChanges = ##f %% for 2.19.82 bug workaround
-""" % (voiceName,)
+""" % (voiceName,)), voiceName
 def western_staff_end(): return "} }\n% === END 5-LINE STAFF ===\n"
 
-lyricsPtr = 0
-def lyrics_start(voiceName="jianpu"):
-    global lyricsPtr ; lyricsPtr += 1 # TODO: encapsulate
-    return r'\new Lyrics = "I%s" { \lyricsto "%s" { ' % (str(lyricsPtr).translate((letters*5)[:256]),voiceName)
+def lyrics_start(voiceName):
+    return r'\new Lyrics = "I%s" { \lyricsto "%s" { ' % (uniqName(),voiceName)
 def lyrics_end(): return "} }"
 
 dashes_as_ties = True # Implement dash (-) continuations as invisible ties rather than rests; sometimes works better in awkward beaming situations
@@ -462,7 +463,7 @@ class notehead_markup:
             # versions (usually at end of bar); new voice
             # so lyrics miss it as if it were a rest:
             if has_lyrics and not self.withStaff: # (OK if self.withStaff: lyrics will be attached to that instead)
-                ret = jianpu_voice_start() + ret
+                ret = jianpu_voice_start(1)[0]+ret
                 inRestHack = 1
                 if self.inBeamGroup and not self.inBeamGroup=="restHack": aftrlast0 = "] "
     if placeholder_chord.startswith("<"):
@@ -792,7 +793,7 @@ def gracenotes_western(notes):
 
 def getLY(score,headers=None):
    if not headers: headers = {} # Python 2 persists this dict if it's in the default args
-   lyrics = ""
+   lyrics = []
    notehead_markup.initOneScore()
    out = [] ; maxBeams = 0 ; need_final_barline = 0
    repeatStack = [] ; lastPtr = 0
@@ -815,7 +816,6 @@ def getLY(score,headers=None):
         # lyrics
         do_hanzi_spacing = line.startswith("H:")
         line = line[2:].strip()
-        lyrics += lyrics_start()
         toAdd = ""
         if line and '1' <= line[0] <= '9' and (line[1]=='.' or asUnicode(line)[1]==u"\uff0e"):
             # a verse number
@@ -839,7 +839,7 @@ def getLY(score,headers=None):
                 l2.append(c)
             line = u"".join(l2)
             if not type("")==type(u""): line = line.encode('utf-8') # Python 2
-        lyrics += toAdd+re.sub("(?<=[^- ])- "," -- ",line).replace(" -- "," --\n")+" "+lyrics_end()+" "
+        lyrics.append(toAdd+re.sub("(?<=[^- ])- "," -- ",line).replace(" -- "," --\n"))
     elif re.match(r"\s*[A-Za-z]+\s*=",line):
         # Lilypond header
         hName,hValue = line.split("=",1)
@@ -1124,11 +1124,14 @@ def process_input(inDat):
      if midi:
        ret.append(midi_staff_start()+" "+out+" "+midi_staff_end())
      else:
-       ret.append(jianpu_staff_start(inst,notehead_markup.withStaff)+" "+out+" "+jianpu_staff_end())
+       staffStart,voiceName = jianpu_staff_start(inst,notehead_markup.withStaff)
+       ret.append(staffStart+" "+out+" "+jianpu_staff_end())
        if notehead_markup.withStaff:
-           western=True ; ret.append(western_staff_start(inst)+" "+getLY(part)[0]+" "+western_staff_end()) ; western = False
-           lyrics = lyrics.replace(r'\lyricsto "jianpu"',r'\lyricsto "5line"')
-       if lyrics: ret.append(lyrics)
+           western=True
+           staffStart,voiceName = western_staff_start(inst)
+           ret.append(staffStart+" "+getLY(part)[0]+" "+western_staff_end())
+           western = False
+       if lyrics: ret.append("".join(lyrics_start(voiceName)+l+" "+lyrics_end()+" " for l in lyrics))
    ret.append(score_end(**headers))
  ret = "".join(r+"\n" for r in ret)
  if lilypond_minor_version() >= 24: ret=re.sub(r"(\\override [A-Z][^ ]*) #'",r"\1.",ret) # needed to avoid deprecation warnings on Lilypond 2.24
