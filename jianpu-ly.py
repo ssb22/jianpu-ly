@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.69 (c) 2012-2023 Silas S. Brown
+# v1.691 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -370,14 +370,14 @@ class notehead_markup:
         accidental = self.last_accidental # ditto
     self.last_figures = figures
     if len(self.last_figures)>1 and self.last_figures[0]=='-': self.last_figures = self.last_figures[1:]
-    if self.keepOctave:
+    if self.keepOctave and not invisTieLast:
         while octave:
             if octave.startswith("'"): # ' : go up
                 if ',' in self.last_octave: self.last_octave = self.last_octave[:-1]
                 else: self.last_octave += "'"
             else: # , : go down
                 if "'" in self.last_octave: self.last_octave = self.last_octave[:-1]
-                else: self.last_octave += "'"
+                else: self.last_octave += ","
             octave=octave[1:]
         octave = self.last_octave
     else: self.last_octave = octave
