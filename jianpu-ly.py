@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.692 (c) 2012-2023 Silas S. Brown
+# v1.693 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -830,13 +830,15 @@ def getLY(score,headers=None):
                 l2.append(toAdd) ; toAdd = ""
             needSpace = 0
             for c in list(asUnicode(line)):
-                if needSpace and (0x4e00 <= ord(c) < 0xa700 or c in u"\u2018\u201c"):
+                is_hanzi = (0x3400 <= ord(c) < 0xa700) # TODO: also cover those outside the BMP?  but beware narrow Python builds
+                is_openquote = c in u"\u2018\u201c\u300A"
+                if needSpace and (is_hanzi or is_openquote):
                     l2.append(' ') ; needSpace = 0
-                    if c in u"\u2018\u201c":
-                        # we're just about to have an open quote - this needs to hang left.  Try:
+                    if is_openquote: # hang left
                         l2.append(r"\once \override LyricText #'self-alignment-X = #CENTER ") # or RIGHT if there's no punctuation after
-                if 0x4e00 <= ord(c) < 0xa700: needSpace=1
-                l2.append(c)
+                if is_hanzi: needSpace=1
+                if c=="_": needSpace=0 # TODO: document this: separate hanzi with _ to put more than one on same note
+                else: l2.append(c)
             line = u"".join(l2)
             if not type("")==type(u""): line = line.encode('utf-8') # Python 2
         lyrics.append(toAdd+re.sub("(?<=[^- ])- "," -- ",line).replace(" -- "," --\n"))
