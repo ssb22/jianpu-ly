@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.693 (c) 2012-2023 Silas S. Brown
+# v1.694 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -318,7 +318,7 @@ class notehead_markup:
   def endScore(self):
       if self.barPos == self.startBarPos: pass
       elif os.environ.get("j2ly_sloppy_bars",""): sys.stderr.write("Wrong bar length at end of score %d ignored (j2ly_sloppy_bars set)\n" % scoreNo)
-      elif self.startBarPos and not self.barPos: errExit("Final bar of score %d does not make up for anacrusis bar.  Set j2ly_sloppy_bars environment variable if you really want to break the rules." % scoreNo)
+      elif self.startBarPos and not self.barPos: errExit("Score %d should end with a %g-beat bar to make up for the %g-beat anacrusis bar.  Set j2ly_sloppy_bars environment variable if you really want to break this rule." % (scoreNo,self.startBarPos/self.beatLength,(self.barLength-self.startBarPos)/self.beatLength)) # this is on the music theory syllabi at about Grade 3, but you can get up to Grade 5 practical without actually covering it, so we'd better not expect all users to understand "final bar does not make up for anacrusis bar"
       else: errExit("Incomplete bar at end of score %d (pos %d)" % (scoreNo,self.barPos))
   def setTime(self,num,denom):
       self.barLength = int(64*num/denom)
