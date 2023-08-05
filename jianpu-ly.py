@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.694 (c) 2012-2023 Silas S. Brown
+# v1.695 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1102,6 +1102,7 @@ def getLY(score,headers=None):
    return out,maxBeams,lyrics,headers
 
 def process_input(inDat):
+ if 'scoreNo' in globals(): raise Exception("process_input should be called only once.  Use importlib.reload(jianpu) first if you need to call it a second time.") # TODO: or reset notehead_markup and uniqCount here
  ret = []
  global scoreNo, western, has_lyrics, midi, not_angka, maxBeams
  scoreNo = 0 # incr'd to 1 below
