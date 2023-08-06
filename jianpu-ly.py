@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.695 (c) 2012-2023 Silas S. Brown
+# v1.696 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -188,7 +188,6 @@ def score_end(**headers):
     else: ret += r"\layout{}"
     return ret + " }"
 
-uniqCount = 0
 def uniqName():
     global uniqCount
     r = str(uniqCount) ; uniqCount += 1
@@ -300,7 +299,7 @@ placeholders = {
     '7':'b',
     '-':'r'}
 
-class notehead_markup:
+class NoteheadMarkup:
   def __init__(self):
       self.defines_done = {} ; self.initOneScore()
   def initOneScore(self):
@@ -531,8 +530,6 @@ class notehead_markup:
     else: b4last,aftrlast = "",""
     if inRestHack: ret += " } "
     return b4last,aftrlast0+aftrlast,ret, need_space_for_accidental, nBeams,octave
-
-notehead_markup = notehead_markup()
 
 def parseNote(word):
     if word==".": word = "-" # (for not angka, TODO: document that this is now acceptable as an input word?)
@@ -1102,9 +1099,9 @@ def getLY(score,headers=None):
    return out,maxBeams,lyrics,headers
 
 def process_input(inDat):
- if 'scoreNo' in globals(): raise Exception("process_input should be called only once.  Use importlib.reload(jianpu) first if you need to call it a second time.") # TODO: or reset notehead_markup and uniqCount here
  ret = []
- global scoreNo, western, has_lyrics, midi, not_angka, maxBeams
+ global scoreNo, western, has_lyrics, midi, not_angka, maxBeams, uniqCount, notehead_markup
+ uniqCount = 0 ; notehead_markup = NoteheadMarkup()
  scoreNo = 0 # incr'd to 1 below
  western = False
  for score in re.split(r"\sNextScore\s"," "+inDat+" "):
