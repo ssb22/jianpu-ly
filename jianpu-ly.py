@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.696 (c) 2012-2023 Silas S. Brown
+# v1.697 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -171,7 +171,7 @@ def score_start():
     ret = "\\score {\n"
     if midi: ret += "\\unfoldRepeats\n"
     ret += r"<< "
-    if not notehead_markup.noBarNums and not midi: ret += ("\\override Score.BarNumber #'break-visibility = #center-visible\n\\override Score.BarNumber #'Y-offset = -1\n\\set Score.barNumberVisibility = #(every-nth-bar-number-visible %d)" % bar_number_every)
+    if not notehead_markup.noBarNums and not midi: ret += ("\\override Score.BarNumber #'break-visibility = #center-visible\n\\override Score.BarNumber #'Y-offset = 3\n\\set Score.barNumberVisibility = #(every-nth-bar-number-visible %d)" % bar_number_every)
     return ret
 bar_number_every = 5 # TODO customise?  (anyway don't leave it numbering at start of system, doesn't work well in jianpu+lyrics)
 
@@ -454,6 +454,7 @@ class NoteheadMarkup:
     inRestHack = 0
     if not midi and not western:
         if ret: ret = ret.rstrip()+"\n" # try to keep the .ly code vaguely readable
+        if octave=="''": ret += r"  \once \override Score.TextScript.outside-staff-priority = 45" # inside bar numbers etc
         ret += r"  \applyOutput #'Voice #"+self.defines_done[figures]+" "
         if placeholder_chord == "r" and use_rest_hack and nBeams:
             placeholder_chord = "c"
