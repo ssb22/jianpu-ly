@@ -7,8 +7,8 @@ test:
 	echo 'WithStaff 1 \p - - -' | python2.7 jianpu-ly.py |grep "c'1 \\\\p" >/dev/null
 	echo 'WithStaff 3/4 135 \p - -' | python3 jianpu-ly.py | grep "c' e' g' >2. "'\\p' >/dev/null
 	echo 'WithStaff 3/4 135 \p - -' | python2.7 jianpu-ly.py | grep "c' e' g' >2. "'\\p' >/dev/null
-	echo 'KeepOctave 2/4 1,, - >1 - >1 - >1 - >1 -' | python3 jianpu-ly.py | grep "c'''2" >/dev/null
-	echo 'KeepOctave 2/4 1,, - >1 - >1 - >1 - >1 -' | python2.7 jianpu-ly.py | grep "c'''2" >/dev/null
+	echo 'KeepOctave 2/4 <<1 - >1 - >1 - >1 - >1 -' | python3 jianpu-ly.py | grep "c'''2" >/dev/null
+	echo 'KeepOctave 2/4 <<1 - >1 - >1 - >1 - >1 -' | python2.7 jianpu-ly.py | grep "c'''2" >/dev/null
 
 	python3 jianpu-ly.py <(echo WithStaff 1 - 0 -) </dev/null | grep r2 >/dev/null # check read from non-stdin still works
 	python2.7 jianpu-ly.py <(echo WithStaff 1 - 0 -) </dev/null | grep r2 >/dev/null

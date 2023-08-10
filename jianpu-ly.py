@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.698 (c) 2012-2023 Silas S. Brown
+# v1.7 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -30,6 +30,7 @@ Scale going up: 1 2 3 4 5 6 7 1'
 Accidentals: 1 #1 2 b2 1
 Octaves: 1,, 1, 1 1' 1''
 Shortcuts for 1' and 2': 8 9
+Change base octave: < >
 Semiquaver, quaver, crotchet (16/8/4th notes): s1 q1 1
 Dotted versions of the above (50% longer): s1. q1. 1.
 Demisemiquaver, hemidemisemiquaver (32/64th notes): d1 h1
@@ -284,6 +285,18 @@ def errExit(msg):
         sys.stderr.write("Error: "+msg+"\n")
         sys.exit(1)
     else: raise Exception(msg)
+def scoreError(msg,word,line):
+    if len(word)>60: word=word[:50]+"..."
+    msg += " %s in score %d" % (word,scoreNo)
+    if len(line)>600: line=line[:500]+"..."
+    if not word in line: pass # above truncations caused problems
+    elif "xterm" in os.environ.get("TERM",""): # use xterm underline escapes
+        msg += "\n"+re.sub(r"(\s|^)"+re.escape(word)+r"(?=\s|$)",lambda m:m.group(1)+"\x1b[4m"+word+"\x1b[m",line)
+    elif re.match('[ -~]*$',line): # all ASCII: we can underline the word with ^^s
+        msg += "\n"+line+"\n"+re.sub('[^^]',' ',re.sub(r"(\s|^)"+re.escape(word)+r"(?=\s|$)",lambda m:' '+'^'*(len(m.group())-1),line))
+    else: # don't try to underline the word (at least not without ANSI): don't know how the terminal will handle character widths
+        msg += "\nin this line: "+line
+    errExit(msg)
 
 placeholders = {
     # for accidentals and word-fitting to work
@@ -299,6 +312,18 @@ placeholders = {
     '7':'b',
     '-':'r'}
 
+def addOctaves(octave1,octave2):
+    octave2=octave2.replace(">","'").replace("<",",") # so it can be used with a base-octave change
+    while octave1:
+        if octave1[0] in "'>": # go up
+            if ',' in octave2: octave2 = octave2[:-1]
+            else: octave2 += "'"
+        else: # , or < : go down
+            if "'" in octave2: octave2 = octave2[:-1]
+            else: octave2 += ","
+        octave1=octave1[1:]
+    return octave2
+
 class NoteheadMarkup:
   def __init__(self):
       self.defines_done = {} ; self.initOneScore()
@@ -306,8 +331,8 @@ class NoteheadMarkup:
       self.barLength = 64 ; self.beatLength = 16 # in 64th notes
       self.barPos = self.startBarPos = F(0)
       self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.separateTimesig = self.withStaff = 0
-      self.keepOctave = self.keepLength = 0
-      self.last_octave = ""
+      self.keepLength = 0
+      self.last_octave = self.base_octave = ""
       self.current_accidentals = {}
       self.barNo = 1
       self.tuplet = (1,1)
@@ -329,14 +354,17 @@ class NoteheadMarkup:
       if self.barPos<0: errExit("Anacrusis is longer than bar in score %d" % scoreNo) # but anacrusis being exactly equal to bar is OK: we'll just interpret that as no anacrusis
       self.startBarPos = self.barPos
   def wholeBarRestLen(self): return {96:"1.",48:"2.",32:"2",24:"4.",16:"4",12:"8.",8:"8"}.get(self.barLength,"1") # TODO: what if irregular?
-  def __call__(self,figures,nBeams,dot,octave,accidental,tremolo):
+  def baseOctaveChange(self,change):
+      self.base_octave = addOctaves(change,self.base_octave)
+  def __call__(self,figures,nBeams,dot,octave,accidental,tremolo,word,line):
     # figures is a chord string of '1'-'7', or '0' or '-'
     # nBeams is 0, 1, 2 .. etc (number of beams for this note)
     # dot is "" or "." (dotted length)
     # octave is "", "'", "''", "," or ",,"
     # accidental is "", "#", "b"
     # tremolo is "" or ":32"
-    if len(figures)>1 and accidental: errExit("Accidentals in chords not yet implemented") # see TODOs below
+    # word,line is for error handling
+    if len(figures)>1 and accidental: scoreError("Accidentals in chords not yet implemented:",word,line) # see TODOs below
     self.notesHad.append(figures)
     names = {'0':'nought',
              '1':'one',
@@ -367,19 +395,12 @@ class NoteheadMarkup:
         placeholder_chord = get_placeholder_chord(self.last_figures)
         octave = self.last_octave # for MIDI or 5-line
         accidental = self.last_accidental # ditto
+    else:
+        octave=addOctaves(octave,self.base_octave)
+        if not octave in [",,",",","","'","''"]: scoreError("Can't handle octave "+octave+" in",word,line)
+        self.last_octave = octave
     self.last_figures = figures
     if len(self.last_figures)>1 and self.last_figures[0]=='-': self.last_figures = self.last_figures[1:]
-    if self.keepOctave and not invisTieLast:
-        while octave:
-            if octave.startswith("'"): # ' : go up
-                if ',' in self.last_octave: self.last_octave = self.last_octave[:-1]
-                else: self.last_octave += "'"
-            else: # , : go down
-                if "'" in self.last_octave: self.last_octave = self.last_octave[:-1]
-                else: self.last_octave += ","
-            octave=octave[1:]
-        octave = self.last_octave
-    else: self.last_octave = octave
     self.last_accidental = accidental
     if figures not in self.defines_done and not midi and not western:
         # Define a notehead graphical object for the figures
@@ -532,16 +553,16 @@ class NoteheadMarkup:
     if inRestHack: ret += " } "
     return b4last,aftrlast0+aftrlast,ret, need_space_for_accidental, nBeams,octave
 
-def parseNote(word):
+def parseNote(word,origWord,line):
     if word==".": word = "-" # (for not angka, TODO: document that this is now acceptable as an input word?)
-    word = word.replace(">","'").replace("<",",") # for KeepOctave mode, accept SMX-like octave changing via > and < as an alternative to ' and , (TODO: document this somewhere?)
     word = word.replace("8","1'").replace("9","2'")
     if type(u"")==type(""): word = word.replace(u"\u2019","'")
     else: word=word.replace(u"\u2019".encode('utf-8'),"'")
     if "///" in word: tremolo,word=":32",word.replace("///","",1)
     else: tremolo = ""
-    if not re.match("[0-7.,'<>cqsdh\\#b-]+$",word): figures = None # unrecognised stuff in it: flag as error, rather than ignoring and possibly getting a puzzling barsync fail
-    else: figures = ''.join(re.findall('[01234567-]',word))
+    if not re.match("[0-7.,'cqsdh\\#b-]+$",word): # unrecognised stuff in it: flag as error, rather than ignoring and possibly getting a puzzling barsync fail
+        scoreError("Unrecognised command",origWord,line)
+    figures = ''.join(re.findall('[01234567-]',word))
     if "." in word: dot="."
     else: dot=""
     if "q" in word: nBeams=1
@@ -793,7 +814,8 @@ def getLY(score,headers=None):
    if not headers: headers = {} # Python 2 persists this dict if it's in the default args
    lyrics = []
    notehead_markup.initOneScore()
-   out = [] ; maxBeams = 0 ; need_final_barline = 0
+   out = [] ; maxBeams = 0
+   need_final_barline = False
    repeatStack = [] ; lastPtr = 0
    escaping = inTranspose = 0
    aftrnext = defined_jianpuGrace = defined_JGR = None
@@ -911,8 +933,7 @@ def getLY(score,headers=None):
             elif word=="OnePage":
                 if notehead_markup.onePage: sys.stderr.write("WARNING: Duplicate OnePage, did you miss out a NextScore?\n")
                 notehead_markup.onePage=1
-            elif word=="KeepOctave": # TODO: document this
-                notehead_markup.keepOctave=1
+            elif word=="KeepOctave": pass # undocumented option removed in 1.7, no effect
             elif word=="KeepLength": # TODO: document this.  If this is on, you have to use c in a note to go back to crotchets.
                 notehead_markup.keepLength=1
             elif word=="NoBarNums":
@@ -1027,37 +1048,31 @@ def getLY(score,headers=None):
              (list (quote moveto) (* textWidth 0.5) -0.3)
              (list (quote curveto) (* textWidth 0.5) -1 (* textWidth 0.5) -1 0 -1)))))))))))) """ + out[lastPtr]
             elif word=="Fine":
-                need_final_barline = 0
+                need_final_barline = False
                 out.append(r'''\once \override Score.RehearsalMark #'break-visibility = #begin-of-line-invisible \once \override Score.RehearsalMark #'self-alignment-X = #RIGHT \mark "Fine" \bar "|."''')
             elif word=="DC":
-                need_final_barline = 0
+                need_final_barline = False
                 out.append(r'''\once \override Score.RehearsalMark #'break-visibility = #begin-of-line-invisible \once \override Score.RehearsalMark #'self-alignment-X = #RIGHT \mark "D.C. al Fine" \bar "||"''')
             else: # note (or unrecognised)
-                figures,nBeams,dot,octave,accidental,tremolo = parseNote(word)
-                if figures:
-                    need_final_barline = 1
-                    b4last,aftrlast,this,need_space_for_accidental,nBeams,octave = notehead_markup(figures,nBeams,dot,octave,accidental,tremolo)
-                    if b4last: out[lastPtr]=b4last+out[lastPtr]
-                    if aftrlast: out.insert(lastPtr+1,aftrlast)
-                    lastPtr = len(out)
-                    out.append(this)
-                    if aftrnext:
-                        if need_space_for_accidental: aftrnext = aftrnext.replace(r"\markup",r"\markup \halign #2 ",1)
-                        out.append(aftrnext)
-                        aftrnext = None
-                    if not_angka and "'" in octave: maxBeams=max(maxBeams,len(octave)*.8+nBeams)
-                    else: maxBeams=max(maxBeams,nBeams)
-                else:
-                    if len(word)>60: word=word[:50]+"..."
-                    msg = "Unrecognised command %s in score %d" % (word,scoreNo)
-                    if len(line)>600: line=line[:500]+"..."
-                    if not word in line: pass # above truncations caused problems
-                    elif "xterm" in os.environ.get("TERM",""): msg += "\n"+re.sub(r"(\s|^)"+re.escape(word)+r"(?=\s|$)",lambda m:m.group()[:1]+"\x1b[4m"+m.group()[1:]+"\x1b[m",line)
-                    elif re.match('[ -~]*$',line): # all ASCII: we can underline the word with ^^s
-                        msg += "\n"+line+"\n"+re.sub('[^^]',' ',re.sub(r"(\s|^)"+re.escape(word)+r"(?=\s|$)",lambda m:' '+'^'*(len(m.group())-1),line))
-                    else: # don't try to underline the word (at least not without ANSI): don't know how the terminal will handle character widths
-                        msg += "\nin this line: "+line
-                    errExit(msg)
+                word0 = word
+                baseOctaveChange = "".join(c for c in word if c in "<>")
+                if baseOctaveChange:
+                    notehead_markup.baseOctaveChange(baseOctaveChange)
+                    word = "".join(c for c in word if not c in "<>")
+                    if not word: continue # allow just < and > by itself in a word
+                figures,nBeams,dot,octave,accidental,tremolo = parseNote(word,word0,line)
+                need_final_barline = True
+                b4last,aftrlast,this,need_space_for_accidental,nBeams,octave = notehead_markup(figures,nBeams,dot,octave,accidental,tremolo,word0,line)
+                if b4last: out[lastPtr]=b4last+out[lastPtr]
+                if aftrlast: out.insert(lastPtr+1,aftrlast)
+                lastPtr = len(out)
+                out.append(this)
+                if aftrnext:
+                    if need_space_for_accidental: aftrnext = aftrnext.replace(r"\markup",r"\markup \halign #2 ",1)
+                    out.append(aftrnext)
+                    aftrnext = None
+                if not_angka and "'" in octave: maxBeams=max(maxBeams,len(octave)*.8+nBeams)
+                else: maxBeams=max(maxBeams,nBeams)
    if notehead_markup.barPos == 0 and notehead_markup.barNo == 1: errExit("No jianpu in score %d" % scoreNo)
    if notehead_markup.inBeamGroup and not midi and not western and not notehead_markup.inBeamGroup=="restHack": out[lastPtr] += ']' # needed if ending on an incomplete beat
    if inTranspose: out.append("}")
@@ -1109,7 +1124,7 @@ def process_input(inDat):
   if not score.strip(): continue
   scoreNo += 1
   has_lyrics = not not re.search("(^|\n)[LH]:",score) # The occasional false positive doesn't matter: has_lyrics==False is only an optimisation so we don't have to create use_rest_hack voices.  It is however important to always detect lyrics if they are present.
-  for midi in [0,1]:
+  for midi in [False,True]:
    not_angka = False # may be set by getLY
    if scoreNo==1 and not midi: ret.append(all_scores_start())
    ret.append(score_start()) ; headers = {}
