@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.7 (c) 2012-2023 Silas S. Brown
+# v1.701 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -602,7 +602,7 @@ def write_docs():
                 shouldType,note = shouldType.rsplit("(",1)
                 note = " ("+note
             else: note = ""
-            if "--html" in sys.argv: print ("<tr><td>"+toGet.strip()+"</td><td><kbd>"+shouldType.strip()+"</kbd>"+note+"</td>")
+            if "--html" in sys.argv: print ("<tr><td>"+htmlify(toGet.strip())+"</td><td><kbd>"+htmlify(shouldType.strip())+"</kbd>"+htmlify(note)+"</td>")
             else: print (toGet.strip()+": `"+shouldType.strip()+"`"+note+"\n")
         else:
             if "--markdown" in sys.argv: print ("")
