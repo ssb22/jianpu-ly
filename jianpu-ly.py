@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.701 (c) 2012-2023 Silas S. Brown
+# v1.71 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -293,7 +293,7 @@ def scoreError(msg,word,line):
     elif "xterm" in os.environ.get("TERM",""): # use xterm underline escapes
         msg += "\n"+re.sub(r"(\s|^)"+re.escape(word)+r"(?=\s|$)",lambda m:m.group(1)+"\x1b[4m"+word+"\x1b[m",line)
     elif re.match('[ -~]*$',line): # all ASCII: we can underline the word with ^^s
-        msg += "\n"+line+"\n"+re.sub('[^^]',' ',re.sub(r"(\s|^)"+re.escape(word)+r"(?=\s|$)",lambda m:' '+'^'*(len(m.group())-1),line))
+        msg += "\n"+line+"\n"+re.sub('[^^]',' ',re.sub(r"(\s|^)"+re.escape(word)+r"(?=\s|$)",lambda m:m.group(1)+'^'*(len(word)),line))
     else: # don't try to underline the word (at least not without ANSI): don't know how the terminal will handle character widths
         msg += "\nin this line: "+line
     errExit(msg)
@@ -356,15 +356,17 @@ class NoteheadMarkup:
   def wholeBarRestLen(self): return {96:"1.",48:"2.",32:"2",24:"4.",16:"4",12:"8.",8:"8"}.get(self.barLength,"1") # TODO: what if irregular?
   def baseOctaveChange(self,change):
       self.base_octave = addOctaves(change,self.base_octave)
-  def __call__(self,figures,nBeams,dot,octave,accidental,tremolo,word,line):
+  def __call__(self,figures,nBeams,dots,octave,accidental,tremolo,word,line):
     # figures is a chord string of '1'-'7', or '0' or '-'
     # nBeams is 0, 1, 2 .. etc (number of beams for this note)
-    # dot is "" or "." (dotted length)
+    # dots is "" or "." or ".." etc (extra length)
     # octave is "", "'", "''", "," or ",,"
     # accidental is "", "#", "b"
     # tremolo is "" or ":32"
     # word,line is for error handling
-    if len(figures)>1 and accidental: scoreError("Accidentals in chords not yet implemented:",word,line) # see TODOs below
+    if len(figures)>1:
+        if accidental: scoreError("Accidentals in chords not yet implemented:",word,line) # see TODOs below
+        if '0' in figures: scoreError("Can't have rest in chord:",word,line)
     self.notesHad.append(figures)
     names = {'0':'nought',
              '1':'one',
@@ -401,6 +403,7 @@ class NoteheadMarkup:
         self.last_octave = octave
     self.last_figures = figures
     if len(self.last_figures)>1 and self.last_figures[0]=='-': self.last_figures = self.last_figures[1:]
+    if not accidental in ["","#","b"]: scoreError("Can't handle accidental "+accidental+" in",word,line)
     self.last_accidental = accidental
     if figures not in self.defines_done and not midi and not western:
         # Define a notehead graphical object for the figures
@@ -455,7 +458,9 @@ class NoteheadMarkup:
         self.inBeamGroup = 0
     length = 4 ; b = 0 ; toAdd = F(16) # crotchet
     while b < nBeams: b,length,toAdd = b+1,length*2,toAdd/2
-    if dot: toAdd += toAdd/2
+    toAdd0 = toAdd
+    for _ in dots:
+        toAdd0 /= 2 ; toAdd += toAdd0
     toAdd_preTuplet = toAdd
     if not self.tuplet[0]==self.tuplet[1]:
         toAdd = toAdd*self.tuplet[0]/self.tuplet[1]
@@ -475,7 +480,7 @@ class NoteheadMarkup:
     inRestHack = 0
     if not midi and not western:
         if ret: ret = ret.rstrip()+"\n" # try to keep the .ly code vaguely readable
-        if octave=="''": ret += r"  \once \override Score.TextScript.outside-staff-priority = 45" # inside bar numbers etc
+        if octave=="''" and not invisTieLast: ret += r"  \once \override Score.TextScript.outside-staff-priority = 45" # inside bar numbers etc
         ret += r"  \applyOutput #'Voice #"+self.defines_done[figures]+" "
         if placeholder_chord == "r" and use_rest_hack and nBeams:
             placeholder_chord = "c"
@@ -498,7 +503,7 @@ class NoteheadMarkup:
     else: # single note or rest
         ret += placeholder_chord + {"":"", "#":"is", "b":"es"}[accidental]
         if not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI + Western, put it so no-mark starts near middle C
-    ret += ("%d" % length) + dot
+    ret += ("%d" % length) + dots
     if tremolo:
         if lilypond_minor_version()<20: errExit("tremolo requires Lilypond 2.20+, we found 2."+str(lilypond_minor_version()))
         if midi or western:
@@ -508,16 +513,16 @@ class NoteheadMarkup:
                 ret = r"%s\repeat tremolo %d { %s32 %s32 }" % (previous,int(toAdd_preTuplet/4),n1,n2)
             else: ret += tremolo
         elif lilypond_minor_version()>=22:
-            if dot: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.8 . 2.1) \postscript "1.6 -0.2 moveto 2.6 0.8 lineto 1.8 -0.4 moveto 2.8 0.6 lineto 2.0 -0.6 moveto 3.0 0.4 lineto stroke" } %{ requires Lilypond 2.22+ %} """
+            if dots: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.8 . 2.1) \postscript "1.6 -0.2 moveto 2.6 0.8 lineto 1.8 -0.4 moveto 2.8 0.6 lineto 2.0 -0.6 moveto 3.0 0.4 lineto stroke" } %{ requires Lilypond 2.22+ %} """
             else: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.5 . 2.1) \postscript "1.1 0.4 moveto 2.1 1.4 lineto 1.3 0.2 moveto 2.3 1.2 lineto 1.5 0.0 moveto 2.5 1.0 lineto stroke" } %{ requires Lilypond 2.22+ %} """
-        elif dot: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.8 . 2.6) \postscript "1.4 1.6 moveto 2.4 2.6 lineto 1.6 1.4 moveto 2.6 2.4 lineto 1.8 1.2 moveto 2.8 2.2 lineto stroke" } %{ requires Lilypond 2.20 %} """
+        elif dots: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.8 . 2.6) \postscript "1.4 1.6 moveto 2.4 2.6 lineto 1.6 1.4 moveto 2.6 2.4 lineto 1.8 1.2 moveto 2.8 2.2 lineto stroke" } %{ requires Lilypond 2.20 %} """
         else: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.5 . 2.6) \postscript "1.1 1.6 moveto 2.1 2.6 lineto 1.3 1.4 moveto 2.3 2.4 lineto 1.5 1.2 moveto 2.5 2.2 lineto stroke" } %{ requires Lilypond 2.20 %} """
     if nBeams and (not self.inBeamGroup or self.inBeamGroup=="restHack" or inRestHack) and not midi and not western:
         # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
         ret += '['
         self.inBeamGroup = 1
     self.barPos += toAdd
-    # sys.stderr.write(accidental+figure+octave+dot+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
+    # sys.stderr.write(accidental+figure+octave+dots+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
     if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figures,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
     if self.barPos%self.beatLength == 0 and self.inBeamGroup: # (self.inBeamGroup is set only if not midi/western)
         # jianpu printouts tend to restart beams every beat
@@ -560,27 +565,19 @@ def parseNote(word,origWord,line):
     else: word=word.replace(u"\u2019".encode('utf-8'),"'")
     if "///" in word: tremolo,word=":32",word.replace("///","",1)
     else: tremolo = ""
-    if not re.match("[0-7.,'cqsdh\\#b-]+$",word): # unrecognised stuff in it: flag as error, rather than ignoring and possibly getting a puzzling barsync fail
+    if not re.match(r"[0-7.,'cqsdh\\#b-]+$",word): # unrecognised stuff in it: flag as error, rather than ignoring and possibly getting a puzzling barsync fail
         scoreError("Unrecognised command",origWord,line)
     figures = ''.join(re.findall('[01234567-]',word))
-    if "." in word: dot="."
-    else: dot=""
-    if "q" in word: nBeams=1
-    elif "s" in word: nBeams=2
-    elif "d" in word: nBeams=3
-    elif "h" in word: nBeams=4
-    elif "c" in word: nBeams = 0
-    elif "\\" in word: nBeams=len(word.split("\\"))-1 # requested by a user who found British note-length names hard to remember; won't work if the \ is placed at the start, as that'll be a Lilypond command, so to save confusion we won't put this in the docstring
+    dots = "".join(c for c in word if c==".")
+    nBeams = ''.join(re.findall(r'[cqsdh\\]',word))
+    if re.match(r"[\\]+$",nBeams): nBeams=len(nBeams) # requested by a user who found British note-length names hard to remember; won't work if the \ is placed at the start, as that'll be a Lilypond command, so to save confusion we won't put this in the docstring
+    elif nBeams:
+        try: nBeams = list("cqsdh").index(nBeams)
+        except ValueError: scoreError("Can't calculate number of beams from "+nBeams+" in",origWord,line)
     else: nBeams=None # unspecified
-    octave = ""
-    for o in ["''","'",",,",","]:
-        if o in word:
-            octave = o ; break
-    accidental = ""
-    for acc in ["#","b"]:
-        if acc in word:
-            accidental = acc ; break
-    return figures,nBeams,dot,octave,accidental,tremolo
+    octave = "".join(c for c in word if c in "',")
+    accidental = "".join(c for c in word if c in "#b")
+    return figures,nBeams,dots,octave,accidental,tremolo
 
 def write_docs():
     # Write an HTML or Markdown version of the doc string
@@ -1060,9 +1057,9 @@ def getLY(score,headers=None):
                     notehead_markup.baseOctaveChange(baseOctaveChange)
                     word = "".join(c for c in word if not c in "<>")
                     if not word: continue # allow just < and > by itself in a word
-                figures,nBeams,dot,octave,accidental,tremolo = parseNote(word,word0,line)
+                figures,nBeams,dots,octave,accidental,tremolo = parseNote(word,word0,line)
                 need_final_barline = True
-                b4last,aftrlast,this,need_space_for_accidental,nBeams,octave = notehead_markup(figures,nBeams,dot,octave,accidental,tremolo,word0,line)
+                b4last,aftrlast,this,need_space_for_accidental,nBeams,octave = notehead_markup(figures,nBeams,dots,octave,accidental,tremolo,word0,line)
                 if b4last: out[lastPtr]=b4last+out[lastPtr]
                 if aftrlast: out.insert(lastPtr+1,aftrlast)
                 lastPtr = len(out)
