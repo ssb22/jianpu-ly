@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.71 (c) 2012-2023 Silas S. Brown
+# v1.72 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -921,12 +921,6 @@ def getLY(score,headers=None):
                     else: a2,anacDotted = anac,0
                     notehead_markup.setAnac(int(a2),anacDotted)
                     out.append(r'\partial '+anac)
-            elif word.startswith("\\") or word in ["(",")","~","->","|"] or word.startswith('^"') or word.startswith('_"'):
-                # Lilypond command, \p, ^"text", barline check, etc
-                if out and "afterGrace" in out[lastPtr]:
-                    # apply to inside afterGrace in midi/western
-                    out[lastPtr] = out[lastPtr][:-1] + word + " }"
-                else: out.append(word)
             elif word=="OnePage":
                 if notehead_markup.onePage: sys.stderr.write("WARNING: Duplicate OnePage, did you miss out a NextScore?\n")
                 notehead_markup.onePage=1
@@ -966,10 +960,14 @@ def getLY(score,headers=None):
             elif word=="A{":
                 repeatStack.append((2,0,0))
                 out.append(r'\alternative { {')
-            elif word=="|":
-                if not (repeatStack and repeatStack[-1][0]==2):
-                    sys.stderr.write("| should be in an A{ .. } block (scoreNo=%d barNo=%d)\n" % (scoreNo,notehead_markup.barNo))
-                out.append("} {")
+            elif word=="|" and repeatStack and repeatStack[-1][0]==2:
+                out.append("} {") # separate repeat alternates (if the repeatStack conditions are not met i.e. we're not in an A block, then we fall through to the undocumented use of | as barline check below)
+            elif word.startswith("\\") or word in ["(",")","~","->","|"] or word.startswith('^"') or word.startswith('_"'):
+                # Lilypond command, \p, ^"text", barline check (undocumented, see above), etc
+                if out and "afterGrace" in out[lastPtr]:
+                    # apply to inside afterGrace in midi/western
+                    out[lastPtr] = out[lastPtr][:-1] + word + " }"
+                else: out.append(word)
             elif re.match(r"[1-9][0-9]*\[$",word):
                 # tuplet start, e.g. 3[
                 fitIn = int(word[:-1])
