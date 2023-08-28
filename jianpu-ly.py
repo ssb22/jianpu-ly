@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.72 (c) 2012-2023 Silas S. Brown
+# v1.721 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -941,6 +941,7 @@ def getLY(score,headers=None):
             elif word=="WithStaff":
                 if notehead_markup.withStaff: sys.stderr.write("WARNING: Duplicate WithStaff, did you miss out a NextScore?\n")
                 notehead_markup.withStaff=1
+            elif word=="PartMidi": pass # handled in process_input
             elif word=="R{":
                 repeatStack.append((1,0,0))
                 out.append(r'\repeat volta 2 {')
@@ -1119,12 +1120,16 @@ def process_input(inDat):
   if not score.strip(): continue
   scoreNo += 1
   has_lyrics = not not re.search("(^|\n)[LH]:",score) # The occasional false positive doesn't matter: has_lyrics==False is only an optimisation so we don't have to create use_rest_hack voices.  It is however important to always detect lyrics if they are present.
+  parts = [p for p in re.split(r"\sNextPart\s"," "+score+" ") if p.strip()]
   for midi in [False,True]:
    not_angka = False # may be set by getLY
-   if scoreNo==1 and not midi: ret.append(all_scores_start())
-   ret.append(score_start()) ; headers = {}
-   parts = [p for p in re.split(r"\sNextPart\s"," "+score+" ") if p.strip()]
-   for part in parts:
+   if scoreNo==1 and not midi: ret.append(all_scores_start()) # now we've established non-empty
+   separate_score_per_part = midi and re.search(r"\sPartMidi\s"," "+score+" ") and len(parts)>1 # TODO: document this (results in 1st MIDI file containing all parts, then each MIDI file containing one part, if there's more than 1 part)
+   for separate_scores in [True,False] if separate_score_per_part else [True]:
+    headers = {} # will accumulate below
+    for partNo,part in enumerate(parts):
+     if partNo==0 or separate_scores:
+         ret.append(score_start())
      out,maxBeams,lyrics,headers = getLY(part,headers)
      if notehead_markup.withStaff and notehead_markup.separateTimesig: errExit("Use of both WithStaff and SeparateTimesig in the same piece is not yet implemented")
      if len(parts)>1 and "instrument" in headers:
@@ -1142,7 +1147,8 @@ def process_input(inDat):
            ret.append(staffStart+" "+getLY(part)[0]+" "+western_staff_end())
            western = False
        if lyrics: ret.append("".join(lyrics_start(voiceName)+l+" "+lyrics_end()+" " for l in lyrics))
-   ret.append(score_end(**headers))
+     if partNo==len(parts)-1 or separate_scores:
+       ret.append(score_end(**headers))
  ret = "".join(r+"\n" for r in ret)
  if lilypond_minor_version() >= 24: ret=re.sub(r"(\\override [A-Z][^ ]*) #'",r"\1.",ret) # needed to avoid deprecation warnings on Lilypond 2.24
  return ret
