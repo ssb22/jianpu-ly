@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.721 (c) 2012-2023 Silas S. Brown
+# v1.722 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -649,10 +649,10 @@ def xml2jianpu(x):
     partList=[""];time=["4","4"];tempo=["4","60"]
     note=[[""]*10];naturalType=[""];note1=["C"]
     tSig=[None,0];prevChord=[None]
-    types={"16th":"s","eighth":"q","quarter":"","half":" -","whole":" - - -"}
-    typesDot={"16th":"s.","eighth":"q.","quarter":".","half":" - -","whole":" - - - - -"}
-    typesMM={"16th":16,"eighth":"8","quarter":"4","half":"2","whole":"1"}
-    quavers={"16th":0.5,"eighth":1,"quarter":2,"half":4,"whole":8}
+    types={"64th":"h","32nd":"d","16th":"s","eighth":"q","quarter":"","half":" -","whole":" - - -"}
+    typesDot={"64th":"h.","32nd":"d.","16th":"s.","eighth":"q.","quarter":".","half":" - -","whole":" - - - - -"}
+    typesMM={"64th":"64","32nd":"32","16th":"16","eighth":"8","quarter":"4","half":"2","whole":"1"}
+    quavers={"64th":0.125,"32nd":0.25,"16th":0.5,"eighth":1,"quarter":2,"half":4,"whole":8}
     def s(name,attrs): dat[0],dat[1]="",attrs.get("type","")
     def c(data): dat[0] += data
     def e(name):
