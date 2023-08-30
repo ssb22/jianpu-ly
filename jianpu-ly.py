@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.722 (c) 2012-2023 Silas S. Brown
+# v1.723 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1125,7 +1125,7 @@ def process_input(inDat):
    not_angka = False # may be set by getLY
    if scoreNo==1 and not midi: ret.append(all_scores_start()) # now we've established non-empty
    separate_score_per_part = midi and re.search(r"\sPartMidi\s"," "+score+" ") and len(parts)>1 # TODO: document this (results in 1st MIDI file containing all parts, then each MIDI file containing one part, if there's more than 1 part)
-   for separate_scores in [True,False] if separate_score_per_part else [True]:
+   for separate_scores in [False,True] if separate_score_per_part else [False]:
     headers = {} # will accumulate below
     for partNo,part in enumerate(parts):
      if partNo==0 or separate_scores:
