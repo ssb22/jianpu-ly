@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.723 (c) 2012-2023 Silas S. Brown
+# v1.724 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -657,7 +657,7 @@ def xml2jianpu(x):
     def c(data): dat[0] += data
     def e(name):
         d0 = dat[0].strip()
-        if name=='work-title': ret.append('title='+d0)
+        if name in ['work-title','movement-title']: ret.append('title='+d0)
         elif name=='creator' and dat[1]=="composer": ret.append('composer='+d0)
         elif name=="part-name" or name=="instrument-name": partList[-1]=d0
         elif name=="score-part": partList.append("")
