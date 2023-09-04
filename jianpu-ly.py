@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.724 (c) 2012-2023 Silas S. Brown
+# v1.725 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -112,7 +112,7 @@ def lilypond_command():
         for t in placesToTry:
             if os.path.exists(t): return t
 
-def all_scores_start():
+def all_scores_start(inDat):
     staff_size = float(os.environ.get("j2ly_staff_size",20))
     # Normal: j2ly_staff_size=20
     # Large: j2ly_staff_size=25.2
@@ -166,7 +166,8 @@ def all_scores_start():
   score-system-spacing = #'((basic-distance . 9) (padding . 5) (stretchability . 1e7))
   markup-system-spacing = #'((basic-distance . 2) (padding . 2) (stretchability . 0))
 """
-    return r+"}\n"
+    r += "}\n" # end of \paper block
+    return r+"\n%{ The jianpu-ly input was:\n" + inDat.strip().replace("%}","%/}")+"\n%}\n\n"
 
 def score_start():
     ret = "\\score {\n"
@@ -675,12 +676,12 @@ def xml2jianpu(x):
         elif name=="beats": time[0]=d0
         elif name=="beat-type": time[1]=d0
         elif name=="time":
-            tSig[0] = len(ret) # for anacrusis
-            tSig[1] = 0
+            tSig[0] = len(ret) # so anacrusis logic can come back and add to this
+            tSig[1] = 0 # count quavers in 1st bar
             ret.append("/".join(time))
         elif name=="backup" or name=="forward": errExit("MusicXML import: multiple voices per part not implemented")
         elif name=="measure" and not tSig[0]==None:
-            ret[tSig[0]]+=","+{0.5:"16",0.75:"16.",1:"8",1.5:"8.",2:"4",3:"4.",4:"2",6:"2.",8:"1",12:"1."}[tSig[1]]
+            if not tSig[1]==int(time[0])*8/int(time[1]): ret[tSig[0]]+=","+{0.5:"16",0.75:"16.",1:"8",1.5:"8.",2:"4",3:"4.",4:"2",6:"2.",8:"1",12:"1."}[tSig[1]] # anacrusis
             tSig[0]=None
         elif name=="beat-unit": tempo[0]=typesMM.get(name,"4")
         elif name=="beat-minute": tempo[1]=d0
@@ -1123,7 +1124,7 @@ def process_input(inDat):
   parts = [p for p in re.split(r"\sNextPart\s"," "+score+" ") if p.strip()]
   for midi in [False,True]:
    not_angka = False # may be set by getLY
-   if scoreNo==1 and not midi: ret.append(all_scores_start()) # now we've established non-empty
+   if scoreNo==1 and not midi: ret.append(all_scores_start(inDat)) # now we've established non-empty
    separate_score_per_part = midi and re.search(r"\sPartMidi\s"," "+score+" ") and len(parts)>1 # TODO: document this (results in 1st MIDI file containing all parts, then each MIDI file containing one part, if there's more than 1 part)
    for separate_scores in [False,True] if separate_score_per_part else [False]:
     headers = {} # will accumulate below
