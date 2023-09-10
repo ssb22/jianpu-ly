@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.725 (c) 2012-2023 Silas S. Brown
+# v1.726 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1183,7 +1183,15 @@ def write_output(outDat):
         if cmd:
             if lilypond_minor_version() >= 20: cmd += ' -dstrokeadjust' # if will be viewed on-screen rather than printed, and it's not a Retina display
             os.system(cmd+" "+quote(fn))
-            if sys.platform=='darwin': os.system("open "+quote(pdf))
+            if sys.platform=='darwin':
+                if os.path.exists(pdf):
+                    os.system("open "+quote(pdf))
+                elif cmd.startswith("lilypond ") and os.path.exists(pdf[:-3]+"midi"):
+                    print("\nMIDI worked but PDF failed.\nMight be a macports issue.  Trying SVG\n")
+                    svg = pdf[:-3]+"svg"
+                    try: os.remove(svg) # so won't show old one if lilypond fails
+                    except: pass
+                    os.system(cmd+" -dbackend=svg "+quote(fn)+";open "+quote(svg)) # ; to see any partial output
             elif sys.platform.startswith('win'):
                 import subprocess
                 subprocess.Popen([quote(pdf)],shell=True)
