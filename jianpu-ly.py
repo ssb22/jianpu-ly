@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.726 (c) 2012-2023 Silas S. Brown
+# v1.727 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -340,6 +340,7 @@ class NoteheadMarkup:
       self.last_figures = None
       self.last_was_rest = False
       self.notesHad = []
+      self.unicode_approx = []
   def endScore(self):
       if self.barPos == self.startBarPos: pass
       elif os.environ.get("j2ly_sloppy_bars",""): sys.stderr.write("Wrong bar length at end of score %d ignored (j2ly_sloppy_bars set)\n" % scoreNo)
@@ -534,7 +535,10 @@ class NoteheadMarkup:
         ret += ']'
         self.inBeamGroup = 'restHack'
     self.lastNBeams = nBeams
+    beamC = u'\u0333' if nBeams>=2 else u'\u0332' if nBeams==1 else u""
+    self.unicode_approx.append(u""+(u"-" if invisTieLast else figures[-1:])+(u"" if invisTieLast else (u'\u0323' if "," in octave else u'\u0307' if "'" in octave else u""))+beamC+u''.join(c+beamC for c in dots)+(u"" if self.inBeamGroup else u" ")) # (NB inBeamGroup is correct only if not midi and not western)
     if self.barPos == self.barLength:
+        self.unicode_approx[-1]=self.unicode_approx[-1].rstrip()+u'\u2502'
         self.barPos = 0 ; self.barNo += 1
         self.current_accidentals = {}
     # Octave dots:
@@ -740,8 +744,8 @@ def fix_fullwidth(t):
     r = []
     for c in utext:
         if 0xff01<=ord(c)<=0xff5e: r.append(unichr(ord(c)-0xfee0))
-        elif c==unichr(0x201a): r.append(",") # sometimes used as comma (incorrectly)
-        elif c==unichr(0xff61): r.append(".")
+        elif c==u'\u201a': r.append(",") # sometimes used as comma (incorrectly)
+        elif c==u'\uff61': r.append(".")
         else: r.append(c)
     utext = u"".join(r)
     if type(u"")==type(""): return utext
@@ -751,7 +755,7 @@ def graceNotes_markup(notes,isAfter):
     if isAfter: cmd = "jianpu-grace-after"
     else: cmd = "jianpu-grace"
     r = [] ; aftrNext = None
-    thinspace = unichr(0x2009)
+    thinspace = u'\u2009'
     if not type("")==type(u""): thinspace = thinspace.encode('utf-8')
     notes = grace_octave_fix(notes)
     for i in xrange(len(notes)):
@@ -880,6 +884,7 @@ def getLY(score,headers=None):
                 # Must use \transpose because \transposition doesn't always work.
                 # However, don't use \transpose if printing - it adds extra accidentals to the rhythm staff.
                 # So we have to do separate runs of \layout and \midi (hence the outer loop).
+                notehead_markup.unicode_approx.append(u''+re.sub('(?<!=)b$',u'\u266d',word.replace('#',u'\u266f')).upper()+u' ')
                 if midi or western:
                     if inTranspose: out.append('}')
                     if word[0]=="6": transposeFrom = "a"
@@ -1081,7 +1086,7 @@ def getLY(score,headers=None):
    while i < len(out)-1:
        while i<len(out)-1 and out[i].startswith(r'\mark \markup{') and out[i].endswith('}') and out[i+1].startswith(r'\mark \markup{') and out[i+1].endswith('}'):
            # merge time/key signatures
-           nbsp = unichr(0xA0)
+           nbsp = u'\u00a0'
            if not type(u"")==type(""): # Python 2
                nbsp = nbsp.encode('utf-8')
            out[i]=out[i][:-1]+nbsp+' '+out[i+1][len(r'\mark \markup{'):]
@@ -1153,6 +1158,17 @@ def process_input(inDat):
  ret = "".join(r+"\n" for r in ret)
  if lilypond_minor_version() >= 24: ret=re.sub(r"(\\override [A-Z][^ ]*) #'",r"\1.",ret) # needed to avoid deprecation warnings on Lilypond 2.24
  return ret
+
+def get_unicode_approx(inDat):
+    # TODO: document this (can use in a module)
+    # (takes one score, one part only; returns approximation in Unicode; limited support for non-notes)
+    global notehead_markup, western, midi, uniqCount, scoreNo, has_lyrics, not_angka, maxBeams
+    notehead_markup = NoteheadMarkup()
+    western = midi = not_angka = False
+    has_lyrics = True # doesn't matter for our purposes (see 'false positive' comment above)
+    uniqCount = 0 ; scoreNo = 1
+    getLY(inDat,{})
+    return u''.join(notehead_markup.unicode_approx)
 
 try: from shlex import quote
 except:
