@@ -109,6 +109,8 @@ Text: `^"above note" _"below note"`
 
 Other Lilypond code: `LP: (block of code) :LP` (each delimeter at start of its line)
 
+Unicode approximation instead of Lilypond: `Unicode`
+
 Ignored: `% a comment`
 
 

@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.727 (c) 2012-2023 Silas S. Brown
+# v1.728 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -73,6 +73,7 @@ Dynamics (applies to previous note): \p \mp \f
 Other 1-word Lilypond \ commands: \fermata \> \! \( \) etc
 Text: ^"above note" _"below note"
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
+Unicode approximation instead of Lilypond: Unicode
 Ignored: % a comment
 """
 
@@ -1117,6 +1118,9 @@ def getLY(score,headers=None):
    return out,maxBeams,lyrics,headers
 
 def process_input(inDat):
+ global unicode_mode
+ unicode_mode = not not re.search(r"\sUnicode\s"," "+inDat+" ")
+ if unicode_mode: return get_unicode_approx(re.sub(r"\sUnicode\s"," "," "+inDat+" ").strip())
  ret = []
  global scoreNo, western, has_lyrics, midi, not_angka, maxBeams, uniqCount, notehead_markup
  uniqCount = 0 ; notehead_markup = NoteheadMarkup()
@@ -1160,8 +1164,9 @@ def process_input(inDat):
  return ret
 
 def get_unicode_approx(inDat):
-    # TODO: document this (can use in a module)
-    # (takes one score, one part only; returns approximation in Unicode; limited support for non-notes)
+    if re.search(r"\sNextPart\s"," "+inDat+" "): errExit("multiple parts in Unicode mode not yet supported")
+    if re.search(r"\sNextScore\s"," "+inDat+" "): errExit("multiple scores in Unicode mode not yet supported")
+    # TODO: also pick up on other not-supported stuff e.g. grace notes (or check for unicode_mode when these are encountered)
     global notehead_markup, western, midi, uniqCount, scoreNo, has_lyrics, not_angka, maxBeams
     notehead_markup = NoteheadMarkup()
     western = midi = not_angka = False
@@ -1176,6 +1181,16 @@ except:
 
 def write_output(outDat):
     if sys.stdout.isatty():
+      if unicode_mode:
+        if sys.platform=='win32' and sys.version_info() < (3,6):
+          # Unicode on this console could be a problem
+          print ("""
+For Unicode approximation on this system, please do one of these things:
+(1) redirect output to a file,
+(2) upgrade to Python 3.6 or above, or
+(3) switch from Microsoft Windows to GNU/Linux""")
+          return
+      else: # normal Lilypond
         # They didn't redirect our output.
         # Try to be a little more 'user friendly'
         # and see if we can put it in a temporary
@@ -1212,8 +1227,8 @@ def write_output(outDat):
                 import subprocess
                 subprocess.Popen([quote(pdf)],shell=True)
             elif hasattr(shutil,'which') and shutil.which('evince'): os.system("evince "+quote(pdf))
-        os.chdir(cwd)
-    else: fix_utf8(sys.stdout,'w').write(outDat)
+        os.chdir(cwd) ; return
+    fix_utf8(sys.stdout,'w').write(outDat)
 
 def main():
     if "--html" in sys.argv or "--markdown" in sys.argv:
