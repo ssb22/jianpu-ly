@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.728 (c) 2012-2023 Silas S. Brown
+# v1.729 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1173,7 +1173,9 @@ def get_unicode_approx(inDat):
     has_lyrics = True # doesn't matter for our purposes (see 'false positive' comment above)
     uniqCount = 0 ; scoreNo = 1
     getLY(inDat,{})
-    return u''.join(notehead_markup.unicode_approx)
+    u=u''.join(notehead_markup.unicode_approx)
+    if u.endswith(u'\u2502'): u=u[:-1]+u'\u2551'
+    return u
 
 try: from shlex import quote
 except:
