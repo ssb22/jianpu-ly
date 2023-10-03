@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.729 (c) 2012-2023 Silas S. Brown
+# v1.73 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -103,15 +103,21 @@ def lilypond_minor_version():
 
 def lilypond_command():
     if hasattr(shutil,'which'):
-        if shutil.which('lilypond'): return 'lilypond'
+        w = shutil.which('lilypond')
+        if w: return path_wrap(w)
     elif not sys.platform.startswith("win"):
         cmd = getoutput('which lilypond 2>/dev/null')
-        if os.path.exists(cmd): return 'lilypond'
+        if os.path.exists(cmd):
+            return path_wrap(cmd)
         placesToTry = ['/Applications/LilyPond.app/Contents/Resources/bin/lilypond'] # e.g. from Mac OS 10.4-10.14 Intel build https://web.archive.org/web/20221121202056/https://lilypond.org/download/binaries/darwin-x86/lilypond-2.22.2-1.darwin-x86.tar.bz2 (unpacked and moved to /Applications), or similarly 2.20 for macOS 10.15+ from https://gitlab.com/marnen/lilypond-mac-builder/-/package_files/9872804/download
         placesToTry = ['/Applications/LilyPond-2.22.2.app/Contents/Resources/bin/lilypond','/Applications/LilyPond-2.20.0.app/Contents/Resources/bin/lilypond'] + placesToTry # if renamed from the above (try specific versions 1st, in case default is older)
         placesToTry += ['lilypond-2.24.0/bin/lilypond','/opt/lilypond-2.24.0/bin/lilypond'] # if unpacked 2.24 (which drops the .app; in macOS 13, might need first to manually open at least lilypond and gs binaries for Gatekeeper approval if installing it this way)
         for t in placesToTry:
             if os.path.exists(t): return t
+def path_wrap(w):
+    if sys.platform.startswith("win"):
+        return 'lilypond'
+    return 'PATH="%s:$PATH" lilypond' % w[:w.rindex('/')] # ensure any of its supporting binaries in that packaging system get priority in PATH (especially if we're on a Mac with a case-insensitive filesystem and someone installed another binary called GS which is not GhostScript)
 
 def all_scores_start(inDat):
     staff_size = float(os.environ.get("j2ly_staff_size",20))
@@ -957,19 +963,20 @@ def getLY(score,headers=None):
                 repeatStack.append((1,notehead_markup.barPos,times-1))
                 out.append(r'\repeat percent %d {' % times)
             elif word=="}":
-                numBraces,oldBarPos,multiplier = repeatStack.pop()
+                numBraces,oldBarPos,extraRepeats = repeatStack.pop()
                 out.append("}"*numBraces)
                 # Re-synchronise so bar check still works if percent is less than a bar:
                 newBarPos = notehead_markup.barPos
                 while newBarPos < oldBarPos: newBarPos += notehead_markup.barLength
                 # newBarPos-oldBarPos now gives the remainder (mod barLength) of the percent section's length
-                notehead_markup.barPos = (notehead_markup.barPos + (newBarPos-oldBarPos)*multiplier) % notehead_markup.barLength
+                notehead_markup.barPos = (notehead_markup.barPos + (newBarPos-oldBarPos)*extraRepeats) % notehead_markup.barLength
                 # TODO: update barNo also (but it's used only for error reports)
             elif word=="A{":
-                repeatStack.append((2,0,0))
+                repeatStack.append((2,notehead_markup.barPos,0))
                 out.append(r'\alternative { {')
             elif word=="|" and repeatStack and repeatStack[-1][0]==2:
                 out.append("} {") # separate repeat alternates (if the repeatStack conditions are not met i.e. we're not in an A block, then we fall through to the undocumented use of | as barline check below)
+                notehead_markup.barPos = repeatStack[-1][1]
             elif word.startswith("\\") or word in ["(",")","~","->","|"] or word.startswith('^"') or word.startswith('_"'):
                 # Lilypond command, \p, ^"text", barline check (undocumented, see above), etc
                 if out and "afterGrace" in out[lastPtr]:
@@ -1220,7 +1227,7 @@ For Unicode approximation on this system, please do one of these things:
                 if os.path.exists(pdf):
                     os.system("open "+quote(pdf))
                 elif cmd.startswith("lilypond ") and os.path.exists(pdf[:-3]+"midi"):
-                    print("\nMIDI worked but PDF failed.\nMight be a macports issue.  Trying SVG\n")
+                    print("\nMIDI worked but PDF failed.\nBroken gs binary on this Mac?  Trying SVG\n") # can happen if you have a binary called "GS" on a case-insensitive filesystem (see above PATH workaround)
                     svg = pdf[:-3]+"svg"
                     try: os.remove(svg) # so won't show old one if lilypond fails
                     except: pass
