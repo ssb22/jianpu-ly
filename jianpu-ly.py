@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.731 (c) 2012-2023 Silas S. Brown
+# v1.732 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -821,6 +821,7 @@ def getLY(score,headers=None):
    out = [] ; maxBeams = 0
    need_final_barline = False
    repeatStack = [] ; lastPtr = 0
+   rStartP = None
    escaping = inTranspose = 0
    aftrnext = defined_jianpuGrace = defined_JGR = None
    for line in score.split("\n"):
@@ -951,27 +952,31 @@ def getLY(score,headers=None):
                 notehead_markup.withStaff=1
             elif word=="PartMidi": pass # handled in process_input
             elif word=="R{":
-                repeatStack.append((1,0,0))
+                repeatStack.append((1,notehead_markup.barPos,0,len(out)))
                 out.append(r'\repeat volta 2 {')
             elif re.match("R[1-9][0-9]*{$",word):
                 times = int(word[1:-1])
-                repeatStack.append((1,notehead_markup.barPos,times-1))
+                repeatStack.append((1,notehead_markup.barPos,times-1,len(out)))
                 out.append(r'\repeat percent %d {' % times)
             elif word=="}":
-                numBraces,oldBarPos,extraRepeats = repeatStack.pop()
+                numBraces,oldBarPos,extraRepeats,rStartP = repeatStack.pop()
                 out.append("}"*numBraces)
                 # Re-synchronise so bar check still works if percent is less than a bar:
                 newBarPos = notehead_markup.barPos
                 while newBarPos < oldBarPos: newBarPos += notehead_markup.barLength
                 # newBarPos-oldBarPos now gives the remainder (mod barLength) of the percent section's length
-                notehead_markup.barPos = (notehead_markup.barPos + (newBarPos-oldBarPos)*extraRepeats) % notehead_markup.barLength
+                if numBraces==1: notehead_markup.barPos = (notehead_markup.barPos + (newBarPos-oldBarPos)*extraRepeats) % notehead_markup.barLength
                 # TODO: update barNo also (but it's used only for error reports)
             elif word=="A{":
-                repeatStack.append((2,notehead_markup.barPos,0))
+                out[rStartP] = out[rStartP].replace('percent','volta') # for time-bars with 3 or more times, you can say R3{ ... } A{ ... } (TODO document this)
+                repeatStack.append((2,notehead_markup.barPos,0,rStartP))
                 out.append(r'\alternative { {')
             elif word=="|" and repeatStack and repeatStack[-1][0]==2:
                 out.append("} {") # separate repeat alternates (if the repeatStack conditions are not met i.e. we're not in an A block, then we fall through to the undocumented use of | as barline check below)
-                notehead_markup.barPos = repeatStack[-1][1]
+                numBraces,oldBarPos,extraRepeats,rStartP = repeatStack.pop()
+                notehead_markup.barPos = oldBarPos
+                repeatStack.append((numBraces,oldBarPos,extraRepeats+1,rStartP))
+                out[rStartP] = out[rStartP].replace(('volta %d ' % (extraRepeats+1)),('volta %d ' % (extraRepeats+2))) # ensure there's enough repeats for the alternatives
             elif word.startswith("\\") or word in ["(",")","~","->","|"] or word.startswith('^"') or word.startswith('_"'):
                 # Lilypond command, \p, ^"text", barline check (undocumented, see above), etc
                 if out and "afterGrace" in out[lastPtr]:
