@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.732 (c) 2012-2023 Silas S. Brown
+# v1.733 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -187,9 +187,16 @@ def score_end(**headers):
         ret += r"\header{"+'\n'
         for k,v in headers.items(): ret+=k+'="'+v+'"\n'
         ret += "}\n"
+    layoutExtra = ""
+    if "j2ly_lyric_size" in os.environ:
+        lyric_size = float(os.environ.get("j2ly_lyric_size",20))
+        staff_size = float(os.environ.get("j2ly_staff_size",20))
+        if not lyric_size == staff_size:
+            from math import log
+            layoutExtra=r" \override Lyrics.LyricText.font-size = #+"+str(log(lyric_size/staff_size)*6/log(2))+" "
     if midi: ret += r"\midi { \context { \Score tempoWholesPerMinute = #(ly:make-moment 84 4)}}" # will be overridden by any \tempo command used later
-    elif notehead_markup.noBarNums: ret += r'\layout { \context { \Score \remove "Bar_number_engraver" } }'
-    else: ret += r"\layout{}"
+    elif notehead_markup.noBarNums: ret += r'\layout { \context { \Score \remove "Bar_number_engraver"'+layoutExtra+' } }'
+    else: ret += r"\layout{"+layoutExtra+"}"
     return ret + " }"
 
 def uniqName():
