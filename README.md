@@ -67,6 +67,10 @@ Prohibit page breaks until end of this movement: `OnePage`
 
 Suppress bar numbers: `NoBarNums`
 
+Suppress first-line indent: `NoIndent`
+
+Ragged last line: `RaggedLast`
+
 Old-style time signature: `SeparateTimesig 1=C 4/4`
 
 Indonesian 'not angka' style: `angka`

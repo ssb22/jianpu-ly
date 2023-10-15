@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.733 (c) 2012-2023 Silas S. Brown
+# v1.734 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -52,6 +52,8 @@ Instrument of current part: instrument=Flute (on a line of its own)
 Multiple movements: NextScore
 Prohibit page breaks until end of this movement: OnePage
 Suppress bar numbers: NoBarNums
+Suppress first-line indent: NoIndent
+Ragged last line: RaggedLast
 Old-style time signature: SeparateTimesig 1=C 4/4
 Indonesian 'not angka' style: angka
 Add a Western staff doubling the tune: WithStaff
@@ -194,8 +196,10 @@ def score_end(**headers):
         if not lyric_size == staff_size:
             from math import log
             layoutExtra=r" \override Lyrics.LyricText.font-size = #+"+str(log(lyric_size/staff_size)*6/log(2))+" "
+    if notehead_markup.noIndent: layoutExtra += ' indent = 0.0 '
+    if notehead_markup.raggedLast: layoutExtra += ' ragged-last = ##t '
+    if notehead_markup.noBarNums: layoutExtra += r' \context { \Score \remove "Bar_number_engraver" } '
     if midi: ret += r"\midi { \context { \Score tempoWholesPerMinute = #(ly:make-moment 84 4)}}" # will be overridden by any \tempo command used later
-    elif notehead_markup.noBarNums: ret += r'\layout { \context { \Score \remove "Bar_number_engraver"'+layoutExtra+' } }'
     else: ret += r"\layout{"+layoutExtra+"}"
     return ret + " }"
 
@@ -340,7 +344,7 @@ class NoteheadMarkup:
   def initOneScore(self):
       self.barLength = 64 ; self.beatLength = 16 # in 64th notes
       self.barPos = self.startBarPos = F(0)
-      self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.separateTimesig = self.withStaff = 0
+      self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.noIndent = self.raggedLast = self.separateTimesig = self.withStaff = 0
       self.keepLength = 0
       self.last_octave = self.base_octave = ""
       self.current_accidentals = {}
@@ -946,6 +950,12 @@ def getLY(score,headers=None):
             elif word=="NoBarNums":
                 if notehead_markup.noBarNums: sys.stderr.write("WARNING: Duplicate NoBarNums, did you miss out a NextScore?\n")
                 notehead_markup.noBarNums=1
+            elif word=="NoIndent":
+                if notehead_markup.noIndent: sys.stderr.write("WARNING: Duplicate NoIndent, did you miss out a NextScore?\n")
+                notehead_markup.noIndent=1
+            elif word=="RaggedLast":
+                if notehead_markup.raggedLast: sys.stderr.write("WARNING: Duplicate Raggedlast, did you miss out a NextScore?\n")
+                notehead_markup.raggedLast=1
             elif word=="SeparateTimesig":
                 if notehead_markup.separateTimesig: sys.stderr.write("WARNING: Duplicate SeparateTimesig, did you miss out a NextScore?\n")
                 notehead_markup.separateTimesig=1
