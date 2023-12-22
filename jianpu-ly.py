@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.734 (c) 2012-2023 Silas S. Brown
+# v1.735 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -116,12 +116,14 @@ def lilypond_command():
         for t in placesToTry:
             if os.path.exists(t): return t
 
+staff_size = float(os.environ.get("j2ly_staff_size",20))
+# Normal: j2ly_staff_size=20
+# Large: j2ly_staff_size=25.2
+# Small: j2ly_staff_size=17.82
+# Tiny: j2ly_staff_size=15.87
+lyric_size = float(os.environ.get("j2ly_lyric_size",staff_size))
+
 def all_scores_start(inDat):
-    staff_size = float(os.environ.get("j2ly_staff_size",20))
-    # Normal: j2ly_staff_size=20
-    # Large: j2ly_staff_size=25.2
-    # Small: j2ly_staff_size=17.82
-    # Tiny: j2ly_staff_size=15.87
     r = r"""\version "2.18.0"
 #(set-global-staff-size %g)""" % staff_size
     r += r"""
@@ -190,12 +192,11 @@ def score_end(**headers):
         for k,v in headers.items(): ret+=k+'="'+v+'"\n'
         ret += "}\n"
     layoutExtra = ""
-    if "j2ly_lyric_size" in os.environ:
-        lyric_size = float(os.environ.get("j2ly_lyric_size",20))
-        staff_size = float(os.environ.get("j2ly_staff_size",20))
-        if not lyric_size == staff_size:
-            from math import log
-            layoutExtra=r" \override Lyrics.LyricText.font-size = #+"+str(log(lyric_size/staff_size)*6/log(2))+" "
+    if not lyric_size == staff_size:
+        from math import log
+        lSize = log(lyric_size/staff_size)*6/log(2)
+        if lSize > 3: sys.stderr.write("WARNING: potential layout problems; consider increasing j2ly_staff_size to be closer to j2ly_lyric_size\n") # TODO: is 3 a good threshold for this warning?  (need to check different Lilypond versions)
+        layoutExtra=r" \override Lyrics.LyricText.font-size = #+"+str(lSize)+" "
     if notehead_markup.noIndent: layoutExtra += ' indent = 0.0 '
     if notehead_markup.raggedLast: layoutExtra += ' ragged-last = ##t '
     if notehead_markup.noBarNums: layoutExtra += r' \context { \Score \remove "Bar_number_engraver" } '
