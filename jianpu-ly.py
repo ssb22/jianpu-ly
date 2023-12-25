@@ -2,7 +2,7 @@
 # (can be run with either Python 2 or Python 3)
 
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.735 (c) 2012-2023 Silas S. Brown
+# v1.736 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -196,7 +196,7 @@ def score_end(**headers):
         from math import log
         lSize = log(lyric_size/staff_size)*6/log(2)
         if lSize > 3: sys.stderr.write("WARNING: potential layout problems; consider increasing j2ly_staff_size to be closer to j2ly_lyric_size\n") # TODO: is 3 a good threshold for this warning?  (need to check different Lilypond versions)
-        layoutExtra=r" \override Lyrics.LyricText.font-size = #+"+str(lSize)+" "
+        layoutExtra=r" \override Lyrics.LyricText.font-size = #"+("+" if lSize>=0 else "")+str(lSize)+" "
     if notehead_markup.noIndent: layoutExtra += ' indent = 0.0 '
     if notehead_markup.raggedLast: layoutExtra += ' ragged-last = ##t '
     if notehead_markup.noBarNums: layoutExtra += r' \context { \Score \remove "Bar_number_engraver" } '
