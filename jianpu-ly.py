@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # (can be run with either Python 2 or Python 3)
 
+r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.736 (c) 2012-2023 Silas S. Brown
+# v1.737 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,8 +24,8 @@
 # and at https://gitlab.developers.cam.ac.uk/ssb22/jianpu-ly
 # and in China: https://gitee.com/ssb22/jianpu-ly
 
-# (The following doc string's format is fixed, see --html)
-r"""Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file)
+# (The following docstring format is fixed, see --html)
+Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file)
 Text files are whitespace-separated and can contain:
 Scale going up: 1 2 3 4 5 6 7 1'
 Accidentals: 1 #1 2 b2 1
@@ -606,7 +607,7 @@ def write_docs():
         else: return l
     inTable = 0 ; justStarted=1
     for line in __doc__.split("\n"):
-        if not line.strip(): continue
+        if line.startswith("#") or not line.strip(): continue
         if ":" in line and line.split(":",1)[1].strip():
             toGet,shouldType = line.split(":",1)
             if not inTable:
@@ -648,8 +649,14 @@ def getInput0():
     if f:
       try: return [open(f,encoding="utf-8").read()]
       except: return [open(f).read()]
-  sys.stderr.write(__doc__)
-  raise SystemExit
+  write_help() ; raise SystemExit
+
+def write_help():
+  write_version()
+  sys.stderr.write("\n".join(l for l in __doc__.split("\n") if l.strip() and not l.startswith("#"))+"\n")
+def write_version():
+  for l in __doc__.split("\n"):
+      if l.startswith("# v"): return sys.stderr.write(l.replace("#","jianpu-ly",1)+"\n\n")
 
 def get_input():
   inDat = getInput0()
@@ -1253,6 +1260,8 @@ For Unicode approximation on this system, please do one of these things:
 def main():
     if "--html" in sys.argv or "--markdown" in sys.argv:
         return write_docs()
+    if '--help' in sys.argv or '-h' in sys.argv or '/?' in sys.argv: return write_help()
+    if '--version' in sys.argv or '-v' in sys.argv or '/v' in sys.argv: return write_version()
     inDat = get_input()
     out = process_input(inDat) # <-- you can also call this if importing as a module
     write_output(out)
