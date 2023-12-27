@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.737 (c) 2012-2023 Silas S. Brown
+# v1.738 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -159,7 +159,7 @@ def all_scores_start(inDat):
   % lyrics etc) that includes Chinese will likely fall back to
   % Japanese fonts which don't support all Simplified hanzi.
   % This brings back 2.18's behaviour on 2.20+
-  % (you might have to comment it out to run this on 2.18)
+  % - you'll have to comment it out to run this on 2.18:
   #(define fonts
     (set-global-fonts
      #:roman "Times New Roman,Arial Unicode MS"
@@ -213,19 +213,19 @@ def jianpu_voice_start(isTemp=0):
     if not isTemp and maxBeams >= 2: stemLenFrac = "0.5" # sometimes needed if the semiquavers occur in isolation rather than in groups (TODO do we need to increase this for 3+ beams in some cases?)
     else: stemLenFrac = "0"
     voiceName = uniqName()
-    r = (r"""\new Voice="%s" {"""%voiceName)+"\n"
+    r = (r"""\new Voice="%s" {"""%voiceName)
     r += r"""
-    \override Beam #'transparent = ##f % (needed for LilyPond 2.18 or the above switch will also hide beams)
-    """
+    \override Beam #'transparent = ##f"""
     if not_angka:
         r +=r"""
         \override Stem #'direction = #UP
         \override Tie #'staff-position = #-2.5
         \tupletDown"""
         stemLenFrac=str(0.4+0.2*max(0,maxBeams-1))
-    else: r += r"""\override Stem #'direction = #DOWN
+    else: r += r"""
+    \override Stem #'direction = #DOWN
     \override Tie #'staff-position = #2.5
-    \tupletUp"""+"\n"
+    \tupletUp"""
     r += (r"""
     \override Stem #'length-fraction = #%s
     \override Beam #'beam-thickness = #0.1
@@ -291,7 +291,7 @@ def lyrics_start(voiceName):
 def lyrics_end(): return "} }"
 
 dashes_as_ties = True # Implement dash (-) continuations as invisible ties rather than rests; sometimes works better in awkward beaming situations
-use_rest_hack = True # Implement short rests as notes (and if there are lyrics, creates temporary voices so the lyrics miss them); sometimes works better for beaming (at least in 2.15, 2.16 and 2.18)
+use_rest_hack = True # Implement some short rests as notes (and if there are lyrics, creates temporary voices so the lyrics miss them); sometimes works better for beaming (at least in 2.15 through 2.24)
 if __name__=="__main__" and '--noRestHack' in sys.argv: # TODO: document
     use_rest_hack=False ; sys.argv.remove('--noRestHack')
 assert not (use_rest_hack and not dashes_as_ties), "This combination has not been tested"
@@ -356,6 +356,7 @@ class NoteheadMarkup:
       self.last_was_rest = False
       self.notesHad = []
       self.unicode_approx = []
+      self.rplacNextIfStillInBeam = None
   def endScore(self):
       if self.barPos == self.startBarPos: pass
       elif os.environ.get("j2ly_sloppy_bars",""): sys.stderr.write("Wrong bar length at end of score %d ignored (j2ly_sloppy_bars set)\n" % scoreNo)
@@ -494,18 +495,21 @@ class NoteheadMarkup:
             if not accidental==self.current_accidentals[octave][int(figure)-1]:
                 need_space_for_accidental = True
             self.current_accidentals[octave][int(figure)-1] = accidental # TODO: not sensible (assumes accidental applies to EVERY note in the chord, see above)
-    inRestHack = 0
+    inRestHack = replaceLast = 0
     if not midi and not western:
         if ret: ret = ret.rstrip()+"\n" # try to keep the .ly code vaguely readable
         if octave=="''" and not invisTieLast: ret += r"  \once \override Score.TextScript.outside-staff-priority = 45" # inside bar numbers etc
         ret += r"  \applyOutput #'Voice #"+self.defines_done[figures]+" "
-        if placeholder_chord == "r" and use_rest_hack and nBeams:
+        if self.rplacNextIfStillInBeam and leftBeams and nBeams: replaceLast = self.rplacNextIfStillInBeam # didn't need the rest-hack here after all
+        self.rplacNextIfStillInBeam = None
+        if placeholder_chord == "r" and use_rest_hack and nBeams and not (leftBeams and not not_angka):
             placeholder_chord = "c"
             # C to work around diagonal-tail problem with
             # some isolated quaver rests in some Lilypond
             # versions (usually at end of bar); new voice
             # so lyrics miss it as if it were a rest:
             if has_lyrics and not self.withStaff: # (OK if self.withStaff: lyrics will be attached to that instead)
+                self.rplacNextIfStillInBeam = ret
                 ret = jianpu_voice_start(1)[0]+ret
                 inRestHack = 1
                 if self.inBeamGroup and not self.inBeamGroup=="restHack": aftrlast0 = "] "
@@ -521,6 +525,7 @@ class NoteheadMarkup:
         ret += placeholder_chord + {"":"", "#":"is", "b":"es"}[accidental]
         if not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI + Western, put it so no-mark starts near middle C
     ret += ("%d" % length) + dots
+    if self.rplacNextIfStillInBeam: self.rplacNextIfStillInBeam += ("r%d" % length) + dots + '['
     if tremolo:
         if lilypond_minor_version()<20: errExit("tremolo requires Lilypond 2.20+, we found 2."+str(lilypond_minor_version()))
         if midi or western:
@@ -534,7 +539,7 @@ class NoteheadMarkup:
             else: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.5 . 2.1) \postscript "1.1 0.4 moveto 2.1 1.4 lineto 1.3 0.2 moveto 2.3 1.2 lineto 1.5 0.0 moveto 2.5 1.0 lineto stroke" } %{ requires Lilypond 2.22+ %} """
         elif dots: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.8 . 2.6) \postscript "1.4 1.6 moveto 2.4 2.6 lineto 1.6 1.4 moveto 2.6 2.4 lineto 1.8 1.2 moveto 2.8 2.2 lineto stroke" } %{ requires Lilypond 2.20 %} """
         else: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.5 . 2.6) \postscript "1.1 1.6 moveto 2.1 2.6 lineto 1.3 1.4 moveto 2.3 2.4 lineto 1.5 1.2 moveto 2.5 2.2 lineto stroke" } %{ requires Lilypond 2.20 %} """
-    if nBeams and (not self.inBeamGroup or self.inBeamGroup=="restHack" or inRestHack) and not midi and not western:
+    if nBeams and (not self.inBeamGroup or (self.inBeamGroup=="restHack" and not replaceLast) or inRestHack) and not midi and not western:
         # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
         ret += '['
         self.inBeamGroup = 1
@@ -548,7 +553,7 @@ class NoteheadMarkup:
         self.inBeamGroup = 0 # DON'T reset lastNBeams here (needed for start-of-group accidental logic)
     elif inRestHack and self.inBeamGroup:
         ret += ']'
-        self.inBeamGroup = 'restHack'
+        self.inBeamGroup = "restHack"
     self.lastNBeams = nBeams
     beamC = u'\u0333' if nBeams>=2 else u'\u0332' if nBeams==1 else u""
     self.unicode_approx.append(u""+(u"-" if invisTieLast else figures[-1:])+(u"" if invisTieLast else (u'\u0323' if "," in octave else u'\u0307' if "'" in octave else u""))+beamC+u''.join(c+beamC for c in dots)+(u"" if self.inBeamGroup else u" ")) # (NB inBeamGroup is correct only if not midi and not western)
@@ -576,7 +581,7 @@ class NoteheadMarkup:
         else: b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
     else: b4last,aftrlast = "",""
     if inRestHack: ret += " } "
-    return b4last,aftrlast0+aftrlast,ret, need_space_for_accidental, nBeams,octave
+    return b4last,replaceLast,aftrlast0+aftrlast,ret, need_space_for_accidental, nBeams,octave
 
 def parseNote(word,origWord,line):
     if word==".": word = "-" # (for not angka, TODO: document that this is now acceptable as an input word?)
@@ -1097,7 +1102,8 @@ def getLY(score,headers=None):
                     if not word: continue # allow just < and > by itself in a word
                 figures,nBeams,dots,octave,accidental,tremolo = parseNote(word,word0,line)
                 need_final_barline = True
-                b4last,aftrlast,this,need_space_for_accidental,nBeams,octave = notehead_markup(figures,nBeams,dots,octave,accidental,tremolo,word0,line)
+                b4last,replaceLast,aftrlast,this,need_space_for_accidental,nBeams,octave = notehead_markup(figures,nBeams,dots,octave,accidental,tremolo,word0,line)
+                if replaceLast: out[lastPtr]=replaceLast
                 if b4last: out[lastPtr]=b4last+out[lastPtr]
                 if aftrlast: out.insert(lastPtr+1,aftrlast)
                 lastPtr = len(out)
