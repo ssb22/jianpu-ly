@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.738 (c) 2012-2023 Silas S. Brown
+# v1.74 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -48,6 +48,7 @@ Lyrics (verse 1): L: 1. Here is verse one
 Lyrics (verse 2): L: 2. Here is verse two
 Hanzi lyrics (auto space): H: hanzi (with or without spaces)
 Lilypond headers: title=the title (on a line of its own)
+Guitar chords: chords=c2. g:7 c (on own line)
 Multiple parts: NextPart
 Instrument of current part: instrument=Flute (on a line of its own)
 Multiple movements: NextScore
@@ -361,7 +362,7 @@ class NoteheadMarkup:
       if self.barPos == self.startBarPos: pass
       elif os.environ.get("j2ly_sloppy_bars",""): sys.stderr.write("Wrong bar length at end of score %d ignored (j2ly_sloppy_bars set)\n" % scoreNo)
       elif self.startBarPos and not self.barPos: errExit("Score %d should end with a %g-beat bar to make up for the %g-beat anacrusis bar.  Set j2ly_sloppy_bars environment variable if you really want to break this rule." % (scoreNo,self.startBarPos/self.beatLength,(self.barLength-self.startBarPos)/self.beatLength)) # this is on the music theory syllabi at about Grade 3, but you can get up to Grade 5 practical without actually covering it, so we'd better not expect all users to understand "final bar does not make up for anacrusis bar"
-      else: errExit("Incomplete bar at end of score %d (pos %d)" % (scoreNo,self.barPos))
+      else: errExit("Incomplete bar at end of score %d (%g beats)" % (scoreNo,self.barPos*1.0/self.beatLength))
   def setTime(self,num,denom):
       self.barLength = int(64*num/denom)
       if denom>4 and num%3==0: self.beatLength = 24 # compound time
@@ -892,7 +893,7 @@ def getLY(score,headers=None):
             if not type("")==type(u""): line = line.encode('utf-8') # Python 2
         lyrics.append(toAdd+re.sub("(?<=[^- ])- "," -- ",line).replace(" -- "," --\n"))
     elif re.match(r"\s*[A-Za-z]+\s*=",line):
-        # Lilypond header
+        # Lilypond header (or guitar chords)
         hName,hValue = line.split("=",1)
         hName,hValue = hName.strip().lower(),hValue.strip()
         if not headers.get(hName,hValue)==hValue:
@@ -1184,6 +1185,9 @@ def process_input(inDat):
          inst = headers["instrument"]
          del headers["instrument"]
      else: inst = None
+     if "chords" in headers:
+         ret.append(r'\new ChordNames { \chordmode { '+headers["chords"]+' } }')
+         del headers["chords"]
      if midi:
        ret.append(midi_staff_start()+" "+out+" "+midi_staff_end())
      else:
