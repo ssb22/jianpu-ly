@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.74 (c) 2012-2023 Silas S. Brown
+# v1.75 (c) 2012-2023 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -126,8 +126,8 @@ staff_size = float(os.environ.get("j2ly_staff_size",20))
 lyric_size = float(os.environ.get("j2ly_lyric_size",staff_size))
 
 def all_scores_start(inDat):
-    r = r"""\version "2.18.0"
-#(set-global-staff-size %g)""" % staff_size
+    r = r"""\version "2.%d.0"
+#(set-global-staff-size %g)""" % ((20 if lilypond_minor_version()>=20 else 18),staff_size)
     r += r"""
 
 % un-comment the next line to remove Lilypond tagline:
@@ -159,8 +159,7 @@ def all_scores_start(inDat):
   % (using it only in Sans), which means any Serif text (titles,
   % lyrics etc) that includes Chinese will likely fall back to
   % Japanese fonts which don't support all Simplified hanzi.
-  % This brings back 2.18's behaviour on 2.20+
-  % - you'll have to comment it out to run this on 2.18:
+  % This brings back 2.18's behaviour on 2.20+:
   #(define fonts
     (set-global-fonts
      #:roman "Times New Roman,Arial Unicode MS"
@@ -410,9 +409,18 @@ class NoteheadMarkup:
         # because it affects the notehead shape
         figures += accidental # TODO: chords?
         name += {"#":"-sharp","b":"-flat","":""}[accidental]
+    aftrLastNonDash = tieEnd = ""
     if invisTieLast: # (so figures == "-")
-        figures += self.last_figures # (so "-" + last)
-        name += ''.join(names[f] for f in self.last_figures)
+        if self.barPos==0 and not midi and not western and lilypond_minor_version()>=20:
+            # dash over barline: write as new note
+            figures = self.last_figures
+            name = ''.join(names[f] for f in figures)
+            aftrLastNonDash = r'\=JianpuTie('
+            tieEnd = r'\=JianpuTie)'
+        else:
+            figures += self.last_figures # (so "-" + last)
+            name += ''.join(names[f] for f in self.last_figures)
+            if self.barPos==0 and not midi and not western: sys.stderr.write("Warning: jianpu barline-crossing tie won't be done right because your Lilypond version is older than 2.20\n")
         placeholder_chord = get_placeholder_chord(self.last_figures)
         octave = self.last_octave # for MIDI or 5-line
         accidental = self.last_accidental # ditto
@@ -581,8 +589,9 @@ class NoteheadMarkup:
         if midi or western: b4last, aftrlast = "", " ~"
         else: b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
     else: b4last,aftrlast = "",""
-    if inRestHack: ret += " } "
-    return b4last,replaceLast,aftrlast0+aftrlast,ret, need_space_for_accidental, nBeams,octave
+    if inRestHack: ret += " } " # end temporary voice for the "-" (non)-note
+    elif tieEnd: ret += ' '+tieEnd # end of JianpuTie curve
+    return aftrLastNonDash,figures.startswith('-'),b4last,replaceLast,aftrlast0+aftrlast,ret, need_space_for_accidental, nBeams,octave
 
 def parseNote(word,origWord,line):
     if word==".": word = "-" # (for not angka, TODO: document that this is now acceptable as an input word?)
@@ -846,9 +855,11 @@ def getLY(score,headers=None):
    out = [] ; maxBeams = 0
    need_final_barline = False
    repeatStack = [] ; lastPtr = 0
+   lastNonDashPtr = 0
    rStartP = None
    escaping = inTranspose = 0
    aftrnext = defined_jianpuGrace = defined_JGR = None
+   aftrnext2 = None
    for line in score.split("\n"):
     line = fix_fullwidth(line).strip()
     line=re.sub(r"^%%\s*tempo:\s*(\S+)\s*$",r"\1",line) # to provide an upgrade path for jihuan-tian's fork
@@ -1010,10 +1021,16 @@ def getLY(score,headers=None):
                 out[rStartP] = out[rStartP].replace(('volta %d ' % (extraRepeats+1)),('volta %d ' % (extraRepeats+2))) # ensure there's enough repeats for the alternatives
             elif word.startswith("\\") or word in ["(",")","~","->","|"] or word.startswith('^"') or word.startswith('_"'):
                 # Lilypond command, \p, ^"text", barline check (undocumented, see above), etc
-                if out and "afterGrace" in out[lastPtr]:
+                if word=="~" and not midi and not western and lastNonDashPtr < lastPtr and lilypond_minor_version()>=20: # tie from the number, not the last dash
+                    out.insert(lastNonDashPtr+1,r'\=JianpuTie(')
+                    lastPtr += 1
+                    aftrnext2 = r'\=JianpuTie)'
+                elif out and "afterGrace" in out[lastPtr]:
                     # apply to inside afterGrace in midi/western
                     out[lastPtr] = out[lastPtr][:-1] + word + " }"
-                else: out.append(word)
+                else:
+                    out.append(word)
+                    if word=="~" and not midi and not western and lastNonDashPtr < lastPtr: sys.stderr.write("Warning: jianpu long-note tie won't be done right because your Lilypond version is older than 2.20\n")
             elif re.match(r"[1-9][0-9]*\[$",word):
                 # tuplet start, e.g. 3[
                 fitIn = int(word[:-1])
@@ -1103,12 +1120,17 @@ def getLY(score,headers=None):
                     if not word: continue # allow just < and > by itself in a word
                 figures,nBeams,dots,octave,accidental,tremolo = parseNote(word,word0,line)
                 need_final_barline = True
-                b4last,replaceLast,aftrlast,this,need_space_for_accidental,nBeams,octave = notehead_markup(figures,nBeams,dots,octave,accidental,tremolo,word0,line)
+                aftrLastNonDash,isDash,b4last,replaceLast,aftrlast,this,need_space_for_accidental,nBeams,octave = notehead_markup(figures,nBeams,dots,octave,accidental,tremolo,word0,line)
                 if replaceLast: out[lastPtr]=replaceLast
                 if b4last: out[lastPtr]=b4last+out[lastPtr]
                 if aftrlast: out.insert(lastPtr+1,aftrlast)
+                if aftrLastNonDash: out.insert(lastNonDashPtr+1,aftrLastNonDash)
                 lastPtr = len(out)
+                if not isDash: lastNonDashPtr = len(out)
                 out.append(this)
+                if aftrnext2:
+                    out.append(aftrnext2)
+                    aftrnext2 = None
                 if aftrnext:
                     if need_space_for_accidental: aftrnext = aftrnext.replace(r"\markup",r"\markup \halign #2 ",1)
                     out.append(aftrnext)
