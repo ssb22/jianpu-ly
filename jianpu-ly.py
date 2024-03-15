@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.75 (c) 2012-2023 Silas S. Brown
+# v1.76 (c) 2012-2024 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -610,7 +610,10 @@ def parseNote(word,origWord,line):
         try: nBeams = list("cqsdh").index(nBeams)
         except ValueError: scoreError("Can't calculate number of beams from "+nBeams+" in",origWord,line)
     else: nBeams=None # unspecified
-    octave = "".join(c for c in word if c in "',")
+    octaves = re.findall("'+|,+",word)
+    if len(octaves)>1: scoreError("Multiple octave-dot settings not yet implemented:",origWord,line) # TODO: apparently, multiple sets of octave dots in chords are stacked, so a dot ends up vertically between figures; this would require adding to defines_done name and the dir-column, probably with baseline-skip adjustments
+    if octaves: octave = octaves[0]
+    else: octave = ""
     accidental = "".join(c for c in word if c in "#b")
     return figures,nBeams,dots,octave,accidental,tremolo
 
@@ -917,6 +920,7 @@ def getLY(score,headers=None):
         for word in line.split():
             word=word.replace(chr(0)," ")
             if word in ["souyin","harmonic","up","down","bend","tilde"]: word="Fr="+word # (Fr= before these is optional)
+            if re.match("[16]=[#b][A-Ga-g]$",word): word=word[:2]+word[3]+word[2] # somebody wrote a key name backwards (bE instead of Eb), we can fix that here
             if word.startswith('%'): break # a comment
             elif re.match("[1-468]+[.]*=[1-9][0-9]*$",word): out.append(r'\tempo '+word) # TODO: reduce size a little?
             elif re.match("[16]=[A-Ga-g][#b]?$",word): #key
