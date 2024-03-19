@@ -59,6 +59,8 @@ Lilypond headers: `title=the title` (on a line of its own)
 
 Guitar chords: `chords=c2. g:7 c` (on own line)
 
+Fret diagrams: `frets=guitar` (on own line)
+
 Multiple parts: `NextPart`
 
 Instrument of current part: `instrument=Flute` (on a line of its own)

@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.76 (c) 2012-2024 Silas S. Brown
+# v1.77 (c) 2012-2024 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -49,6 +49,7 @@ Lyrics (verse 2): L: 2. Here is verse two
 Hanzi lyrics (auto space): H: hanzi (with or without spaces)
 Lilypond headers: title=the title (on a line of its own)
 Guitar chords: chords=c2. g:7 c (on own line)
+Fret diagrams: frets=guitar (on own line)
 Multiple parts: NextPart
 Instrument of current part: instrument=Flute (on a line of its own)
 Multiple movements: NextScore
@@ -1212,7 +1213,15 @@ def process_input(inDat):
          del headers["instrument"]
      else: inst = None
      if "chords" in headers:
+         if "frets" in headers:
+             frets = headers["frets"]
+             assert frets in ["guitar","ukulele","mandolin"]
+             fretsInc = r'\include "predefined-'+frets+'-fretboards.ly"\n'
+             if not fretsInc in ret: ret.insert(1,fretsInc) # after all-scores-start
+             del headers["frets"]
+         else: frets = None
          ret.append(r'\new ChordNames { \chordmode { '+headers["chords"]+' } }')
+         if frets: ret.append(r'\new FretBoards { '+('' if frets=='guitar' else r'\set Staff.stringTunings = #'+frets+'-tuning')+r' \chordmode { '+headers["chords"]+' } }')
          del headers["chords"]
      if midi:
        ret.append(midi_staff_start()+" "+out+" "+midi_staff_end())
