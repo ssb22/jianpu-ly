@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.78 (c) 2012-2024 Silas S. Brown
+# v1.79 (c) 2012-2024 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -572,7 +572,7 @@ class NoteheadMarkup:
         self.barPos = 0 ; self.barNo += 1
         self.current_accidentals = {}
     # Octave dots:
-    if not midi and not western and not invisTieLast:
+    if not midi and not western and not '-' in figures:
       # Tweak the Y-offset, as Lilypond occasionally puts it too far down:
       if not nBeams: ret += {",":r"-\tweak #'Y-offset #-1.2 ",
                              ",,":r"-\tweak #'Y-offset #1 "}.get(octave,"")
