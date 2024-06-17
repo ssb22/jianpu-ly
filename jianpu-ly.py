@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.79 (c) 2012-2024 Silas S. Brown
+# v1.8 (c) 2012-2024 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -941,7 +941,8 @@ def getLY(score,headers=None):
             elif word.startswith("Fr="):
               finger = word.split("=")[1]
               finger = {
-                  "1": u"\u4e00", "2": u"\u4c8c",
+                  "0": u"\u5b80",
+                  "1": u"\u4e00", "2": u"\u4e8c",
                   "3": u"\u4e09", "4": u"\u56db",
                   "souyin": u"\u4e45", # jiu3
                   "harmonic": u"\u25cb", # white circle: TODO: can we use Lilypond's ^\flageolet command (not in a \finger{}) which doesn't require a font with 25CB in it? or would that get wrong size? (can be tweaked)
@@ -951,7 +952,7 @@ def getLY(score,headers=None):
                   "tilde": u"\u223c", # full-width tilde.  Could also use U+1D008 "Byzantine musical symbol syrmatiki" but that (a) won't display on macOS (as of 12.6) and (b) needs special consideration for old versions of Python 2 on narrow Unicode builds
                   }.get(finger, finger)
               if not type("")==type(u""): finger = finger.encode('utf-8') # Python 2
-              out.append(r'\finger "%s"' % finger)
+              out.append(r'\finger \markup { \fontsize #-4 "%s" } ' % finger)
             elif re.match("letter[A-Z]$",word):
                 out.append(r'\mark \markup { \box { "%s" } }' % word[-1]) # TODO: not compatible with key change at same point, at least not in lilypond 2.20 (2nd mark mentioned will be dropped)
             elif re.match(r"R\*[1-9][0-9]*$",word):
