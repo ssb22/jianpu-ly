@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.801 (c) 2012-2024 Silas S. Brown
+# v1.802 (c) 2012-2024 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -566,7 +566,7 @@ class NoteheadMarkup:
         self.inBeamGroup = "restHack"
     self.lastNBeams = nBeams
     beamC = u'\u0333' if nBeams>=2 else u'\u0332' if nBeams==1 else u""
-    self.unicode_approx.append({'#':u"\u266f",'b':u"\u266d"}.get(accidental,u"")+(u"-" if invisTieLast else figures[-1:])+beamC+(u"" if invisTieLast else (u'\u0323' if "," in octave else u'\u0307' if "'" in octave else u""))+u''.join(c+beamC for c in dots)+(u"" if self.inBeamGroup else u" ")) # (NB inBeamGroup is correct only if not midi and not western)
+    self.unicode_approx.append({'#':u"\u266f",'b':u"\u266d"}.get(0 if invisTieLast else accidental,u"")+(u"-" if invisTieLast else figures[-1:])+beamC+(u"" if invisTieLast else (u'\u0323' if "," in octave else u'\u0307' if "'" in octave else u""))+u''.join(c+beamC for c in dots)+(u"" if self.inBeamGroup else u" ")) # (NB inBeamGroup is correct only if not midi and not western)
     if self.barPos == self.barLength:
         self.unicode_approx[-1]=self.unicode_approx[-1].rstrip()+u'\u2502'
         self.barPos = 0 ; self.barNo += 1
@@ -1187,7 +1187,7 @@ def getLY(score,headers=None):
 def process_input(inDat):
  global unicode_mode
  unicode_mode = not not re.search(r"\sUnicode\s"," "+inDat+" ")
- if unicode_mode: return get_unicode_approx(re.sub(r"\sUnicode\s"," "," "+inDat+" ").strip())
+ if unicode_mode: return get_unicode_approx(re.sub(r"\sUnicode\s"," "," "+inDat+" ").strip())+"\n"
  ret = []
  global scoreNo, western, has_lyrics, midi, not_angka, maxBeams, uniqCount, notehead_markup
  uniqCount = 0 ; notehead_markup = NoteheadMarkup()
