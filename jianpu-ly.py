@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.802 (c) 2012-2024 Silas S. Brown
+# v1.803 (c) 2012-2024 Silas S. Brown
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1001,10 +1001,12 @@ def getLY(score,headers=None):
             elif word=="PartMidi": pass # handled in process_input
             elif word=="R{":
                 repeatStack.append((1,notehead_markup.barPos,0,len(out)))
+                if out: out[-1]=re.sub(r' \\bar "|."$',"",out[-1]) # in case starting after a Fine
                 out.append(r'\repeat volta 2 {')
             elif re.match("R[1-9][0-9]*{$",word):
                 times = int(word[1:-1])
                 repeatStack.append((1,notehead_markup.barPos,times-1,len(out)))
+                if out: out[-1]=re.sub(r' \\bar "|."$',"",out[-1])
                 out.append(r'\repeat percent %d {' % times)
             elif word=="}":
                 numBraces,oldBarPos,extraRepeats,rStartP = repeatStack.pop()
