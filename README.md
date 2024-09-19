@@ -115,6 +115,8 @@ Other 1-word Lilypond \ commands: `\fermata \> \! \( \) etc`
 
 Text: `^"above note" _"below note"`
 
+Harmonic symbols above main notes: `Harm: (music) :Harm` (main music)
+
 Other Lilypond code: `LP: (block of code) :LP` (each delimeter at start of its line)
 
 Unicode approximation instead of Lilypond: `Unicode`

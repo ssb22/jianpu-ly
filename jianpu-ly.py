@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.803 (c) 2012-2024 Silas S. Brown
+# v1.805 (c) 2012-2024 Silas S. Brown
 # v1.804 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -78,7 +78,7 @@ Multibar rest: R*8
 Dynamics (applies to previous note): \p \mp \f
 Other 1-word Lilypond \ commands: \fermata \> \! \( \) etc
 Text: ^"above note" _"below note"
-Add harmonic symbols for a series of notes: Harm: (block of code) :Harm (each delimeter at start of its line)
+Harmonic symbols above main notes: Harm: (music) :Harm (main music)
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
 Unicode approximation instead of Lilypond: Unicode
 Ignored: % a comment
@@ -108,6 +108,11 @@ def lilypond_minor_version():
     else: _lilypond_minor_version = 20 # 2.20
     return _lilypond_minor_version
 
+def use_new_Unbored_code():
+    return lilypond_minor_version() >= 24
+# (2.22 positions lower dots wrongly, don't know why yet,
+# so fall back to old code unless we have 2.24+)
+
 def lilypond_command():
     if hasattr(shutil,'which'):
         w = shutil.which('lilypond')
@@ -136,7 +141,10 @@ def all_scores_start(inDat):
 % un-comment the next line to remove Lilypond tagline:
 % \header { tagline="" }
 
-% \pointAndClickOff
+% comment out the next line if you're debugging jianpu-ly
+% (but best leave it un-commented in production, since
+% the point-and-click locations won't go to the user input)
+\pointAndClickOff
 
 \paper {
   print-all-headers = ##t %% allow per-score headers
@@ -178,7 +186,7 @@ def all_scores_start(inDat):
 """
     r += "}\n" # end of \paper block
 
-    r += r"""
+    if use_new_Unbored_code(): r += r"""
 %% make ":" a new articulation, helps to solve harmonic position
 \layout {
   \context {
@@ -317,10 +325,13 @@ def jianpu_voice_start(isTemp=0):
     \override Stem #'length-fraction = #%s
     \override Beam #'beam-thickness = #0.1
     \override Beam #'length-fraction = #0.5
-    \override Beam.after-line-breaking = #jianpu-beam-adjust  %% refer to jianpu10a.ly
+    %s
     \override Voice.Rest #'style = #'neomensural %% this size tends to line up better (we'll override the appearance anyway)
     \override Accidental #'font-size = #-4
-    \override TupletBracket #'bracket-visibility = ##t""" % stemLenFrac)
+    \override TupletBracket #'bracket-visibility = ##t""" %
+          (stemLenFrac,
+           r"\override Beam.after-line-breaking = #jianpu-beam-adjust  %% refer to jianpu10a.ly" if use_new_Unbored_code() else ""
+           ))
     r += "\n"+r"""\set Voice.chordChanges = ##t %% 2.19 bug workaround""" # LilyPond 2.19.82: \applyOutput docs say "called for every layout object found in the context Context at the current time step" but 2.19.x breaks this by calling it for ALL contexts in the current time step, hence breaking our WithStaff by applying our jianpu numbers to the 5-line staff too.  Obvious workaround is to make our function check that the context it's called with matches our jianpu voice, but I'm not sure how to do this other than by setting a property that's not otherwise used, which we can test for in the function.  So I'm 'commandeering' the "chordChanges" property (there since at least 2.15 and used by Lilypond only when it's in chord mode, which we don't use, and if someone adds a chord-mode staff then it won't print noteheads anyway): we will substitute jianpu numbers for noteheads only if chordChanges = #t.
     return r+"\n", voiceName
 def jianpu_staff_start(inst=None,withStaff=False):
@@ -666,9 +677,9 @@ class NoteheadMarkup:
                              ",,":r"-\tweak #'Y-offset #1 "}.get(octave,"")
       oDict = {"":"",
             "'":"^.",
-            "''":r"-\tweak #'X-offset #0.6 ^\two-dots",
+            "''":r"-\tweak #'X-offset #0.6 ^\two-dots" if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 ^\markup{\bold :}", # could possibly use new code unconditionally here because it's the *lower* dots that's the problem on 2.22, however the style might not match if we don't keep both the same
             ",":r"-\tweak #'X-offset #0.6 _.",
-            ",,":r"-\tweak #'X-offset #0.6 _\two-dots"}
+            ",,":r"-\tweak #'X-offset #0.6 _\two-dots" if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 _\markup{\bold :}"}
       if not_angka: oDict.update({
               "'":r"-\tweak #'extra-offset #'(0.4 . 2.7) -\markup{\bold .}",
               "''":r"-\tweak #'extra-offset #'(0.4 . 3.5) -\markup{\bold :}",
@@ -762,8 +773,10 @@ def write_help():
   write_version()
   sys.stderr.write("\n".join(l for l in __doc__.split("\n") if l.strip() and not l.startswith("#"))+"\n")
 def write_version():
+  versions = [] # output the biggest (might not be 1st listed)
   for l in __doc__.split("\n"):
-      if l.startswith("# v"): return sys.stderr.write(l.replace("#","jianpu-ly",1)+"\n\n")
+      if l.startswith("# v"): versions.append((float(l[len("# v"):l.index(' ',len("# v"))]),l.replace("#","jianpu-ly",1)+"\n\n"))
+  sys.stderr.write(max(versions)[1])
 
 def get_input():
   inDat = getInput0()
@@ -959,15 +972,10 @@ def getLY(score,headers=None):
         # Escaped LilyPond block.  Thanks to James Harkins for this suggestion.
         # (Our internal barcheck does not understand code in LP blocks, so keep it to complete bars.)
         escaping = 1
-        if len(line)>3: out.append(line[3:]+"\n") # remainder of current line
+        if len(line)>len("LP:"): out.append(line[3:]+"\n") # remainder of current line
     elif line.startswith(":LP"):
-        escaping = 0 # TODO: and process the rest of the line?  (assume on line of own for now)
-    elif line.startswith("Harm:"):
-        # begin repeat harmonic articulation
-        out.append("\n\\addHarmonic {\n")
-        if len(line)>9: out.append(line[9:]+"\n") # remainder of current line
-    elif line.startswith(":Harm"):
-        out.append("\n}\n")
+        escaping = 0
+        if line.replace(":LP","").strip(): sys.stderr.write("Warning: current implementation ignores anything after :LP on same line\n") # TODO
     elif escaping:
         out.append(line+"\n")
     elif not line: pass
@@ -1016,7 +1024,15 @@ def getLY(score,headers=None):
             word=word.replace(chr(0)," ")
             if word in ["souyin","harmonic","up","down","bend","tilde"]: word="Fr="+word # (Fr= before these is optional)
             if re.match("[16]=[#b][A-Ga-g]$",word): word=word[:2]+word[3]+word[2] # somebody wrote a key name backwards (bE instead of Eb), we can fix that here
+            # -----------------------------------
+            # Start of main 'switch' on each word
+            # -----------------------------------
             if word.startswith('%'): break # a comment
+            elif word == "Harm:":
+                if not use_new_Unbored_code(): scoreError("Harm: requires Lilypond 2.24 or above",word,line)
+                out.append("\n\\addHarmonic {\n")
+            elif word==":Harm":
+                out.append("\n}\n")
             elif re.match("[1-468]+[.]*=[1-9][0-9]*$",word): out.append(r'\tempo '+word) # TODO: reduce size a little?
             elif re.match("[16]=[A-Ga-g][#b]?$",word): #key
                 # Must use \transpose because \transposition doesn't always work.
