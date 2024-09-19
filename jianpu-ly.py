@@ -4,6 +4,7 @@
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
 # v1.803 (c) 2012-2024 Silas S. Brown
+# v1.804 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -77,6 +78,7 @@ Multibar rest: R*8
 Dynamics (applies to previous note): \p \mp \f
 Other 1-word Lilypond \ commands: \fermata \> \! \( \) etc
 Text: ^"above note" _"below note"
+Add harmonic symbols for a series of notes: Harm: (block of code) :Harm (each delimeter at start of its line)
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
 Unicode approximation instead of Lilypond: Unicode
 Ignored: % a comment
@@ -134,7 +136,7 @@ def all_scores_start(inDat):
 % un-comment the next line to remove Lilypond tagline:
 % \header { tagline="" }
 
-\pointAndClickOff
+% \pointAndClickOff
 
 \paper {
   print-all-headers = ##t %% allow per-score headers
@@ -163,7 +165,7 @@ def all_scores_start(inDat):
   % This brings back 2.18's behaviour on 2.20+:
   #(define fonts
     (set-global-fonts
-     #:roman "Times New Roman,Arial Unicode MS"
+     #:roman "Source Han Serif SC,Source Serif Pro,Times New Roman,Arial Unicode MS"
      #:factor (/ staff-height pt 20)
     ))
 """
@@ -175,6 +177,90 @@ def all_scores_start(inDat):
   markup-system-spacing = #'((basic-distance . 2) (padding . 2) (stretchability . 0))
 """
     r += "}\n" # end of \paper block
+
+    r += r"""
+%% make ":" a new articulation, helps to solve harmonic position
+\layout {
+  \context {
+    \Score
+    scriptDefinitions =
+    #(acons
+      'two-dots
+      `((stencil . ,ly:text-interface::print)
+        (text . ,#{ \markup \override #'(font-encoding . latin1) \center-align \bold ":" #})
+        (padding . 0.2)
+        (avoid-slur . around)
+        (direction . ,UP))
+      default-script-alist)
+  }
+}
+
+"two-dots" =
+#(make-articulation 'two-dots)
+
+%% addHarmonic function, make a series of notes hamonic by adding flageolet articulation
+#(define (make-script x)
+   (make-music 'ArticulationEvent
+               'articulation-type x))
+
+#(define (add-script m x)
+   (case (ly:music-property m 'name)
+     ((NoteEvent) (set! (ly:music-property m 'articulations)
+                        (append (ly:music-property m 'articulations)
+                                (list (make-script x))))
+                  m)
+     ((EventChord)(set! (ly:music-property m 'elements)
+                        (append (ly:music-property m 'elements)
+                                (list (make-script x))))
+                  m)
+     (else #f)))
+
+#(define (add-harmonic m)
+   (add-script m 'flageolet))
+
+addHarmonic = #(define-music-function (music)
+                 (ly:music?)
+                 (map-some-music add-harmonic music))
+
+%% the two functions are from jianpu10a.ly, with minor adjustment.
+%% In order to flip the beams upside down.
+#(define (stencil-flip axis stl)
+   "Flip stencil @var{stl} in the direction of @var{axis}. 
+    @var{axis} is 0 for X, 1 for Y."
+   (let* (
+           ;; center stl on 0,0 to prepare for flipping,
+           ;; and calculate how far it moved.
+           (centered-stl (ly:stencil-aligned-to stl axis DOWN))
+           (original-ext (ly:stencil-extent stl axis))
+           (centered-ext (ly:stencil-extent centered-stl axis))
+           (offset (* (- (car original-ext) (car centered-ext)) 0))
+
+           ;; scale centered-stl using -1 to flip it
+           (xy (if (= axis X) '(-1 . 1) '(1 . -1)))
+           (flipped-stl (ly:stencil-scale centered-stl (car xy) (cdr xy)))
+
+           ;; restore flipped stl to original position
+           (replaced-stl (ly:stencil-translate-axis flipped-stl offset axis)))
+
+     ;; for testing...
+     ;; (display original-ext) (display centered-ext)
+     ;; (display (ly:stencil-extent replaced-stl axis))(newline)
+
+     replaced-stl))
+
+#(define (jianpu-beam-adjust grob)
+   "Adjusts the width etc. of beams."
+   ;; We calculate the amount to scale based on width of beam
+   ;; TODO: improve this, maybe by using stems
+   (let* ((x-ext (interval-length (ly:stencil-extent (ly:grob-property grob 'stencil) X))))
+     ;; (display x-ext)(newline)
+     (ly:grob-set-property! grob 'stencil
+                           (ly:stencil-translate
+                             (stencil-flip Y
+                                           (ly:grob-property grob 'stencil))
+                             (cons 0 -0.8))
+                            )))
+"""
     return r+"\n%{ The jianpu-ly input was:\n" + inDat.strip().replace("%}","%/}")+"\n%}\n\n"
 
 def score_start():
@@ -231,6 +317,7 @@ def jianpu_voice_start(isTemp=0):
     \override Stem #'length-fraction = #%s
     \override Beam #'beam-thickness = #0.1
     \override Beam #'length-fraction = #0.5
+    \override Beam.after-line-breaking = #jianpu-beam-adjust  %% refer to jianpu10a.ly
     \override Voice.Rest #'style = #'neomensural %% this size tends to line up better (we'll override the appearance anyway)
     \override Accidental #'font-size = #-4
     \override TupletBracket #'bracket-visibility = ##t""" % stemLenFrac)
@@ -448,6 +535,7 @@ class NoteheadMarkup:
       (or (grob::has-interface grob 'note-head-interface)
         (grob::has-interface grob 'rest-interface)))
     (begin
+      (ly:grob-set-property! grob 'font-family 'sans)
       (ly:grob-set-property! grob 'stencil
         (grob-interpret-markup grob
           """ % self.defines_done[figures]
@@ -578,9 +666,9 @@ class NoteheadMarkup:
                              ",,":r"-\tweak #'Y-offset #1 "}.get(octave,"")
       oDict = {"":"",
             "'":"^.",
-            "''":r"-\tweak #'X-offset #0.3 ^\markup{\bold :}",
+            "''":r"-\tweak #'X-offset #0.6 ^\two-dots",
             ",":r"-\tweak #'X-offset #0.6 _.",
-            ",,":r"-\tweak #'X-offset #0.3 _\markup{\bold :}"}
+            ",,":r"-\tweak #'X-offset #0.6 _\two-dots"}
       if not_angka: oDict.update({
               "'":r"-\tweak #'extra-offset #'(0.4 . 2.7) -\markup{\bold .}",
               "''":r"-\tweak #'extra-offset #'(0.4 . 3.5) -\markup{\bold :}",
@@ -817,7 +905,7 @@ def graceNotes_markup(notes,isAfter):
         else:
             if r and r[-1].endswith('"'):
                 r[-1] = r[-1][:-1] + n + '"'
-            else: r.append('"%s"' % n)
+            else: r.append('\\bold \\sans "%s"' % n)
             if aftrNext:
                 r.append(aftrNext) ; aftrNext = None
     return r"^\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside ^\markup \%s { \line { %s } }" % (cmd,' '.join(r))
@@ -874,6 +962,12 @@ def getLY(score,headers=None):
         if len(line)>3: out.append(line[3:]+"\n") # remainder of current line
     elif line.startswith(":LP"):
         escaping = 0 # TODO: and process the rest of the line?  (assume on line of own for now)
+    elif line.startswith("Harm:"):
+        # begin repeat harmonic articulation
+        out.append("\n\\addHarmonic {\n")
+        if len(line)>9: out.append(line[9:]+"\n") # remainder of current line
+    elif line.startswith(":Harm"):
+        out.append("\n}\n")
     elif escaping:
         out.append(line+"\n")
     elif not line: pass
@@ -1178,7 +1272,7 @@ def getLY(score,headers=None):
            out = re.sub("(?P<note>[^<][^ ]*|<[^>]*>)4"+dot+r"((?::32)?) +~(( \\[^ ]+)*) "+" +~ ".join(["(?P=note)4"+dot]*(numNotes-1)),r"\g<1>"+result+r"\g<2>\g<3>",out)
            if dot: chkLen=6
            else: chkLen = 4
-           out = re.sub(r"\\repeat tremolo "+str(chkLen)+r" { (?P<note1>[^ ]+)32 (?P<note2>[^ ]+)32 } +~(( \\[^ ]+)*) "+" +~ ".join(["< (?P=note1) (?P=note2) >4"+dot]*(numNotes-1)),r"\\repeat tremolo "+str(chkLen*numNotes)+" { \g<1>32 \g<2>32 }\g<3>",out)
+           out = re.sub(r"\\repeat tremolo "+str(chkLen)+r" { (?P<note1>[^ ]+)32 (?P<note2>[^ ]+)32 } +~(( \\[^ ]+)*) "+" +~ ".join(["< (?P=note1) (?P=note2) >4"+dot]*(numNotes-1)),r"\\repeat tremolo "+str(chkLen*numNotes)+r" { \g<1>32 \g<2>32 }\g<3>",out)
            out = out.replace(" ".join(["r4"+dot]*numNotes),"r"+result)
        out = re.sub(r"(\\repeat tremolo [^{]+{ [^ ]+)( [^}]+ })(( +\\[^b][^ ]*)+)",r"\g<1>\g<3>\g<2>",out) # dynamics need to attach inside the tremolo (but \bar doesn't)
        out = re.sub(r"(%\{ bar [0-9]*: %\} )r([^ ]* \\bar)",r"\g<1>R\g<2>",out)
