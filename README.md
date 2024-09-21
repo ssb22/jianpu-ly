@@ -23,6 +23,8 @@ Octaves: `1,, 1, 1 1' 1''`
 
 Shortcuts for 1' and 2': `8 9`
 
+Percussion beat: `x`
+
 Change base octave: `< >`
 
 Semiquaver, quaver, crotchet (16/8/4th notes): `s1 q1 1`
