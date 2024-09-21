@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.805 (c) 2012-2024 Silas S. Brown
+# v1.806 (c) 2012-2024 Silas S. Brown
 # v1.804 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,6 +32,7 @@ Scale going up: 1 2 3 4 5 6 7 1'
 Accidentals: 1 #1 2 b2 1
 Octaves: 1,, 1, 1 1' 1''
 Shortcuts for 1' and 2': 8 9
+Percussion beat: x
 Change base octave: < >
 Semiquaver, quaver, crotchet (16/8/4th notes): s1 q1 1
 Dotted versions of the above (50% longer): s1. q1. 1.
@@ -135,7 +136,9 @@ lyric_size = float(os.environ.get("j2ly_lyric_size",staff_size))
 
 def all_scores_start(inDat):
     r = r"""\version "2.%d.0"
-#(set-global-staff-size %g)""" % ((20 if lilypond_minor_version()>=20 else 18),staff_size)
+#(set-global-staff-size %g)""" % ((
+    24 if use_new_Unbored_code() else
+    20 if lilypond_minor_version()>=20 else 18),staff_size)
     r += r"""
 
 % un-comment the next line to remove Lilypond tagline:
@@ -425,6 +428,7 @@ placeholders = {
     '5':'g',
     '6':'a',
     '7':'b',
+    'x':'c',
     '-':'r'}
 
 def addOctaves(octave1,octave2):
@@ -474,7 +478,7 @@ class NoteheadMarkup:
   def baseOctaveChange(self,change):
       self.base_octave = addOctaves(change,self.base_octave)
   def __call__(self,figures,nBeams,dots,octave,accidental,tremolo,word,line,isGrace=False):
-    # figures is a chord string of '1'-'7', or '0' or '-'
+    # figures is a chord string of '1'-'7', or 'x' or '0' or '-'
     # nBeams is 0, 1, 2 .. etc (number of beams for this note)
     # dots is "" or "." or ".." etc (extra length)
     # octave is "", "'", "''", "," or ",,"
@@ -484,6 +488,7 @@ class NoteheadMarkup:
     if len(figures)>1:
         if accidental: scoreError("Accidentals in chords not yet implemented:",word,line) # see TODOs below
         if '0' in figures: scoreError("Can't have rest in chord:",word,line)
+        if 'x' in figures: scoreError("Can't have percussion beat in chord:",word,line)
     self.notesHad.append(figures)
     names = {'0':'nought',
              '1':'one',
@@ -493,6 +498,7 @@ class NoteheadMarkup:
              '5':'five',
              '6':'six',
              '7':'seven',
+             'x':'beat',
              '-':'dash'}
     def get_placeholder_chord(figures):
         if len(figures)==1:
@@ -510,7 +516,7 @@ class NoteheadMarkup:
         name += {"#":"-sharp","b":"-flat","":""}[accidental]
     aftrLastNonDash = tieEnd = ""
     if invisTieLast: # (so figures == "-")
-        if self.barPos==0 and not midi and not western and lilypond_minor_version()>=20:
+        if self.barPos==0 and not midi and not western and lilypond_minor_version()>=20 and not self.last_figures=="x":
             # dash over barline: write as new note
             figures = self.last_figures
             name = ''.join(names[f] for f in figures)
@@ -674,7 +680,9 @@ class NoteheadMarkup:
     if not midi and not western and not '-' in figures:
       # Tweak the Y-offset, as Lilypond occasionally puts it too far down:
       if not nBeams: ret += {",":r"-\tweak #'Y-offset #-1.2 ",
-                             ",,":r"-\tweak #'Y-offset #1 "}.get(octave,"")
+                             ",,":r"-\tweak #'Y-offset #-2 " if use_new_Unbored_code() else r"-\tweak #'Y-offset #1 "
+                             }.get(octave,"")
+        
       # Ugly fix for grace dot positions
       x_offset=0.6
       extra_offset=0
@@ -695,6 +703,7 @@ class NoteheadMarkup:
         if midi or western: b4last, aftrlast = "", " ~"
         else: b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
     else: b4last,aftrlast = "",""
+    if figures=="x" and western: ret = r"\once \override NoteHead.style = #'cross \once \override NoteHead.no-ledgers = ##t " + ret
     if inRestHack: ret += " } " # end temporary voice for the "-" (non)-note
     elif tieEnd: ret += ' '+tieEnd # end of JianpuTie curve
     return aftrLastNonDash,figures.startswith('-'),b4last,replaceLast,aftrlast0+aftrlast,ret, need_space_for_accidental, nBeams,octave
@@ -706,9 +715,9 @@ def parseNote(word,origWord,line):
     else: word=word.replace(u"\u2019".encode('utf-8'),"'")
     if "///" in word: tremolo,word=":32",word.replace("///","",1)
     else: tremolo = ""
-    if not re.match(r"[0-7.,'cqsdh\\#b-]+$",word): # unrecognised stuff in it: flag as error, rather than ignoring and possibly getting a puzzling barsync fail
+    if not re.match(r"[0-7x.,'cqsdh\\#b-]+$",word): # unrecognised stuff in it: flag as error, rather than ignoring and possibly getting a puzzling barsync fail
         scoreError("Unrecognised command",origWord,line)
-    figures = ''.join(re.findall('[01234567-]',word))
+    figures = ''.join(re.findall('[01234567x-]',word))
     dots = "".join(c for c in word if c==".")
     nBeams = ''.join(re.findall(r'[cqsdh\\]',word))
     if re.match(r"[\\]+$",nBeams): nBeams=len(nBeams) # requested by a user who found British note-length names hard to remember; won't work if the \ is placed at the start, as that'll be a Lilypond command, so to save confusion we won't put this in the docstring
