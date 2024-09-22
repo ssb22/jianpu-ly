@@ -191,23 +191,36 @@ def all_scores_start(inDat):
 
     if use_new_Unbored_code(): r += r"""
 %% make ":" a new articulation, helps to solve harmonic position
+#(append! default-script-alist
+   (list
+    `(two-dots
+       . (
+           (stencil . ,ly:text-interface::print)
+           (text . ,#{ \markup \override #'(font-encoding . latin1) \center-align \bold ":" #})
+           (padding . 0.20)
+           (avoid-slur . around)
+           (direction . ,UP)))))
+#(append! default-script-alist
+   (list
+    `(three-dots
+       . (
+           (stencil . ,ly:text-interface::print)
+           (text . ,#{ \markup \override #'(font-encoding . latin1) \center-align \bold """+u"\"\u22EE\""+r""" #})
+           (padding . 0.30)
+           (avoid-slur . around)
+           (direction . ,UP)))))
+"two-dots" =
+#(make-articulation 'two-dots)
+
+"three-dots" =
+#(make-articulation 'three-dots)
+
 \layout {
   \context {
     \Score
-    scriptDefinitions =
-    #(acons
-      'two-dots
-      `((stencil . ,ly:text-interface::print)
-        (text . ,#{ \markup \override #'(font-encoding . latin1) \center-align \bold ":" #})
-        (padding . 0.2)
-        (avoid-slur . around)
-        (direction . ,UP))
-      default-script-alist)
+    scriptDefinitions = #default-script-alist
   }
 }
-
-"two-dots" =
-#(make-articulation 'two-dots)
 
 %% addHarmonic function, make a series of notes hamonic by adding flageolet articulation
 #(define (make-script x)
@@ -460,6 +473,7 @@ class NoteheadMarkup:
       self.notesHad = []
       self.unicode_approx = []
       self.rplacNextIfStillInBeam = None
+      self.isGrace = False
   def endScore(self):
       if self.barPos == self.startBarPos: pass
       elif os.environ.get("j2ly_sloppy_bars",""): sys.stderr.write("Wrong bar length at end of score %d ignored (j2ly_sloppy_bars set)\n" % scoreNo)
@@ -477,7 +491,7 @@ class NoteheadMarkup:
   def wholeBarRestLen(self): return {96:"1.",48:"2.",32:"2",24:"4.",16:"4",12:"8.",8:"8"}.get(self.barLength,"1") # TODO: what if irregular?
   def baseOctaveChange(self,change):
       self.base_octave = addOctaves(change,self.base_octave)
-  def __call__(self,figures,nBeams,dots,octave,accidental,tremolo,word,line,isGrace=False):
+  def __call__(self,figures,nBeams,dots,octave,accidental,tremolo,word,line):
     # figures is a chord string of '1'-'7', or 'x' or '0' or '-'
     # nBeams is 0, 1, 2 .. etc (number of beams for this note)
     # dots is "" or "." or ".." etc (extra length)
@@ -694,16 +708,16 @@ class NoteheadMarkup:
       # Ugly fix for grace dot positions
       x_offset=0.6
       extra_offset=0
-      if isGrace: 
+      if self.isGrace: 
           x_offset=0.4
           extra_offset=-1.0
       oDict = {"":"",
             "'":"^.",
             "''":r"-\tweak #'X-offset #%f ^\two-dots" % x_offset if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 ^\markup{\bold :}", # could possibly use new code unconditionally here because it's the *lower* dots that's the problem on 2.22, however the style might not match if we don't keep both the same
-            "'''":r"^\markup{\bold "+three_dots+"}",
+            "'''":r"-\tweak #'X-offset #%f ^\three-dots" % x_offset if use_new_Unbored_code() else r"^\markup{\bold "+three_dots+"}",
             ",":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _." % (x_offset,extra_offset),
             ",,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\two-dots" % (x_offset,extra_offset) if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 _\markup{\bold :}",
-            ",,,":r"-\tweak #'X-offset #0.3 _\markup{\bold "+three_dots+"}"}
+            ",,,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\three-dots" % (x_offset,extra_offset) if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 _\markup{\bold "+three_dots+"}"}
       if not_angka: oDict.update({
               "'":r"-\tweak #'extra-offset #'(0.4 . 2.7) -\markup{\bold .}",
               "''":r"-\tweak #'extra-offset #'(0.4 . 3.5) -\markup{\bold :}",
@@ -932,6 +946,7 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
     # Borrow the notehead markup function
     notemark = NoteheadMarkup()
     notemark.initOneScore()
+    notemark.isGrace = True
     notemark.defines_done = notehead_markup.defines_done.copy() # avoid pre-defined markups
     # TODO: Since the grace markup are put after main notes,
     # there maybe some duplicate definition of note markups.
@@ -949,12 +964,16 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
             accidental = "b"
         elif n=="'":
             if i and notes[i-1]==notes[i]: continue
-            if notes[i:i+3]=="'''": scoreError("Can't yet handle grace-note octave with 3+ dots",word,line)
+            if notes[i:i+3]=="'''":
+                if not use_new_Unbored_code(): scoreError("Can't yet handle grace-note octave with 3+ dots",word,line)
+                else: octave = "'''"
             elif notes[i:i+2]=="''": octave = "''"
             else: octave = "'"
         elif n==',':
             if i and notes[i-1]==notes[i]: continue
-            if notes[i:i+3]==",,,": scoreError("Can't yet handle grace-note octave with 3+ dots",word,line)
+            if notes[i:i+3]==",,,":
+                if not use_new_Unbored_code(): scoreError("Can't yet handle grace-note octave with 3+ dots",word,line)
+                else: octave = ",,,"
             elif notes[i:i+2]==",,": octave = ",,"
             else: octave = ","
         elif n=='q': beams = 1
@@ -964,7 +983,7 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
         else:
             # number should be the last char of a note
             figure = n
-            mr.append(notemark(figure, beams, "", octave, accidental, "", "", "", True)[5])
+            mr.append(notemark(figure, beams, "", octave, accidental, "", "", "")[5])
             accidental = ""
             beams = 2
             figure = ""
