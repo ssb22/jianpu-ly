@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.806 (c) 2012-2024 Silas S. Brown
+# v1.807 (c) 2012-2024 Silas S. Brown
 # v1.804 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -481,7 +481,7 @@ class NoteheadMarkup:
     # figures is a chord string of '1'-'7', or 'x' or '0' or '-'
     # nBeams is 0, 1, 2 .. etc (number of beams for this note)
     # dots is "" or "." or ".." etc (extra length)
-    # octave is "", "'", "''", "," or ",,"
+    # octave is "", "'", "''", "'''", ",", ",," or ",,,"
     # accidental is "", "#", "b"
     # tremolo is "" or ":32"
     # word,line is for error handling
@@ -515,6 +515,7 @@ class NoteheadMarkup:
         figures += accidental # TODO: chords?
         name += {"#":"-sharp","b":"-flat","":""}[accidental]
     aftrLastNonDash = tieEnd = ""
+    add_cautionary_accidental = False
     if invisTieLast: # (so figures == "-")
         if self.barPos==0 and not midi and not western and lilypond_minor_version()>=20 and not self.last_figures=="x":
             # dash over barline: write as new note
@@ -522,17 +523,21 @@ class NoteheadMarkup:
             name = ''.join(names[f] for f in figures)
             aftrLastNonDash = r'\=JianpuTie('
             tieEnd = r'\=JianpuTie)'
+            add_cautionary_accidental = self.last_accidental
+            tremolo = self.last_tremolo
         else:
             figures += self.last_figures # (so "-" + last)
             name += ''.join(names[f] for f in self.last_figures)
-            if self.barPos==0 and not midi and not western: sys.stderr.write("Warning: jianpu barline-crossing tie won't be done right because your Lilypond version is older than 2.20\n")
+            if self.barPos==0 and not midi and not western and not self.last_figures=="x": sys.stderr.write("Warning: jianpu barline-crossing tie won't be done right because your Lilypond version is older than 2.20\n")
+            if self.barPos==0: tremolo = self.last_tremolo
         placeholder_chord = get_placeholder_chord(self.last_figures)
         octave = self.last_octave # for MIDI or 5-line
         accidental = self.last_accidental # ditto
-    else:
+    else: # not invisTieLast
         octave=addOctaves(octave,self.base_octave)
-        if not octave in [",,",",","","'","''"]: scoreError("Can't handle octave "+octave+" in",word,line)
+        if not octave in [",,,",",,",",","","'","''","'''"]: scoreError("Can't handle octave "+octave+" in",word,line)
         self.last_octave = octave
+        self.last_tremolo = tremolo
     self.last_figures = figures
     if len(self.last_figures)>1 and self.last_figures[0]=='-': self.last_figures = self.last_figures[1:]
     if not accidental in ["","#","b"]: scoreError("Can't handle accidental "+accidental+" in",word,line)
@@ -632,13 +637,14 @@ class NoteheadMarkup:
         # Octave with chords: apply to last note if up, 1st note if down
         notes = placeholder_chord.split()[1:-1]
         assert len(notes) >= 2
-        notes[0] += {",":"",",,":","}.get(octave,"'")
+        notes[0] += {",":"",",,":",",",,,":",,"}.get(octave,"'")
         for n in range(1,len(notes)-1): notes[n] += "'"
-        notes[-1] += {"'":"''","''":"'''"}.get(octave,"'")
+        notes[-1] += {"'":"''","''":"'''","'''":"''''"}.get(octave,"'")
         ret += "< "+" ".join(notes)+" >"
     else: # single note or rest
         ret += placeholder_chord + {"":"", "#":"is", "b":"es"}[accidental]
-        if not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''",",":"",",,":","}[octave] # for MIDI + Western, put it so no-mark starts near middle C
+        if not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''","'''":"''''",",":"",",,":",",",,,":",,"}[octave] # for MIDI + Western, put it so no-mark starts near middle C
+        if add_cautionary_accidental: ret += "!"
     ret += ("%d" % length) + dots
     if self.rplacNextIfStillInBeam: self.rplacNextIfStillInBeam += ("r%d" % length) + dots + '['
     if tremolo:
@@ -680,20 +686,29 @@ class NoteheadMarkup:
     if not midi and not western and not '-' in figures:
       # Tweak the Y-offset, as Lilypond occasionally puts it too far down:
       if not nBeams: ret += {",":r"-\tweak #'Y-offset #-1.2 ",
-                             ",,":r"-\tweak #'Y-offset #-2 " if use_new_Unbored_code() else r"-\tweak #'Y-offset #1 "
+                             ",,":r"-\tweak #'Y-offset #-2 " if use_new_Unbored_code() else r"-\tweak #'Y-offset #1 ",
+                             ",,,":r"-\tweak #'Y-offset #-1.2 ",
                              }.get(octave,"")
+      three_dots = u"\u22EE"
+      if not type(u"")==type(""): three_dots = three_dots.encode('utf-8') # Python 2
       oDict = {"":"",
             "'":"^.",
             "''":r"-\tweak #'X-offset #0.6 ^\two-dots" if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 ^\markup{\bold :}", # could possibly use new code unconditionally here because it's the *lower* dots that's the problem on 2.22, however the style might not match if we don't keep both the same
+            "'''":r"^\markup{\bold "+three_dots+"}",
             ",":r"-\tweak #'X-offset #0.6 _.",
-            ",,":r"-\tweak #'X-offset #0.6 _\two-dots" if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 _\markup{\bold :}"}
+            ",,":r"-\tweak #'X-offset #0.6 _\two-dots" if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 _\markup{\bold :}",
+            ",,,":r"-\tweak #'X-offset #0.3 _\markup{\bold "+three_dots+"}"}
       if not_angka: oDict.update({
               "'":r"-\tweak #'extra-offset #'(0.4 . 2.7) -\markup{\bold .}",
               "''":r"-\tweak #'extra-offset #'(0.4 . 3.5) -\markup{\bold :}",
+              "'''":r"-\tweak #'extra-offset #'(0.4 . 4.3) -\markup{\bold "+three_dots+"}",
               })
       ret += oDict[octave]
     if invisTieLast:
-        if midi or western: b4last, aftrlast = "", " ~"
+        if midi or western:
+            b4last, aftrlast = "", " ~"
+            if tremolo and placeholder_chord.startswith("<"):
+                aftrlast = "" # can't tie this kind of tremolo as of Lilypond 2.24 (get warning: Unattached TieEvent)
         else: b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
     else: b4last,aftrlast = "",""
     if figures=="x" and western: ret = r"\once \override NoteHead.style = #'cross \once \override NoteHead.no-ledgers = ##t " + ret
@@ -913,15 +928,17 @@ def graceNotes_markup(notes,isAfter):
         elif n=='b': r.append(r'\fontsize #-4 { \raise #0.4 { \flat } }')
         elif n=="'":
             if i and notes[i-1]==notes[i]: continue
-            if notes[i:i+2]=="''": above = ":"
+            if notes[i:i+3]=="'''": scoreError("Can't yet handle grace-note octave with 3+ dots",word,line)
+            elif notes[i:i+2]=="''": above = ":"
             else: above = "."
             r.append(r"\override #'(direction . 1) \override #'(baseline-skip . 1.2) \dir-column { \line {")
             aftrNext = r"} \line { "+'"'+thinspace+above+'" } }'
         elif n==',':
             if i and notes[i-1]==notes[i]: continue
-            if notes[i:i+2]==",,": below = ":"
+            if notes[i:i+3]==",,,": scoreError("Can't yet handle grace-note octave with 3+ dots",word,line)
+            elif notes[i:i+2]==",,": below = ":"
             else: below = "."
-            r.append(r"\override #'(baseline-skip . 1.0) \center-column { \line { ")
+            r.append(r"\override #'(baseline-skip . %s) \center-column { \line { " % ("0.5" if below=="." else "1.0"))
             aftrNext = r"} \line { \pad-to-box #'(0 . 0) #'(-0.2 . 0) "+'"'+below+'" } }'
         else:
             if r and r[-1].endswith('"'):
@@ -932,8 +949,10 @@ def graceNotes_markup(notes,isAfter):
     return r"^\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside ^\markup \%s { \line { %s } }" % (cmd,' '.join(r))
 def grace_octave_fix(notes):
     notes = notes.replace("8","'1").replace("9","'2")
-    if notes.endswith(',,') or notes.endswith("''"):
+    if notes.endswith(',,,') or notes.endswith("'''"):
         # oops, should write this BEFORE the affected note
+        return notes[:-4]+notes[-3:]+notes[-4]
+    if notes.endswith(',,') or notes.endswith("''"):
         return notes[:-3]+notes[-2:]+notes[-3]
     elif notes.endswith(',') or notes.endswith("'"):
         return notes[:-2]+notes[-1]+notes[-2]
@@ -949,11 +968,13 @@ def gracenotes_western(notes):
         elif n=='b': nextAcc = "es"
         elif n=="'":
             if i and notes[i-1]==notes[i]: continue
-            if notes[i:i+2]=="''": next8ve = "'''"
+            if notes[i:i+3]=="'''": next8ve = "''''"
+            elif notes[i:i+2]=="''": next8ve = "'''"
             else: next8ve = "''"
         elif n==',':
             if i and notes[i-1]==notes[i]: continue
-            if notes[i:i+2]==",,": next8ve = ","
+            if notes[i:i+3]==",,,": next8ve = ",,"
+            elif notes[i:i+2]==",,": next8ve = ","
             else: next8ve = ""
         else:
             if not n in placeholders: continue # TODO: errExit ?
@@ -961,7 +982,7 @@ def gracenotes_western(notes):
             nextAcc = "" ; next8ve = "'"
     return ' '.join(r)
 
-def getLY(score,headers=None):
+def getLY(score,headers=None,have_final_barline=True):
    if not headers: headers = {} # Python 2 persists this dict if it's in the default args
    lyrics = []
    notehead_markup.initOneScore()
@@ -1269,7 +1290,7 @@ def getLY(score,headers=None):
    if repeatStack: errExit("Unterminated repeat in score %d" % scoreNo)
    if escaping: errExit("Unterminated LP: in score %d" % scoreNo)
    notehead_markup.endScore() # perform checks
-   if need_final_barline and not midi: out.append(r'\bar "|."')
+   if have_final_barline and need_final_barline and not midi: out.append(r'\bar "|."')
    i=0
    while i < len(out)-1:
        while i<len(out)-1 and out[i].startswith(r'\mark \markup{') and out[i].endswith('}') and out[i+1].startswith(r'\mark \markup{') and out[i+1].endswith('}'):
@@ -1299,7 +1320,7 @@ def getLY(score,headers=None):
            out = re.sub(r"\\repeat tremolo "+str(chkLen)+r" { (?P<note1>[^ ]+)32 (?P<note2>[^ ]+)32 } +~(( \\[^ ]+)*) "+" +~ ".join(["< (?P=note1) (?P=note2) >4"+dot]*(numNotes-1)),r"\\repeat tremolo "+str(chkLen*numNotes)+r" { \g<1>32 \g<2>32 }\g<3>",out)
            out = out.replace(" ".join(["r4"+dot]*numNotes),"r"+result)
        out = re.sub(r"(\\repeat tremolo [^{]+{ [^ ]+)( [^}]+ })(( +\\[^b][^ ]*)+)",r"\g<1>\g<3>\g<2>",out) # dynamics need to attach inside the tremolo (but \bar doesn't)
-       out = re.sub(r"(%\{ bar [0-9]*: %\} )r([^ ]* \\bar)",r"\g<1>R\g<2>",out)
+       out = re.sub(r"(%\{ bar [0-9]*: %\} | \\major ) *r(?=[^ ]* [| ]* %\{ bar|\\bar)",r"\g<1>R",out)
        out = out.replace(r"\new RhythmicStaff \with {",r"\new RhythmicStaff \with { \override VerticalAxisGroup.default-staff-staff-spacing = #'((basic-distance . 6) (minimum-distance . 6) (stretchability . 0)) ") # don't let it hang too far up in the air
    if not_angka: out=out.replace("make-bold-markup","make-simple-markup")
    return out,maxBeams,lyrics,headers
@@ -1327,7 +1348,7 @@ def process_input(inDat):
     for partNo,part in enumerate(parts):
      if partNo==0 or separate_scores:
          ret.append(score_start())
-     out,maxBeams,lyrics,headers = getLY(part,headers)
+     out,maxBeams,lyrics,headers = getLY(part,headers,partNo==0 or separate_scores) # assume 1st part doesn't have 'tacet al fine'
      if notehead_markup.withStaff and notehead_markup.separateTimesig: errExit("Use of both WithStaff and SeparateTimesig in the same piece is not yet implemented")
      if len(parts)>1 and "instrument" in headers:
          inst = headers["instrument"]
@@ -1352,7 +1373,7 @@ def process_input(inDat):
        if notehead_markup.withStaff:
            western=True
            staffStart,voiceName = western_staff_start(inst)
-           ret.append(staffStart+" "+getLY(part)[0]+" "+western_staff_end())
+           ret.append(staffStart+" "+getLY(part,have_final_barline=False)[0]+" "+western_staff_end())
            western = False
        if lyrics: ret.append("".join(lyrics_start(voiceName)+l+" "+lyrics_end()+" " for l in lyrics))
      if partNo==len(parts)-1 or separate_scores:
