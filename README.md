@@ -85,11 +85,11 @@ Add a Western staff doubling the tune: `WithStaff`
 
 Tuplets: `3[ q1 q1 q1 ]`
 
-Grace notes before: `g[#45] 1` 
-Default duration is semiquaver. Other durations also support: `g[#d4d5] 5`
+Grace notes before: `g[#45] 1`
 
 Grace notes after: `1 ['1]g`
-Default duration is semiquaver. Other durations also support: `5 ['d1]g`
+
+Grace notes with duration change: `g[d45s6] 1`
 
 Simple chords: `135 1 13 1`
 

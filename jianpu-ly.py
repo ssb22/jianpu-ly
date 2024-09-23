@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.807 (c) 2012-2024 Silas S. Brown
+# v1.809 (c) 2012-2024 Silas S. Brown
 # v1.808 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -63,8 +63,9 @@ Old-style time signature: SeparateTimesig 1=C 4/4
 Indonesian 'not angka' style: angka
 Add a Western staff doubling the tune: WithStaff
 Tuplets: 3[ q1 q1 q1 ]
-Grace notes before: g[#45] 1 (default duration semiquaver)
+Grace notes before: g[#45] 1
 Grace notes after: 1 ['1]g
+Grace notes with duration change: g[d45s6] 1
 Simple chords: 135 1 13 1
 Da capo: 1 1 Fine 1 1 1 1 1 1 DC
 Repeat (with alternate endings): R{ 1 1 1 } A{ 2 | 3 }
@@ -133,6 +134,9 @@ staff_size = float(os.environ.get("j2ly_staff_size",20))
 # Small: j2ly_staff_size=17.82
 # Tiny: j2ly_staff_size=15.87
 lyric_size = float(os.environ.get("j2ly_lyric_size",staff_size))
+
+three_dots = u"\u22EE"
+if not type(u"")==type(""): three_dots = three_dots.encode('utf-8') # Python 2
 
 def all_scores_start(inDat):
     r = r"""\version "2.%d.0"
@@ -205,7 +209,7 @@ def all_scores_start(inDat):
     `(three-dots
        . (
            (stencil . ,ly:text-interface::print)
-           (text . ,#{ \markup \override #'(font-encoding . latin1) \center-align \bold """+u"\"\u22EE\""+r""" #})
+           (text . ,#{ \markup \override #'(font-encoding . latin1) \center-align \bold """+'"'+three_dots+'"'+r""" #})
            (padding . 0.30)
            (avoid-slur . around)
            (direction . ,UP)))))
@@ -246,44 +250,46 @@ addHarmonic = #(define-music-function (music)
                  (ly:music?)
                  (map-some-music add-harmonic music))
 
-%% the two functions are from jianpu10a.ly, with minor adjustment.
-%% In order to flip the beams upside down.
-#(define (stencil-flip axis stl)
-   "Flip stencil @var{stl} in the direction of @var{axis}. 
-    @var{axis} is 0 for X, 1 for Y."
+%% These two functions are from David Zhang's jianpu10a.ly
+%% with some adjustments.  Flips the beams upside down.
+%% Will call them from Beam.after-line-breaking (instead of
+%% setting that to ##t or ##f, call these functions)
+%% - see Lilypond source lily/system.cc
+%% System::do_break_substitution_and_fixup_refpoints
+%% - it calls after-line-breaking for all child grobs and their
+%% elements, called at the end of each system.
+%% TODO: if there's a place with 2 beams somewhere on the
+%% line of music, and another place with 1 beam, then the
+%% place with 1 beam gets too much space on lower octave dots.
+%% See for example the input: s,6 s,6 q6, 1 1 1 | q6, q6, 1 1 1
+%% (At least previous approach of having beams wrong way around
+%% didn't have spacing issues extending to a different bar.  Not
+%% sure which is worse: add user option to choose which bad thing?)
+%% Need to work out how to make it calculate per beam group, not
+%% whole line of music at once.  Or update the skyline with
+%% (ly:stencil-outline stil outline) if we can define outline.
+%% Difficult if Lilypond usually doesn't need to bother with a
+%% skyline for the inner beams.
+%% Not obvious from beam-engraver.cc if all beams are in 1 grob.
+#(define (stencil-flip-Y stl)
+   "Flip stencil @var{stl} in the direction of Y"
    (let* (
            ;; center stl on 0,0 to prepare for flipping,
            ;; and calculate how far it moved.
-           (centered-stl (ly:stencil-aligned-to stl axis DOWN))
-           (original-ext (ly:stencil-extent stl axis))
-           (centered-ext (ly:stencil-extent centered-stl axis))
+           (centered-stl (ly:stencil-aligned-to stl Y DOWN))
+           (original-ext (ly:stencil-extent stl Y))
+           (centered-ext (ly:stencil-extent centered-stl Y))
            (offset (* (- (car original-ext) (car centered-ext)) 0))
-
            ;; scale centered-stl using -1 to flip it
-           (xy (if (= axis X) '(-1 . 1) '(1 . -1)))
-           (flipped-stl (ly:stencil-scale centered-stl (car xy) (cdr xy)))
-
+           (flipped-stl (ly:stencil-scale centered-stl 1 -1))
            ;; restore flipped stl to original position
-           (replaced-stl (ly:stencil-translate-axis flipped-stl offset axis)))
-
-     ;; for testing...
-     ;; (display original-ext) (display centered-ext)
-     ;; (display (ly:stencil-extent replaced-stl axis))(newline)
-
+           (replaced-stl (ly:stencil-translate-axis flipped-stl offset Y)))
      replaced-stl))
-
 #(define (jianpu-beam-adjust grob)
-   "Adjusts the width etc. of beams."
-   ;; We calculate the amount to scale based on width of beam
-   ;; TODO: improve this, maybe by using stems
-   (let* ((x-ext (interval-length (ly:stencil-extent (ly:grob-property grob 'stencil) X))))
-     ;; (display x-ext)(newline)
      (ly:grob-set-property! grob 'stencil
-                           (ly:stencil-translate
-                             (stencil-flip Y
-                                           (ly:grob-property grob 'stencil))
-                             (cons 0 -0.8))
-                            )))
+        (ly:stencil-translate
+          (stencil-flip-Y (ly:grob-property grob 'stencil))
+          (cons 0 -0.8))))
 """
     return r+"\n%{ The jianpu-ly input was:\n" + inDat.strip().replace("%}","%/}")+"\n%}\n\n"
 
@@ -457,8 +463,9 @@ def addOctaves(octave1,octave2):
     return octave2
 
 class NoteheadMarkup:
-  def __init__(self):
-      self.defines_done = {} ; self.initOneScore()
+  def __init__(self,isGrace=False):
+      self.isGrace = isGrace
+      self.initOneScore()
   def initOneScore(self):
       self.barLength = 64 ; self.beatLength = 16 # in 64th notes
       self.barPos = self.startBarPos = F(0)
@@ -556,9 +563,8 @@ class NoteheadMarkup:
     if len(self.last_figures)>1 and self.last_figures[0]=='-': self.last_figures = self.last_figures[1:]
     if not accidental in ["","#","b"]: scoreError("Can't handle accidental "+accidental+" in",word,line)
     self.last_accidental = accidental
-    if figures not in self.defines_done and not midi and not western:
+    if figures not in defines and not midi and not western:
         # Define a notehead graphical object for the figures
-        self.defines_done[figures] = "note-"+name
         if figures.startswith("-"):
           if not_angka: figuresNew="."
           else:
@@ -566,6 +572,7 @@ class NoteheadMarkup:
             if not type(u"")==type(""):
                 figuresNew=figuresNew.encode('utf-8')
         else: figuresNew = figures
+        newName = "note-"+name
         ret = """#(define (%s grob grob-origin context)
   (if (and (eq? (ly:context-property context 'chordChanges) #t)
       (or (grob::has-interface grob 'note-head-interface)
@@ -574,7 +581,7 @@ class NoteheadMarkup:
       (ly:grob-set-property! grob 'font-family 'sans)
       (ly:grob-set-property! grob 'stencil
         (grob-interpret-markup grob
-          """ % self.defines_done[figures]
+          """ % newName
         if len(figuresNew)==1 or figures.startswith("-"): ret += """(make-lower-markup 0.5 (make-bold-markup "%s")))))))
 """ % figuresNew
         elif not_angka and accidental: # not chord
@@ -586,7 +593,8 @@ class NoteheadMarkup:
           (#:override (cons (quote baseline-skip) 1.8)
           (#:dir-column (\n""" + "".join('    #:line (#:bold "'+f+'")\n' for f in figuresNew) + """)))))))))))
 """ # TODO: can do accidentals e.g. #:halign 1 #:line ((#:fontsize -5 (#:raise 0.7 (#:flat))) (#:bold "3")) but might cause the beam not to extend its full length if this chord occurs at the end of a beamed group, + accidentals won't be tracked by Lilypond and would have be taken care of by jianpu-ly (which might mean if any chord has an accidental on one of its notes we'd have to do all notes in that bar like this, whether they are chords or not)
-    else: ret = ""
+        defines[figures] = (newName,ret)
+    ret = ""
     if self.barPos==0 and self.barNo > 1:
         ret += "| " # barline in Lilypond file: not strictly necessary but may help readability
         if self.onePage and not midi: ret += r"\noPageBreak "
@@ -633,7 +641,7 @@ class NoteheadMarkup:
     if not midi and not western:
         if ret: ret = ret.rstrip()+"\n" # try to keep the .ly code vaguely readable
         if octave=="''" and not invisTieLast: ret += r"  \once \override Score.TextScript.outside-staff-priority = 45" # inside bar numbers etc
-        ret += r"  \applyOutput #'Voice #"+self.defines_done[figures]+" "
+        ret += r"  \applyOutput #'Voice #"+defines[figures][0]+" "
         if self.rplacNextIfStillInBeam and leftBeams and nBeams: replaceLast = self.rplacNextIfStillInBeam # didn't need the rest-hack here after all
         self.rplacNextIfStillInBeam = None
         if placeholder_chord == "r" and use_rest_hack and nBeams and not (leftBeams and not not_angka):
@@ -703,8 +711,6 @@ class NoteheadMarkup:
                              ",,":r"-\tweak #'Y-offset #-2 " if use_new_Unbored_code() else r"-\tweak #'Y-offset #1 ",
                              ",,,":r"-\tweak #'Y-offset #-1.2 ",
                              }.get(octave,"")
-      three_dots = u"\u22EE"
-      if not type(u"")==type(""): three_dots = three_dots.encode('utf-8') # Python 2
       # Ugly fix for grace dot positions
       x_offset=0.6
       extra_offset=0
@@ -754,7 +760,7 @@ def parseNote(word,origWord,line):
         except ValueError: scoreError("Can't calculate number of beams from "+nBeams+" in",origWord,line)
     else: nBeams=None # unspecified
     octaves = re.findall("'+|,+",word)
-    if len(octaves)>1: scoreError("Multiple octave-dot settings not yet implemented:",origWord,line) # TODO: apparently, multiple sets of octave dots in chords are stacked, so a dot ends up vertically between figures; this would require adding to defines_done name and the dir-column, probably with baseline-skip adjustments
+    if len(octaves)>1: scoreError("Multiple octave-dot settings not yet implemented:",origWord,line) # TODO: apparently, multiple sets of octave dots in chords are stacked, so a dot ends up vertically between figures; this would require adding to defines name and the dir-column, probably with baseline-skip adjustments
     if octaves: octave = octaves[0]
     else: octave = ""
     accidental = "".join(c for c in word if c in "#b")
@@ -941,18 +947,10 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
     r = [] ; aftrNext = None
     thinspace = u'\u2009'
     if not type("")==type(u""): thinspace = thinspace.encode('utf-8')
-    notes = grace_octave_fix(notes)
-
-    # Borrow the notehead markup function
-    notemark = NoteheadMarkup()
-    notemark.initOneScore()
-    notemark.isGrace = True
-    notemark.defines_done = notehead_markup.defines_done.copy() # avoid pre-defined markups
-    # TODO: Since the grace markup are put after main notes,
-    # there maybe some duplicate definition of note markups.
-
+    notes = grace_octave_fix(notes) # ensures octaves come before notes
+    notemark = NoteheadMarkup(isGrace=True)
     accidental = ""
-    beams = 2
+    beams = 2 # default semiquaver
     figure = ""
     octave = ""
     mr = []
@@ -976,10 +974,7 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
                 else: octave = ",,,"
             elif notes[i:i+2]==",,": octave = ",,"
             else: octave = ","
-        elif n=='q': beams = 1
-        elif n=='s': beams = 2
-        elif n=='d': beams = 3
-        elif n=='h': beams = 4
+        elif n in 'qsdh': beams = '*qsdh'.index(n)
         else:
             # number should be the last char of a note
             figure = n
@@ -989,19 +984,14 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
             figure = ""
             octave = ""
     if notemark.inBeamGroup : mr.append(']')
+    mr = ''.join(mr)
     # deal with harmonic articulations
-    if harmonic: mr = r"\addHarmonic{ %s }" % ''.join(mr)
-    return r"^\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside ^\tweak #'extra-offset #'(-0.5 . -0.5) ^\markup \%s { %s }" % (cmd,mr) 
-def grace_octave_fix(notes):
-    notes = notes.replace("8","'1").replace("9","'2")
-    if notes.endswith(',,,') or notes.endswith("'''"):
-        # oops, should write this BEFORE the affected note
-        return notes[:-4]+notes[-3:]+notes[-4]
-    if notes.endswith(',,') or notes.endswith("''"):
-        return notes[:-3]+notes[-2:]+notes[-3]
-    elif notes.endswith(',') or notes.endswith("'"):
-        return notes[:-2]+notes[-1]+notes[-2]
-    else: return notes
+    if harmonic: mr = r"\addHarmonic{ %s }" % mr
+    return r"^\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside ^\tweak #'extra-offset #'(-0.5 . -0.5) ^\markup \%s { %s }" % (cmd,mr)
+def grace_octave_fix(notes): return re.sub(
+        "(.*)([1-7])([^1-7]+)$",
+        lambda m:grace_octave_fix(m.group(1))+m.group(3)+m.group(2),
+        notes.replace("8","1'").replace("9","2'")) # ensures 8ves, durations and accidentals come before main notes, not after
 def gracenotes_western(notes):
     # for western and MIDI staffs
     notes = grace_octave_fix(notes)
@@ -1022,15 +1012,11 @@ def gracenotes_western(notes):
             if notes[i:i+3]==",,,": next8ve = ",,"
             elif notes[i:i+2]==",,": next8ve = ","
             else: next8ve = ""
-        elif n=='q': duration = 8
-        elif n=='s': duration = 16
-        elif n=='d': duration = 32
-        elif n=='h': duration = 64
+        elif n in 'qsdh': duration = {'q':8, 's':16, 'd':32, 'h':64}[n]
         else:
             if not n in placeholders: continue # TODO: errExit ?
             r.append(placeholders[n]+nextAcc+next8ve+str(duration))
             nextAcc = "" ; next8ve = "'"
-            duration=16
     return ' '.join(r)
 
 def getLY(score,headers=None,have_final_barline=True):
@@ -1244,7 +1230,7 @@ def getLY(score,headers=None,have_final_barline=True):
             elif word==']': # tuplet end
                 out.append("}")
                 notehead_markup.tuplet = (1,1)
-            elif re.match(r"g\[[#b',1-9,q,s,d,h]+\]$",word):
+            elif re.match(r"g\[[#b',1-9qsdh]+\]$",word):
                 if midi or western: out.append(r"\grace { " + gracenotes_western(word[2:-1]) + " }")
                 else:
                     aftrnext = graceNotes_markup(word[2:-1],0,isInHarmonic)
@@ -1440,7 +1426,7 @@ def getLY(score,headers=None,have_final_barline=True):
            out = re.sub(r"\\repeat tremolo "+str(chkLen)+r" { (?P<note1>[^ ]+)32 (?P<note2>[^ ]+)32 } +~(( \\[^ ]+)*) "+" +~ ".join(["< (?P=note1) (?P=note2) >4"+dot]*(numNotes-1)),r"\\repeat tremolo "+str(chkLen*numNotes)+r" { \g<1>32 \g<2>32 }\g<3>",out)
            out = out.replace(" ".join(["r4"+dot]*numNotes),"r"+result)
        out = re.sub(r"(\\repeat tremolo [^{]+{ [^ ]+)( [^}]+ })(( +\\[^b][^ ]*)+)",r"\g<1>\g<3>\g<2>",out) # dynamics need to attach inside the tremolo (but \bar doesn't)
-       out = re.sub(r"(%\{ bar [0-9]*: %\} | \\major ) *r(?=[^ ]* [| ]* %\{ bar|\\bar)",r"\g<1>R",out)
+       out = re.sub(r"(%\{ bar [0-9]*: %\} | \\major ) *r(?=[^ ]* [| ]* (?:\\noPageBreak )?%\{ bar|\\bar)",r"\g<1>R",out)
        out = out.replace(r"\new RhythmicStaff \with {",r"\new RhythmicStaff \with { \override VerticalAxisGroup.default-staff-staff-spacing = #'((basic-distance . 6) (minimum-distance . 6) (stretchability . 0)) ") # don't let it hang too far up in the air
    if not_angka: out=out.replace("make-bold-markup","make-simple-markup")
    return out,maxBeams,lyrics,headers
@@ -1450,8 +1436,9 @@ def process_input(inDat):
  unicode_mode = not not re.search(r"\sUnicode\s"," "+inDat+" ")
  if unicode_mode: return get_unicode_approx(re.sub(r"\sUnicode\s"," "," "+inDat+" ").strip())+"\n"
  ret = []
- global scoreNo, western, has_lyrics, midi, not_angka, maxBeams, uniqCount, notehead_markup
+ global scoreNo, western, has_lyrics, midi, not_angka, maxBeams, uniqCount, notehead_markup, defines
  uniqCount = 0 ; notehead_markup = NoteheadMarkup()
+ defines = {}
  scoreNo = 0 # incr'd to 1 below
  western = False
  for score in re.split(r"\sNextScore\s"," "+inDat+" "):
@@ -1498,6 +1485,7 @@ def process_input(inDat):
        if lyrics: ret.append("".join(lyrics_start(voiceName)+l+" "+lyrics_end()+" " for l in lyrics))
      if partNo==len(parts)-1 or separate_scores:
        ret.append(score_end(**headers))
+ if defines: ret.insert(1,"\n".join(["\n% ----- Begin notehead graphical-object definitions"]+[x[1] for x in defines.values()]+["% ----- End notehead graphical-object definitions\n"]))
  ret = "".join(r+"\n" for r in ret)
  if lilypond_minor_version() >= 24: ret=re.sub(r"(\\override [A-Z][^ ]*) #'",r"\1.",ret) # needed to avoid deprecation warnings on Lilypond 2.24
  return ret
@@ -1506,9 +1494,10 @@ def get_unicode_approx(inDat):
     if re.search(r"\sNextPart\s"," "+inDat+" "): errExit("multiple parts in Unicode mode not yet supported")
     if re.search(r"\sNextScore\s"," "+inDat+" "): errExit("multiple scores in Unicode mode not yet supported")
     # TODO: also pick up on other not-supported stuff e.g. grace notes (or check for unicode_mode when these are encountered)
-    global notehead_markup, western, midi, uniqCount, scoreNo, has_lyrics, not_angka, maxBeams
+    global notehead_markup, western, midi, uniqCount, scoreNo, has_lyrics, not_angka, maxBeams, defines
     notehead_markup = NoteheadMarkup()
     western = midi = not_angka = False
+    defines = {}
     has_lyrics = True # doesn't matter for our purposes (see 'false positive' comment above)
     uniqCount = 0 ; scoreNo = 1
     getLY(inDat,{})
