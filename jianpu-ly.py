@@ -4,7 +4,7 @@
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
 # v1.807 (c) 2012-2024 Silas S. Brown
-# v1.804 (c) 2024 Unbored
+# v1.808 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -63,7 +63,7 @@ Old-style time signature: SeparateTimesig 1=C 4/4
 Indonesian 'not angka' style: angka
 Add a Western staff doubling the tune: WithStaff
 Tuplets: 3[ q1 q1 q1 ]
-Grace notes before: g[#45] 1
+Grace notes before: g[#45] 1 (default duration semiquaver)
 Grace notes after: 1 ['1]g
 Simple chords: 135 1 13 1
 Da capo: 1 1 Fine 1 1 1 1 1 1 DC
@@ -176,7 +176,7 @@ def all_scores_start(inDat):
   % This brings back 2.18's behaviour on 2.20+:
   #(define fonts
     (set-global-fonts
-     #:roman "Source Han Serif SC,Source Serif Pro,Times New Roman,Arial Unicode MS"
+     #:roman "Source Serif Pro,Source Han Serif SC,Times New Roman,Arial Unicode MS"
      #:factor (/ staff-height pt 20)
     ))
 """
@@ -191,23 +191,36 @@ def all_scores_start(inDat):
 
     if use_new_Unbored_code(): r += r"""
 %% make ":" a new articulation, helps to solve harmonic position
+#(append! default-script-alist
+   (list
+    `(two-dots
+       . (
+           (stencil . ,ly:text-interface::print)
+           (text . ,#{ \markup \override #'(font-encoding . latin1) \center-align \bold ":" #})
+           (padding . 0.20)
+           (avoid-slur . around)
+           (direction . ,UP)))))
+#(append! default-script-alist
+   (list
+    `(three-dots
+       . (
+           (stencil . ,ly:text-interface::print)
+           (text . ,#{ \markup \override #'(font-encoding . latin1) \center-align \bold """+u"\"\u22EE\""+r""" #})
+           (padding . 0.30)
+           (avoid-slur . around)
+           (direction . ,UP)))))
+"two-dots" =
+#(make-articulation 'two-dots)
+
+"three-dots" =
+#(make-articulation 'three-dots)
+
 \layout {
   \context {
     \Score
-    scriptDefinitions =
-    #(acons
-      'two-dots
-      `((stencil . ,ly:text-interface::print)
-        (text . ,#{ \markup \override #'(font-encoding . latin1) \center-align \bold ":" #})
-        (padding . 0.2)
-        (avoid-slur . around)
-        (direction . ,UP))
-      default-script-alist)
+    scriptDefinitions = #default-script-alist
   }
 }
-
-"two-dots" =
-#(make-articulation 'two-dots)
 
 %% addHarmonic function, make a series of notes hamonic by adding flageolet articulation
 #(define (make-script x)
@@ -460,6 +473,7 @@ class NoteheadMarkup:
       self.notesHad = []
       self.unicode_approx = []
       self.rplacNextIfStillInBeam = None
+      self.isGrace = False
   def endScore(self):
       if self.barPos == self.startBarPos: pass
       elif os.environ.get("j2ly_sloppy_bars",""): sys.stderr.write("Wrong bar length at end of score %d ignored (j2ly_sloppy_bars set)\n" % scoreNo)
@@ -691,13 +705,19 @@ class NoteheadMarkup:
                              }.get(octave,"")
       three_dots = u"\u22EE"
       if not type(u"")==type(""): three_dots = three_dots.encode('utf-8') # Python 2
+      # Ugly fix for grace dot positions
+      x_offset=0.6
+      extra_offset=0
+      if self.isGrace: 
+          x_offset=0.4
+          extra_offset=-1.0
       oDict = {"":"",
             "'":"^.",
-            "''":r"-\tweak #'X-offset #0.6 ^\two-dots" if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 ^\markup{\bold :}", # could possibly use new code unconditionally here because it's the *lower* dots that's the problem on 2.22, however the style might not match if we don't keep both the same
-            "'''":r"^\markup{\bold "+three_dots+"}",
-            ",":r"-\tweak #'X-offset #0.6 _.",
-            ",,":r"-\tweak #'X-offset #0.6 _\two-dots" if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 _\markup{\bold :}",
-            ",,,":r"-\tweak #'X-offset #0.3 _\markup{\bold "+three_dots+"}"}
+            "''":r"-\tweak #'X-offset #%f ^\two-dots" % x_offset if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 ^\markup{\bold :}", # could possibly use new code unconditionally here because it's the *lower* dots that's the problem on 2.22, however the style might not match if we don't keep both the same
+            "'''":r"-\tweak #'X-offset #%f ^\three-dots" % x_offset if use_new_Unbored_code() else r"^\markup{\bold "+three_dots+"}",
+            ",":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _." % (x_offset,extra_offset),
+            ",,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\two-dots" % (x_offset,extra_offset) if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 _\markup{\bold :}",
+            ",,,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\three-dots" % (x_offset,extra_offset) if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 _\markup{\bold "+three_dots+"}"}
       if not_angka: oDict.update({
               "'":r"-\tweak #'extra-offset #'(0.4 . 2.7) -\markup{\bold .}",
               "''":r"-\tweak #'extra-offset #'(0.4 . 3.5) -\markup{\bold :}",
@@ -915,38 +935,63 @@ def fix_fullwidth(t):
     if type(u"")==type(""): return utext
     else: return utext.encode('utf-8')
 
-def graceNotes_markup(notes,isAfter):
+def graceNotes_markup(notes,isAfter,harmonic=False):
     if isAfter: cmd = "jianpu-grace-after"
     else: cmd = "jianpu-grace"
     r = [] ; aftrNext = None
     thinspace = u'\u2009'
     if not type("")==type(u""): thinspace = thinspace.encode('utf-8')
     notes = grace_octave_fix(notes)
+
+    # Borrow the notehead markup function
+    notemark = NoteheadMarkup()
+    notemark.initOneScore()
+    notemark.isGrace = True
+    notemark.defines_done = notehead_markup.defines_done.copy() # avoid pre-defined markups
+    # TODO: Since the grace markup are put after main notes,
+    # there maybe some duplicate definition of note markups.
+
+    accidental = ""
+    beams = 2
+    figure = ""
+    octave = ""
+    mr = []
     for i in xrange(len(notes)):
         n = notes[i]
-        if n=='#': r.append(r'\fontsize #-4 { \raise #0.6 { \sharp } }')
-        elif n=='b': r.append(r'\fontsize #-4 { \raise #0.4 { \flat } }')
+        if n=='#':
+            accidental = "#"
+        elif n=='b': 
+            accidental = "b"
         elif n=="'":
             if i and notes[i-1]==notes[i]: continue
-            if notes[i:i+3]=="'''": scoreError("Can't yet handle grace-note octave with 3+ dots",word,line)
-            elif notes[i:i+2]=="''": above = ":"
-            else: above = "."
-            r.append(r"\override #'(direction . 1) \override #'(baseline-skip . 1.2) \dir-column { \line {")
-            aftrNext = r"} \line { "+'"'+thinspace+above+'" } }'
+            if notes[i:i+3]=="'''":
+                if not use_new_Unbored_code(): scoreError("Can't yet handle grace-note octave with 3+ dots",word,line)
+                else: octave = "'''"
+            elif notes[i:i+2]=="''": octave = "''"
+            else: octave = "'"
         elif n==',':
             if i and notes[i-1]==notes[i]: continue
-            if notes[i:i+3]==",,,": scoreError("Can't yet handle grace-note octave with 3+ dots",word,line)
-            elif notes[i:i+2]==",,": below = ":"
-            else: below = "."
-            r.append(r"\override #'(baseline-skip . %s) \center-column { \line { " % ("0.5" if below=="." else "1.0"))
-            aftrNext = r"} \line { \pad-to-box #'(0 . 0) #'(-0.2 . 0) "+'"'+below+'" } }'
+            if notes[i:i+3]==",,,":
+                if not use_new_Unbored_code(): scoreError("Can't yet handle grace-note octave with 3+ dots",word,line)
+                else: octave = ",,,"
+            elif notes[i:i+2]==",,": octave = ",,"
+            else: octave = ","
+        elif n=='q': beams = 1
+        elif n=='s': beams = 2
+        elif n=='d': beams = 3
+        elif n=='h': beams = 4
         else:
-            if r and r[-1].endswith('"'):
-                r[-1] = r[-1][:-1] + n + '"'
-            else: r.append('\\bold \\sans "%s"' % n)
-            if aftrNext:
-                r.append(aftrNext) ; aftrNext = None
-    return r"^\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside ^\markup \%s { \line { %s } }" % (cmd,' '.join(r))
+            # number should be the last char of a note
+            figure = n
+            mr.append(notemark(figure, beams, "", octave, accidental, "", "", "")[5])
+            accidental = ""
+            beams = 2
+            figure = ""
+            octave = ""
+    if notemark.inBeamGroup : mr.append(']')
+    # deal with harmonic articulations
+    if harmonic: mr = r"\addHarmonic{ %s }" % ''.join(mr)
+    return r"^\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside ^\tweak #'extra-offset #'(-0.5 . -0.5) ^\markup \%s { %s }" % (cmd,mr) 
 def grace_octave_fix(notes):
     notes = notes.replace("8","'1").replace("9","'2")
     if notes.endswith(',,,') or notes.endswith("'''"):
@@ -962,6 +1007,7 @@ def gracenotes_western(notes):
     notes = grace_octave_fix(notes)
     nextAcc = "" ; next8ve = "'" ; current_accidentals = [0]*7
     r = []
+    duration = 16
     for i in xrange(len(notes)):
         n = notes[i]
         if n=='#': nextAcc = "is"
@@ -976,10 +1022,15 @@ def gracenotes_western(notes):
             if notes[i:i+3]==",,,": next8ve = ",,"
             elif notes[i:i+2]==",,": next8ve = ","
             else: next8ve = ""
+        elif n=='q': duration = 8
+        elif n=='s': duration = 16
+        elif n=='d': duration = 32
+        elif n=='h': duration = 64
         else:
             if not n in placeholders: continue # TODO: errExit ?
-            r.append(placeholders[n]+nextAcc+next8ve+"16")
+            r.append(placeholders[n]+nextAcc+next8ve+str(duration))
             nextAcc = "" ; next8ve = "'"
+            duration=16
     return ' '.join(r)
 
 def getLY(score,headers=None,have_final_barline=True):
@@ -994,6 +1045,7 @@ def getLY(score,headers=None,have_final_barline=True):
    escaping = inTranspose = 0
    aftrnext = defined_jianpuGrace = defined_JGR = None
    aftrnext2 = None
+   isInHarmonic = False
    for line in score.split("\n"):
     line = fix_fullwidth(line).strip()
     line=re.sub(r"^%%\s*tempo:\s*(\S+)\s*$",r"\1",line) # to provide an upgrade path for jihuan-tian's fork
@@ -1060,8 +1112,10 @@ def getLY(score,headers=None,have_final_barline=True):
             elif word == "Harm:":
                 if not use_new_Unbored_code(): scoreError("Harm: requires Lilypond 2.24 or above",word,line)
                 out.append("\n\\addHarmonic {\n")
+                isInHarmonic = True
             elif word==":Harm":
                 out.append("\n}\n")
+                isInHarmonic = False
             elif re.match("[1-468]+[.]*=[1-9][0-9]*$",word): out.append(r'\tempo '+word) # TODO: reduce size a little?
             elif re.match("[16]=[A-Ga-g][#b]?$",word): #key
                 # Must use \transpose because \transposition doesn't always work.
@@ -1190,14 +1244,16 @@ def getLY(score,headers=None,have_final_barline=True):
             elif word==']': # tuplet end
                 out.append("}")
                 notehead_markup.tuplet = (1,1)
-            elif re.match(r"g\[[#b',1-9]+\]$",word):
+            elif re.match(r"g\[[#b',1-9,q,s,d,h]+\]$",word):
                 if midi or western: out.append(r"\grace { " + gracenotes_western(word[2:-1]) + " }")
                 else:
-                    aftrnext = graceNotes_markup(word[2:-1],0)
+                    aftrnext = graceNotes_markup(word[2:-1],0,isInHarmonic)
                     if not notehead_markup.withStaff: out.append(r"\once \textLengthOn ")
                     if not defined_jianpuGrace:
                         defined_jianpuGrace = True
-                        out.append(r"""#(define-markup-command (jianpu-grace layout props text)
+                        # TODO: jianpu-grace and jianpu-grace-after code are mostly duplcated
+                        out.append(r"""                                   
+#(define-markup-command (jianpu-grace-curve layout props text)
 (markup?) "Draw right-pointing jianpu grace under text."
 (let ((textWidth (cdr (ly:stencil-extent (interpret-markup layout props (markup (#:fontsize -4 text))) 0))))
 (interpret-markup layout props
@@ -1215,21 +1271,53 @@ def getLY(score,headers=None,have_final_barline=True):
        (cons -1.6 0)  ; affects height of grace
        (#:path
         0.1
-        (list (list (quote moveto) 0 0)
-              (list (quote lineto) textWidth 0)
-              (list (quote moveto) 0 -0.3)
-              (list (quote lineto) textWidth -0.3)
-              (list (quote moveto) (* textWidth 0.5) -0.3)
-              (list (quote curveto) (* textWidth 0.5) -1 (* textWidth 0.5) -1 textWidth -1)))))))))))) """)
-            elif re.match(r"\[[#b',1-9]+\]g$",word):
+        (list (list (quote moveto) (* textWidth 0.5) -0.3)
+              (list (quote curveto) (* textWidth 0.5) -1 (* textWidth 0.5) -1 textWidth -1)))))))))))) 
+                                   
+#(define-markup-command (jianpu-grace layout props text) (string-or-music?)
+   (interpret-markup layout props
+                     #{
+                       \markup  \jianpu-grace-curve  {
+                         \score{
+                           \layout {indent = 0}
+                           \new RhythmicStaff \with {
+                             \consists "Accidental_engraver"
+                             %% Get rid of the stave but not the barlines:
+                             \override StaffSymbol.line-count = #0 %% tested in 2.15.40, 2.16.2, 2.18.0, 2.18.2, 2.20.0 and 2.22.2
+                             \override BarLine.bar-extent = #'(-2 . 2) %% LilyPond 2.18: please make barlines as high as the time signature even though we're on a RhythmicStaff (2.16 and 2.15 don't need this although its presence doesn't hurt; Issue 3685 seems to indicate they'll fix it post-2.18)
+                             \magnifyStaff #(magstep -4)
+                             \remove Time_signature_engraver
+                           }
+                           {
+                             \new Voice="G" {
+                               \override Beam.transparent = ##f
+                               \override Stem.direction = #DOWN
+                               \override Tie.staff-position = #2.5
+                               \tupletUp
+                               \override Stem.length-fraction = #0
+                               \override Beam.beam-thickness = #0.1
+                               \override Beam.length-fraction = #0.5
+                               \override Beam.after-line-breaking = #jianpu-beam-adjust
+                               \override Voice.Rest.style = #'neomensural % this size tends to line up better (we'll override the appearance anyway)
+                               \override Accidental.font-size = #-4
+                               \override TupletBracket.bracket-visibility = ##t
+                               \set Voice.chordChanges = ##t %% 2.19 bug workaround
+
+                               \override Staff.TimeSignature.style = #'numbered
+                               \override Staff.Stem.transparent = ##t
+                               #text
+                       }}}}
+                     #}))
+                                   """)
+            elif re.match(r"\[[#b',1-9,q,s,d,h]+\]g$",word):
                 if midi or western: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + gracenotes_western(word[1:-2]) + " }"
                 else:
                     if not notehead_markup.withStaff:
                         out[lastPtr] = r"\once \textLengthOn " + out[lastPtr]
-                    out.insert(lastPtr+1,graceNotes_markup(word[1:-2],1))
+                    out.insert(lastPtr+1,graceNotes_markup(word[1:-2],1,isInHarmonic))
                     if not defined_JGR:
                         defined_JGR = True
-                        out[lastPtr] = r"""#(define-markup-command (jianpu-grace-after layout props text)
+                        out[lastPtr] = r"""#(define-markup-command (jianpu-grace-after-curve layout props text)
 (markup?) "Draw left-pointing jianpu grace under text."
 (let ((textWidth (cdr (ly:stencil-extent (interpret-markup layout props (markup (#:fontsize -4 text))) 0))))
 (interpret-markup layout props
@@ -1246,12 +1334,44 @@ def getLY(score,headers=None,have_final_barline=True):
        (cons -1.6 0)  ; affects height of grace
       (#:path
        0.1
-       (list (list (quote moveto) 0 0)
-             (list (quote lineto) textWidth 0)
-             (list (quote moveto) 0 -0.3)
-             (list (quote lineto) textWidth -0.3)
-             (list (quote moveto) (* textWidth 0.5) -0.3)
-             (list (quote curveto) (* textWidth 0.5) -1 (* textWidth 0.5) -1 0 -1)))))))))))) """ + out[lastPtr]
+       (list (list (quote moveto) (* textWidth 0.5) -0.3)
+             (list (quote curveto) (* textWidth 0.5) -1 (* textWidth 0.5) -1 0 -1)))))))))))) 
+             
+#(define-markup-command (jianpu-grace-after layout props text) (string-or-music?)
+   (interpret-markup layout props
+                     #{
+                       \markup  \jianpu-grace-after-curve  {
+                         \score{
+                           \layout {indent = 0}
+                           \new RhythmicStaff \with {
+                             \consists "Accidental_engraver"
+                             %% Get rid of the stave but not the barlines:
+                             \override StaffSymbol.line-count = #0 %% tested in 2.15.40, 2.16.2, 2.18.0, 2.18.2, 2.20.0 and 2.22.2
+                             \override BarLine.bar-extent = #'(-2 . 2) %% LilyPond 2.18: please make barlines as high as the time signature even though we're on a RhythmicStaff (2.16 and 2.15 don't need this although its presence doesn't hurt; Issue 3685 seems to indicate they'll fix it post-2.18)
+                             \magnifyStaff #(magstep -4)
+                             \remove Time_signature_engraver
+                           }
+                           {
+                             \new Voice="G" {
+                               \override Beam.transparent = ##f
+                               \override Stem.direction = #DOWN
+                               \override Tie.staff-position = #2.5
+                               \tupletUp
+                               \override Stem.length-fraction = #0
+                               \override Beam.beam-thickness = #0.1
+                               \override Beam.length-fraction = #0.5
+                               \override Beam.after-line-breaking = #jianpu-beam-adjust
+                               \override Voice.Rest.style = #'neomensural % this size tends to line up better (we'll override the appearance anyway)
+                               \override Accidental.font-size = #-4
+                               \override TupletBracket.bracket-visibility = ##t
+                               \set Voice.chordChanges = ##t %% 2.19 bug workaround
+
+                               \override Staff.TimeSignature.style = #'numbered
+                               \override Staff.Stem.transparent = ##t
+                               #text
+                       }}}}
+                     #}))
+             """ + out[lastPtr]
             elif word=="Fine":
                 need_final_barline = False
                 out.append(r'''\once \override Score.RehearsalMark #'break-visibility = #begin-of-line-invisible \once \override Score.RehearsalMark #'self-alignment-X = #RIGHT \mark "Fine" \bar "|."''')
