@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.809 (c) 2012-2024 Silas S. Brown
+# v1.810 (c) 2012-2024 Silas S. Brown
 # v1.808 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -110,11 +110,6 @@ def lilypond_minor_version():
     else: _lilypond_minor_version = 20 # 2.20
     return _lilypond_minor_version
 
-def use_new_Unbored_code():
-    return lilypond_minor_version() >= 24
-# (2.22 positions lower dots wrongly, don't know why yet,
-# so fall back to old code unless we have 2.24+)
-
 def lilypond_command():
     if hasattr(shutil,'which'):
         w = shutil.which('lilypond')
@@ -141,7 +136,6 @@ if not type(u"")==type(""): three_dots = three_dots.encode('utf-8') # Python 2
 def all_scores_start(inDat):
     r = r"""\version "2.%d.0"
 #(set-global-staff-size %g)""" % ((
-    24 if use_new_Unbored_code() else
     20 if lilypond_minor_version()>=20 else 18),staff_size)
     r += r"""
 
@@ -193,8 +187,8 @@ def all_scores_start(inDat):
 """
     r += "}\n" # end of \paper block
 
-    if use_new_Unbored_code(): r += r"""
-%% make ":" a new articulation, helps to solve harmonic position
+    r += r"""
+%% 2-dot and 3-dot articulations
 #(append! default-script-alist
    (list
     `(two-dots
@@ -248,48 +242,18 @@ def all_scores_start(inDat):
 
 addHarmonic = #(define-music-function (music)
                  (ly:music?)
-                 (map-some-music add-harmonic music))
-
-%% These two functions are from David Zhang's jianpu10a.ly
-%% with some adjustments.  Flips the beams upside down.
-%% Will call them from Beam.after-line-breaking (instead of
-%% setting that to ##t or ##f, call these functions)
-%% - see Lilypond source lily/system.cc
-%% System::do_break_substitution_and_fixup_refpoints
-%% - it calls after-line-breaking for all child grobs and their
-%% elements, called at the end of each system.
-%% TODO: if there's a place with 2 beams somewhere on the
-%% line of music, and another place with 1 beam, then the
-%% place with 1 beam gets too much space on lower octave dots.
-%% See for example the input: s,6 s,6 q6, 1 1 1 | q6, q6, 1 1 1
-%% (At least previous approach of having beams wrong way around
-%% didn't have spacing issues extending to a different bar.  Not
-%% sure which is worse: add user option to choose which bad thing?)
-%% Need to work out how to make it calculate per beam group, not
-%% whole line of music at once.  Or update the skyline with
-%% (ly:stencil-outline stil outline) if we can define outline.
-%% Difficult if Lilypond usually doesn't need to bother with a
-%% skyline for the inner beams.
-%% Not obvious from beam-engraver.cc if all beams are in 1 grob.
-#(define (stencil-flip-Y stl)
-   "Flip stencil @var{stl} in the direction of Y"
-   (let* (
-           ;; center stl on 0,0 to prepare for flipping,
-           ;; and calculate how far it moved.
-           (centered-stl (ly:stencil-aligned-to stl Y DOWN))
-           (original-ext (ly:stencil-extent stl Y))
-           (centered-ext (ly:stencil-extent centered-stl Y))
-           (offset (* (- (car original-ext) (car centered-ext)) 0))
-           ;; scale centered-stl using -1 to flip it
-           (flipped-stl (ly:stencil-scale centered-stl 1 -1))
-           ;; restore flipped stl to original position
-           (replaced-stl (ly:stencil-translate-axis flipped-stl offset Y)))
-     replaced-stl))
-#(define (jianpu-beam-adjust grob)
-     (ly:grob-set-property! grob 'stencil
-        (ly:stencil-translate
-          (stencil-flip-Y (ly:grob-property grob 'stencil))
-          (cons 0 -0.8))))
+                 (map-some-music add-harmonic music))"""
+    if inner_beams_below: r += r"""
+#(define (flip-beams grob)
+   (ly:grob-set-property!
+    grob 'stencil
+    (ly:stencil-translate
+     (let* ((stl (ly:grob-property grob 'stencil))
+            (centered-stl (ly:stencil-aligned-to stl Y DOWN)))
+       (ly:stencil-translate-axis
+        (ly:stencil-scale centered-stl 1 -1)
+        (* (- (car (ly:stencil-extent stl Y)) (car (ly:stencil-extent centered-stl Y))) 0) Y))
+     (cons 0 -0.8))))
 """
     return r+"\n%{ The jianpu-ly input was:\n" + inDat.strip().replace("%}","%/}")+"\n%}\n\n"
 
@@ -352,7 +316,7 @@ def jianpu_voice_start(isTemp=0):
     \override Accidental #'font-size = #-4
     \override TupletBracket #'bracket-visibility = ##t""" %
           (stemLenFrac,
-           r"\override Beam.after-line-breaking = #jianpu-beam-adjust  %% refer to jianpu10a.ly" if use_new_Unbored_code() else ""
+           r"\override Beam.after-line-breaking = #flip-beams" if inner_beams_below else ""
            ))
     r += "\n"+r"""\set Voice.chordChanges = ##t %% 2.19 bug workaround""" # LilyPond 2.19.82: \applyOutput docs say "called for every layout object found in the context Context at the current time step" but 2.19.x breaks this by calling it for ALL contexts in the current time step, hence breaking our WithStaff by applying our jianpu numbers to the 5-line staff too.  Obvious workaround is to make our function check that the context it's called with matches our jianpu voice, but I'm not sure how to do this other than by setting a property that's not otherwise used, which we can test for in the function.  So I'm 'commandeering' the "chordChanges" property (there since at least 2.15 and used by Lilypond only when it's in chord mode, which we don't use, and if someone adds a chord-mode staff then it won't print noteheads anyway): we will substitute jianpu numbers for noteheads only if chordChanges = #t.
     return r+"\n", voiceName
@@ -411,6 +375,7 @@ def lyrics_start(voiceName):
     return r'\new Lyrics = "I%s" { \lyricsto "%s" { ' % (uniqName(),voiceName)
 def lyrics_end(): return "} }"
 
+inner_beams_below = True # Use stencil reflection to invert Lilypond's normal beam positioning (like in David Zhang's jianpu10a.ly) - more accurately reflects jianpu typography but can result in octave dots being too far down because beam spacing is done per system not per beam
 dashes_as_ties = True # Implement dash (-) continuations as invisible ties rather than rests; sometimes works better in awkward beaming situations
 use_rest_hack = True # Implement some short rests as notes (and if there are lyrics, creates temporary voices so the lyrics miss them); sometimes works better for beaming (at least in 2.15 through 2.24)
 if __name__=="__main__" and '--noRestHack' in sys.argv: # TODO: document
@@ -706,10 +671,9 @@ class NoteheadMarkup:
         self.current_accidentals = {}
     # Octave dots:
     if not midi and not western and not '-' in figures:
-      # Tweak the Y-offset, as Lilypond occasionally puts it too far down:
       if not nBeams: ret += {",":r"-\tweak #'Y-offset #-1.2 ",
-                             ",,":r"-\tweak #'Y-offset #-2 " if use_new_Unbored_code() else r"-\tweak #'Y-offset #1 ",
-                             ",,,":r"-\tweak #'Y-offset #-1.2 ",
+                             ",,":r"-\tweak #'Y-offset #-2 ",
+                             ",,,":r"-\tweak #'Y-offset #-2.7 ",
                              }.get(octave,"")
       # Ugly fix for grace dot positions
       x_offset=0.6
@@ -719,11 +683,11 @@ class NoteheadMarkup:
           extra_offset=-1.0
       oDict = {"":"",
             "'":"^.",
-            "''":r"-\tweak #'X-offset #%f ^\two-dots" % x_offset if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 ^\markup{\bold :}", # could possibly use new code unconditionally here because it's the *lower* dots that's the problem on 2.22, however the style might not match if we don't keep both the same
-            "'''":r"-\tweak #'X-offset #%f ^\three-dots" % x_offset if use_new_Unbored_code() else r"^\markup{\bold "+three_dots+"}",
+            "''":r"-\tweak #'X-offset #%f ^\two-dots" % x_offset,
+            "'''":r"-\tweak #'X-offset #%f ^\three-dots" % x_offset,
             ",":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _." % (x_offset,extra_offset),
-            ",,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\two-dots" % (x_offset,extra_offset) if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 _\markup{\bold :}",
-            ",,,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\three-dots" % (x_offset,extra_offset) if use_new_Unbored_code() else r"-\tweak #'X-offset #0.3 _\markup{\bold "+three_dots+"}"}
+            ",,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\two-dots" % (x_offset,extra_offset),
+            ",,,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\three-dots" % (x_offset,extra_offset)}
       if not_angka: oDict.update({
               "'":r"-\tweak #'extra-offset #'(0.4 . 2.7) -\markup{\bold .}",
               "''":r"-\tweak #'extra-offset #'(0.4 . 3.5) -\markup{\bold :}",
@@ -962,16 +926,12 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
             accidental = "b"
         elif n=="'":
             if i and notes[i-1]==notes[i]: continue
-            if notes[i:i+3]=="'''":
-                if not use_new_Unbored_code(): scoreError("Can't yet handle grace-note octave with 3+ dots",word,line)
-                else: octave = "'''"
+            if notes[i:i+3]=="'''": octave = "'''"
             elif notes[i:i+2]=="''": octave = "''"
             else: octave = "'"
         elif n==',':
             if i and notes[i-1]==notes[i]: continue
-            if notes[i:i+3]==",,,":
-                if not use_new_Unbored_code(): scoreError("Can't yet handle grace-note octave with 3+ dots",word,line)
-                else: octave = ",,,"
+            if notes[i:i+3]==",,,": octave = ",,,"
             elif notes[i:i+2]==",,": octave = ",,"
             else: octave = ","
         elif n in 'qsdh': beams = '*qsdh'.index(n)
@@ -1096,7 +1056,6 @@ def getLY(score,headers=None,have_final_barline=True):
             # -----------------------------------
             if word.startswith('%'): break # a comment
             elif word == "Harm:":
-                if not use_new_Unbored_code(): scoreError("Harm: requires Lilypond 2.24 or above",word,line)
                 out.append("\n\\addHarmonic {\n")
                 isInHarmonic = True
             elif word==":Harm":
@@ -1282,8 +1241,7 @@ def getLY(score,headers=None,have_final_barline=True):
                                \tupletUp
                                \override Stem.length-fraction = #0
                                \override Beam.beam-thickness = #0.1
-                               \override Beam.length-fraction = #0.5
-                               \override Beam.after-line-breaking = #jianpu-beam-adjust
+                               \override Beam.length-fraction = #0.5""" + (r" \override Beam.after-line-breaking = #flip-beams" if inner_beams_below else "") + r"""
                                \override Voice.Rest.style = #'neomensural % this size tends to line up better (we'll override the appearance anyway)
                                \override Accidental.font-size = #-4
                                \override TupletBracket.bracket-visibility = ##t
@@ -1345,8 +1303,7 @@ def getLY(score,headers=None,have_final_barline=True):
                                \tupletUp
                                \override Stem.length-fraction = #0
                                \override Beam.beam-thickness = #0.1
-                               \override Beam.length-fraction = #0.5
-                               \override Beam.after-line-breaking = #jianpu-beam-adjust
+                               \override Beam.length-fraction = #0.5""" + (r" \override Beam.after-line-breaking = #flip-beams" if inner_beams_below else "") + r"""
                                \override Voice.Rest.style = #'neomensural % this size tends to line up better (we'll override the appearance anyway)
                                \override Accidental.font-size = #-4
                                \override TupletBracket.bracket-visibility = ##t
