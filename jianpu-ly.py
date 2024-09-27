@@ -196,7 +196,7 @@ def all_scores_start(inDat):
            (stencil . ,ly:text-interface::print)
            (text . ,#{ \markup \override #'(font-encoding . latin1) \center-align \bold ":" #})
            (padding . 0.20)
-           (avoid-slur . around)
+           (avoid-slur . inside)
            (direction . ,UP)))))
 #(append! default-script-alist
    (list
@@ -205,7 +205,7 @@ def all_scores_start(inDat):
            (stencil . ,ly:text-interface::print)
            (text . ,#{ \markup \override #'(font-encoding . latin1) \center-align \bold """+'"'+three_dots+'"'+r""" #})
            (padding . 0.30)
-           (avoid-slur . around)
+           (avoid-slur . inside)
            (direction . ,UP)))))
 "two-dots" =
 #(make-articulation 'two-dots)
@@ -429,8 +429,8 @@ def addOctaves(octave1,octave2):
 
 class NoteheadMarkup:
   def __init__(self,isGrace=False):
-      self.isGrace = isGrace
       self.initOneScore()
+      self.isGrace = isGrace
   def initOneScore(self):
       self.barLength = 64 ; self.beatLength = 16 # in 64th notes
       self.barPos = self.startBarPos = F(0)
@@ -528,6 +528,15 @@ class NoteheadMarkup:
     if len(self.last_figures)>1 and self.last_figures[0]=='-': self.last_figures = self.last_figures[1:]
     if not accidental in ["","#","b"]: scoreError("Can't handle accidental "+accidental+" in",word,line)
     self.last_accidental = accidental
+
+    chordMode = False
+    if len(figures)>1 and not figures.startswith("-"):
+        chordMode = True
+        # Process chords: reuse the word to process chords
+        # remove durations
+        figures,newName,bottom_octave,top_octave,placeholder_chord = chordNotes_markup(re.sub('[qsdh]','',word))
+        if not midi and not western: placeholder_chord = "c"
+
     if figures not in defines and not midi and not western:
         # Define a notehead graphical object for the figures
         if figures.startswith("-"):
@@ -537,6 +546,7 @@ class NoteheadMarkup:
             if not type(u"")==type(""):
                 figuresNew=figuresNew.encode('utf-8')
         else: figuresNew = figures
+
         newName = "note-"+name
         ret = """#(define (%s grob grob-origin context)
   (if (and (eq? (ly:context-property context 'chordChanges) #t)
@@ -621,13 +631,13 @@ class NoteheadMarkup:
                 inRestHack = 1
                 if self.inBeamGroup and not self.inBeamGroup=="restHack": aftrlast0 = "] "
     if placeholder_chord.startswith("<"):
-        # Octave with chords: apply to last note if up, 1st note if down
-        notes = placeholder_chord.split()[1:-1]
-        assert len(notes) >= 2
-        notes[0] += {",":"",",,":",",",,,":",,"}.get(octave,"'")
-        for n in range(1,len(notes)-1): notes[n] += "'"
-        notes[-1] += {"'":"''","''":"'''","'''":"''''"}.get(octave,"'")
-        ret += "< "+" ".join(notes)+" >"
+        # # Octave with chords: apply to last note if up, 1st note if down
+        # notes = placeholder_chord.split()[1:-1]
+        # assert len(notes) >= 2
+        # notes[0] += {",":"",",,":",",",,,":",,"}.get(octave,"'")
+        # for n in range(1,len(notes)-1): notes[n] += "'"
+        # notes[-1] += {"'":"''","''":"'''","'''":"''''"}.get(octave,"'")
+        ret += placeholder_chord # "< "+" ".join(notes)+" >"
     else: # single note or rest
         ret += placeholder_chord + {"":"", "#":"is", "b":"es"}[accidental]
         if not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''","'''":"''''",",":"",",,":",",",,,":",,"}[octave] # for MIDI + Western, put it so no-mark starts near middle C
@@ -693,7 +703,11 @@ class NoteheadMarkup:
               "''":r"-\tweak #'extra-offset #'(0.4 . 3.5) -\markup{\bold :}",
               "'''":r"-\tweak #'extra-offset #'(0.4 . 4.3) -\markup{\bold "+three_dots+"}",
               })
-      ret += oDict[octave]
+      if chordMode:
+          ret += oDict[bottom_octave]
+          ret += oDict[top_octave]
+      else:
+          ret += oDict[octave]
     if invisTieLast:
         if midi or western:
             b4last, aftrlast = "", " ~"
@@ -724,7 +738,8 @@ def parseNote(word,origWord,line):
         except ValueError: scoreError("Can't calculate number of beams from "+nBeams+" in",origWord,line)
     else: nBeams=None # unspecified
     octaves = re.findall("'+|,+",word)
-    if len(octaves)>1: scoreError("Multiple octave-dot settings not yet implemented:",origWord,line) # TODO: apparently, multiple sets of octave dots in chords are stacked, so a dot ends up vertically between figures; this would require adding to defines name and the dir-column, probably with baseline-skip adjustments
+    # chords of cause accept multiple octaves
+    if len(octaves)>1 and len(figures) == 1: scoreError("Multiple octaves should not applied to a single note:",origWord,line) # TODO: apparently, multiple sets of octave dots in chords are stacked, so a dot ends up vertically between figures; this would require adding to defines name and the dir-column, probably with baseline-skip adjustments
     if octaves: octave = octaves[0]
     else: octave = ""
     accidental = "".join(c for c in word if c in "#b")
@@ -978,6 +993,162 @@ def gracenotes_western(notes):
             r.append(placeholders[n]+nextAcc+next8ve+str(duration))
             nextAcc = "" ; next8ve = "'"
     return ' '.join(r)
+def chordNotes_markup(notes):
+    notes = grace_octave_fix(notes) # ensures octaves come before notes
+    accidental = ""
+    figure = ""
+    octave = ""
+    value = 0
+    dNotes = []
+    mr = []
+
+    names = {'0':'nought',
+             '1':'one',
+             '2':'two',
+             '3':'three',
+             '4':'four',
+             '5':'five',
+             '6':'six',
+             '7':'seven'}
+    
+    for i in xrange(len(notes)):
+        n = notes[i]
+        if n=='#':
+            accidental = "#"
+            value += 0.5
+        elif n=='b': 
+            accidental = "b"
+            value -= 0.5
+        elif n=="'":
+            if i and notes[i-1]==notes[i]: continue
+            if notes[i:i+3]=="'''": 
+                octave = "'''"
+                value += 22
+            elif notes[i:i+2]=="''": 
+                octave = "''"
+                value += 15
+            else: 
+                octave = "'"
+                value += 8
+        elif n==',':
+            if i and notes[i-1]==notes[i]: continue
+            if notes[i:i+3]==",,,": 
+                octave = ",,,"
+                value -= 22
+            elif notes[i:i+2]==",,": 
+                octave = ",,"
+                value -= 15
+            else: 
+                octave = ","
+                value -= 8
+        else:
+            # number should be the last char of a note
+            if n not in names : continue
+            figure = n
+            if int(n) == 0: value = 0
+            else: value += int(n)
+            dNotes.append({
+                'value':value,
+                'figure':figure,
+                'octave':octave,
+                'accidental':accidental})
+            accidental = ""
+            figure = ""
+            octave = ""
+    # sort by value
+    dNotes.sort(key=lambda element:element['value'])
+    placeholder_chord = "< "
+    for f in dNotes:
+        placeholder_chord +=placeholders[f['figure']]+{"":"", "#":"is", "b":"es"}[f['accidental']]
+        if "," in f['octave']: placeholder_chord += f['octave'][:-1]+" "
+        else: placeholder_chord += f['octave']+"' "
+    placeholder_chord += ">"
+
+    # skip the top and the bottom octave dots
+    # as the they are dealed with markups outside.
+    bottom_octave = top_octave = ""
+    if "," in dNotes[0]['octave']:
+        bottom_octave = dNotes[0]['octave']
+        dNotes[0]['octave'] = ""
+    if "'" in dNotes[-1]['octave']:
+        top_octave = dNotes[-1]['octave']
+        dNotes[-1]['octave'] = ""
+
+    # generate a sorted figure name.
+    # Theorically only one octave could appear between adjacent numbers
+    # and we don't care to whom it belongs
+    figures = ""
+    newName = "note-"
+    marklist = []
+    for v in dNotes:
+        figure = v['accidental']+v['figure']
+        name = names[v['figure']]
+        if v['accidental'] == "#": name = "sharp"+name
+        elif v['accidental'] == "b": name = "flat"+name
+        # lower octaves put before number
+        if v['octave'] == ",,,":
+            figures += "..."+figure
+            newName += "dotdotdot"+name
+            marklist.append("...")
+            marklist.append(v['figure'])
+        elif v['octave'] == ",,":
+            figures += ".."+figure
+            newName += "dotdot"+name
+            marklist.append("..")
+            marklist.append(v['figure'])
+        elif v['octave'] == ",":
+            figures += "."+figure
+            newName += "dot"+name
+            marklist.append(".")
+            marklist.append(v['figure'])
+        # upper octaves put after number
+        elif v['octave'] == "'''":
+            figures += figure+"..."
+            newName += name+"dotdotdot"
+            marklist.append(v['figure'])
+            marklist.append("...")
+        elif v['octave'] == "''":
+            figures += figure+".."
+            newName += name+"dotdot"
+            marklist.append(v['figure'])
+            marklist.append("..")
+        elif v['octave'] == "'":
+            figures += figure+"."
+            newName += name+"dot"
+            marklist.append(v['figure'])
+            marklist.append(".")
+        else:
+            figures += figure
+            newName += name
+            marklist.append(v['figure'])
+
+    if figures not in defines:
+        # Define a notehead graphical object for the figures
+        ret = """#(define (%s grob grob-origin context)
+  (if (and (eq? (ly:context-property context 'chordChanges) #t)
+      (or (grob::has-interface grob 'note-head-interface)
+        (grob::has-interface grob 'rest-interface)))
+    (begin
+      (ly:grob-set-property! grob 'font-family 'sans)
+      (ly:grob-set-property! grob 'stencil
+        (grob-interpret-markup grob
+          """ % newName
+        ret += """(markup (#:lower 0.5
+          (#:override (cons (quote direction) 1)
+          (#:override (cons (quote baseline-skip) 1.8)
+          (#:dir-column (\n"""
+        for v in marklist:
+            if v == "...":
+                ret += '    #:vspace 0.05 #:line (#:hspace -0.2 #:bold "'+three_dots+'") #:vspace -0.05\n'
+            elif v == "..":
+                ret += '    #:vspace 0.05 #:line (#:hspace 0.2 #:bold ":") #:vspace -0.1\n'
+            elif v == ".":
+                ret += '    #:vspace 0.1 #:line (#:hspace 0.3 #:bold ".") #:vspace -0.3\n'
+            else:
+                ret += '    #:line (#:bold "'+v+'")\n'
+        ret += ")))))))))))"
+        defines[figures] = (newName,ret)
+    return figures,newName,bottom_octave,top_octave,placeholder_chord
 
 def getLY(score,headers=None,have_final_barline=True):
    if not headers: headers = {} # Python 2 persists this dict if it's in the default args
