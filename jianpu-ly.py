@@ -219,30 +219,7 @@ def all_scores_start(inDat):
     scriptDefinitions = #default-script-alist
   }
 }
-
-%% addHarmonic function, make a series of notes hamonic by adding flageolet articulation
-#(define (make-script x)
-   (make-music 'ArticulationEvent
-               'articulation-type x))
-
-#(define (add-script m x)
-   (case (ly:music-property m 'name)
-     ((NoteEvent) (set! (ly:music-property m 'articulations)
-                        (append (ly:music-property m 'articulations)
-                                (list (make-script x))))
-                  m)
-     ((EventChord)(set! (ly:music-property m 'elements)
-                        (append (ly:music-property m 'elements)
-                                (list (make-script x))))
-                  m)
-     (else #f)))
-
-#(define (add-harmonic m)
-   (add-script m 'flageolet))
-
-addHarmonic = #(define-music-function (music)
-                 (ly:music?)
-                 (map-some-music add-harmonic music))"""
+"""
     if inner_beams_below: r += r"""
 #(define (flip-beams grob)
    (ly:grob-set-property!
@@ -957,14 +934,13 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
             # number should be the last char of a note
             figure = n
             mr.append(notemark(figure, beams, "", octave, accidental, "", "", "")[5])
+            if harmonic: mr.append(r"\flageolet") # deal with harmonic articulations
             accidental = ""
             beams = 2
             figure = ""
             octave = ""
     if notemark.inBeamGroup : mr.append(']')
     mr = ''.join(mr)
-    # deal with harmonic articulations
-    if harmonic: mr = r"\addHarmonic{ %s }" % mr
     offset = "-2.5 . 0" if isAfter else "-0.5 . -0.5"
     return r"^\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside ^\tweak #'extra-offset #'(%s) ^\markup \%s { %s }" % (offset,cmd,mr)
 def grace_octave_fix(notes): return re.sub(
@@ -1231,10 +1207,8 @@ def getLY(score,headers=None,have_final_barline=True):
             # -----------------------------------
             if word.startswith('%'): break # a comment
             elif word == "Harm:":
-                out.append("\n\\addHarmonic {\n")
                 isInHarmonic = True
             elif word==":Harm":
-                out.append("\n}\n")
                 isInHarmonic = False
             elif re.match("[1-468]+[.]*=[1-9][0-9]*$",word): out.append(r'\tempo '+word) # TODO: reduce size a little?
             elif re.match("[16]=[A-Ga-g][#b]?$",word): #key
@@ -1522,6 +1496,7 @@ def getLY(score,headers=None,have_final_barline=True):
                     aftrnext = None
                 if not_angka and "'" in octave: maxBeams=max(maxBeams,len(octave)*.8+nBeams)
                 else: maxBeams=max(maxBeams,nBeams)
+                if isInHarmonic and not midi and not western and not figures.startswith('-'): out.append(r"\flageolet")
    if notehead_markup.barPos == 0 and notehead_markup.barNo == 1: errExit("No jianpu in score %d" % scoreNo)
    if notehead_markup.inBeamGroup and not midi and not western and not notehead_markup.inBeamGroup=="restHack": out[lastPtr] += ']' # needed if ending on an incomplete beat
    if inTranspose: out.append("}")
