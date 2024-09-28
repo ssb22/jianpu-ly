@@ -534,7 +534,7 @@ class NoteheadMarkup:
         chordMode = True
         # Process chords: reuse the word to process chords
         # remove durations
-        figures,newName,bottom_octave,top_octave,placeholder_chord = chordNotes_markup(re.sub('[qsdh]','',word))
+        figures,newName,bottom_octave,top_octave,placeholder_chord = chordNotes_markup(re.sub('[qsdh.]','',word))
         if not midi and not western: placeholder_chord = "c"
 
     if figures not in defines and not midi and not western:
@@ -681,10 +681,13 @@ class NoteheadMarkup:
         self.current_accidentals = {}
     # Octave dots:
     if not midi and not western and not '-' in figures:
-      if not nBeams: ret += {",":r"-\tweak #'Y-offset #-1.2 ",
-                             ",,":r"-\tweak #'Y-offset #-2 ",
-                             ",,,":r"-\tweak #'Y-offset #-2.7 ",
-                             }.get(octave,"")
+      if not nBeams: 
+          oDict = {",":r"-\tweak #'Y-offset #-1.2 ",
+                   ",,":r"-\tweak #'Y-offset #-2 ",
+                   ",,,":r"-\tweak #'Y-offset #-2.7 ",
+                }
+          if chordMode: ret += oDict.get(bottom_octave,"")
+          else: ret += oDict.get(octave,"")
       # Ugly fix for grace dot positions
       x_offset=0.6
       extra_offset=0
@@ -962,7 +965,8 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
     mr = ''.join(mr)
     # deal with harmonic articulations
     if harmonic: mr = r"\addHarmonic{ %s }" % mr
-    return r"^\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside ^\tweak #'extra-offset #'(-0.5 . -0.5) ^\markup \%s { %s }" % (cmd,mr)
+    offset = "-2.5 . 0" if isAfter else "-0.5 . -0.5"
+    return r"^\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside ^\tweak #'extra-offset #'(%s) ^\markup \%s { %s }" % (offset,cmd,mr)
 def grace_octave_fix(notes): return re.sub(
         "(.*)([1-7])([^1-7]+)$",
         lambda m:grace_octave_fix(m.group(1))+m.group(3)+m.group(2),
@@ -1139,11 +1143,11 @@ def chordNotes_markup(notes):
           (#:dir-column (\n"""
         for v in marklist:
             if v == "...":
-                ret += '    #:vspace 0.05 #:line (#:hspace -0.2 #:bold "'+three_dots+'") #:vspace -0.05\n'
+                ret += '    #:vspace 0.05 #:line (#:hspace -0.2 #:roman #:bold "'+three_dots+'") #:vspace -0.05\n'
             elif v == "..":
-                ret += '    #:vspace 0.05 #:line (#:hspace 0.2 #:bold ":") #:vspace -0.1\n'
+                ret += '    #:vspace 0.05 #:line (#:hspace 0.2 #:roman #:bold ":") #:vspace -0.1\n'
             elif v == ".":
-                ret += '    #:vspace 0.1 #:line (#:hspace 0.3 #:bold ".") #:vspace -0.3\n'
+                ret += '    #:vspace 0.1 #:line (#:hspace 0.3 #:roman #:bold ".") #:vspace -0.3\n'
             else:
                 ret += '    #:line (#:bold "'+v+'")\n'
         ret += ")))))))))))"
