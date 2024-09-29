@@ -4,7 +4,7 @@
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
 # v1.810 (c) 2012-2024 Silas S. Brown
-# v1.808 (c) 2024 Unbored
+# v1.811 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -506,9 +506,8 @@ class NoteheadMarkup:
     if not accidental in ["","#","b"]: scoreError("Can't handle accidental "+accidental+" in",word,line)
     self.last_accidental = accidental
 
-    chordMode = False
-    if len(figures)>1 and not figures.startswith("-"):
-        chordMode = True
+    isChord = len(figures)>1 and not figures.startswith("-")
+    if isChord:
         # Process chords: reuse the word to process chords
         # remove durations
         figures,newName,bottom_octave,top_octave,placeholder_chord = chordNotes_markup(re.sub('[qsdh.]','',word))
@@ -658,12 +657,12 @@ class NoteheadMarkup:
         self.current_accidentals = {}
     # Octave dots:
     if not midi and not western and not '-' in figures:
-      if not nBeams: 
+      if not nBeams:
           oDict = {",":r"-\tweak #'Y-offset #-1.2 ",
                    ",,":r"-\tweak #'Y-offset #-2 ",
                    ",,,":r"-\tweak #'Y-offset #-2.7 ",
                 }
-          if chordMode: ret += oDict.get(bottom_octave,"")
+          if isChord: ret += oDict.get(bottom_octave,"") # TODO: if there's a top_octave as well, it might not now be readable because the Y-tweak applies to both.  Maybe we have to get the chord itself to do the top ones instead
           else: ret += oDict.get(octave,"")
       # Ugly fix for grace dot positions
       x_offset=0.6
@@ -683,7 +682,7 @@ class NoteheadMarkup:
               "''":r"-\tweak #'extra-offset #'(0.4 . 3.5) -\markup{\bold :}",
               "'''":r"-\tweak #'extra-offset #'(0.4 . 4.3) -\markup{\bold "+three_dots+"}",
               })
-      if chordMode:
+      if isChord:
           ret += oDict[bottom_octave]
           ret += oDict[top_octave]
       else:
@@ -718,8 +717,8 @@ def parseNote(word,origWord,line):
         except ValueError: scoreError("Can't calculate number of beams from "+nBeams+" in",origWord,line)
     else: nBeams=None # unspecified
     octaves = re.findall("'+|,+",word)
-    # chords of cause accept multiple octaves
-    if len(octaves)>1 and len(figures) == 1: scoreError("Multiple octaves should not applied to a single note:",origWord,line) # TODO: apparently, multiple sets of octave dots in chords are stacked, so a dot ends up vertically between figures; this would require adding to defines name and the dir-column, probably with baseline-skip adjustments
+    # chords of course accept multiple octaves
+    if len(octaves)>1 and len(figures) == 1: scoreError("Multiple octaves should not applied to a single note:",origWord,line)
     if octaves: octave = octaves[0]
     else: octave = ""
     accidental = "".join(c for c in word if c in "#b")
@@ -934,7 +933,7 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
             # number should be the last char of a note
             figure = n
             mr.append(notemark(figure, beams, "", octave, accidental, "", "", "")[5])
-            if harmonic: mr.append(r"\flageolet") # deal with harmonic articulations
+            if harmonic: mr.append(r"\flageolet ") # deal with harmonic articulations
             accidental = ""
             beams = 2
             figure = ""
@@ -978,7 +977,7 @@ def chordNotes_markup(notes):
     accidental = ""
     figure = ""
     octave = ""
-    value = 0
+    sortKey = 0
     dNotes = []
     mr = []
 
@@ -995,48 +994,47 @@ def chordNotes_markup(notes):
         n = notes[i]
         if n=='#':
             accidental = "#"
-            value += 0.5
+            sortKey += 0.5
         elif n=='b': 
             accidental = "b"
-            value -= 0.5
+            sortKey -= 0.5
         elif n=="'":
             if i and notes[i-1]==notes[i]: continue
             if notes[i:i+3]=="'''": 
                 octave = "'''"
-                value += 22
+                sortKey += 22
             elif notes[i:i+2]=="''": 
                 octave = "''"
-                value += 15
+                sortKey += 15
             else: 
                 octave = "'"
-                value += 8
+                sortKey += 8
         elif n==',':
             if i and notes[i-1]==notes[i]: continue
             if notes[i:i+3]==",,,": 
                 octave = ",,,"
-                value -= 22
+                sortKey -= 22
             elif notes[i:i+2]==",,": 
                 octave = ",,"
-                value -= 15
+                sortKey -= 15
             else: 
                 octave = ","
-                value -= 8
+                sortKey -= 8
         else:
             # number should be the last char of a note
             if n not in names : continue
             figure = n
-            if int(n) == 0: value = 0
-            else: value += int(n)
+            if int(n) == 0: sortKey = 0
+            else: sortKey += int(n)
             dNotes.append({
-                'value':value,
+                'sortKey':sortKey,
                 'figure':figure,
                 'octave':octave,
                 'accidental':accidental})
             accidental = ""
             figure = ""
             octave = ""
-    # sort by value
-    dNotes.sort(key=lambda element:element['value'])
+    dNotes.sort(key=lambda element:element['sortKey'])
     placeholder_chord = "< "
     for f in dNotes:
         placeholder_chord +=placeholders[f['figure']]+{"":"", "#":"is", "b":"es"}[f['accidental']]
@@ -1055,7 +1053,7 @@ def chordNotes_markup(notes):
         dNotes[-1]['octave'] = ""
 
     # generate a sorted figure name.
-    # Theorically only one octave could appear between adjacent numbers
+    # Theoretically only one octave could appear between adjacent numbers
     # and we don't care to whom it belongs
     figures = ""
     newName = "note-"
@@ -1496,7 +1494,7 @@ def getLY(score,headers=None,have_final_barline=True):
                     aftrnext = None
                 if not_angka and "'" in octave: maxBeams=max(maxBeams,len(octave)*.8+nBeams)
                 else: maxBeams=max(maxBeams,nBeams)
-                if isInHarmonic and not midi and not western and not figures.startswith('-'): out.append(r"\flageolet")
+                if isInHarmonic and not midi and not western and not figures.startswith('-'): out.append(r"\flageolet ")
    if notehead_markup.barPos == 0 and notehead_markup.barNo == 1: errExit("No jianpu in score %d" % scoreNo)
    if notehead_markup.inBeamGroup and not midi and not western and not notehead_markup.inBeamGroup=="restHack": out[lastPtr] += ']' # needed if ending on an incomplete beat
    if inTranspose: out.append("}")
