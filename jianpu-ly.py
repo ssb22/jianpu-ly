@@ -510,8 +510,14 @@ class NoteheadMarkup:
     if isChord:
         # Process chords: reuse the word to process chords
         # remove durations
-        figures,newName,bottom_octave,top_octave,placeholder_chord = chordNotes_markup(re.sub('[qsdh.]','',word))
-        if not midi and not western: placeholder_chord = "c"
+        figures,newName,octave,top_octave,placeholder_chord = chordNotes_markup(re.sub('[qsdh.]','',word))
+        if not midi and not western: 
+            # add top octave here
+            oDict = {"'":"^.",
+                     "''":r"-\tweak #'X-offset #0.6 ^\two-dots",
+                     "'''":r"-\tweak #'X-offset #0.6 ^\three-dots"
+            }
+            placeholder_chord = "<c"+oDict.get(top_octave,"")+">"
 
     if figures not in defines and not midi and not western:
         # Define a notehead graphical object for the figures
@@ -662,8 +668,7 @@ class NoteheadMarkup:
                    ",,":r"-\tweak #'Y-offset #-2 ",
                    ",,,":r"-\tweak #'Y-offset #-2.7 ",
                 }
-          if isChord: ret += oDict.get(bottom_octave,"") # TODO: if there's a top_octave as well, it might not now be readable because the Y-tweak applies to both.  Maybe we have to get the chord itself to do the top ones instead
-          else: ret += oDict.get(octave,"")
+          ret += oDict.get(octave,"")
       # Ugly fix for grace dot positions
       x_offset=0.6
       extra_offset=0
@@ -672,21 +677,17 @@ class NoteheadMarkup:
           extra_offset=-1.0
       oDict = {"":"",
             "'":"^.",
-            "''":r"-\tweak #'X-offset #%f ^\two-dots" % x_offset,
-            "'''":r"-\tweak #'X-offset #%f ^\three-dots" % x_offset,
-            ",":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _." % (x_offset,extra_offset),
-            ",,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\two-dots" % (x_offset,extra_offset),
-            ",,,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\three-dots" % (x_offset,extra_offset)}
+            "''":r"-\tweak #'X-offset #%f ^\two-dots " % x_offset,
+            "'''":r"-\tweak #'X-offset #%f ^\three-dots " % x_offset,
+            ",":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _. " % (x_offset,extra_offset),
+            ",,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\two-dots " % (x_offset,extra_offset),
+            ",,,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\three-dots " % (x_offset,extra_offset)}
       if not_angka: oDict.update({
               "'":r"-\tweak #'extra-offset #'(0.4 . 2.7) -\markup{\bold .}",
               "''":r"-\tweak #'extra-offset #'(0.4 . 3.5) -\markup{\bold :}",
               "'''":r"-\tweak #'extra-offset #'(0.4 . 4.3) -\markup{\bold "+three_dots+"}",
               })
-      if isChord:
-          ret += oDict[bottom_octave]
-          ret += oDict[top_octave]
-      else:
-          ret += oDict[octave]
+      ret += oDict[octave]
     if invisTieLast:
         if midi or western:
             b4last, aftrlast = "", " ~"
@@ -1117,7 +1118,7 @@ def chordNotes_markup(notes):
           (#:dir-column (\n"""
         for v in marklist:
             if v == "...":
-                ret += '    #:vspace 0.05 #:line (#:hspace -0.2 #:roman #:bold "'+three_dots+'") #:vspace -0.05\n'
+                ret += '    #:vspace 0.1 #:line (#:hspace 0.3 #:roman #:bold "'+three_dots+'") #:vspace 0.1\n'
             elif v == "..":
                 ret += '    #:vspace 0.05 #:line (#:hspace 0.2 #:roman #:bold ":") #:vspace -0.1\n'
             elif v == ".":
