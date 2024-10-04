@@ -461,7 +461,7 @@ class NoteheadMarkup:
     # tremolo is "" or ":32"
     # word,line is for error handling
     if len(figures)>1:
-        if accidental: scoreError("Accidentals in chords not yet implemented:",word,line) # see TODOs below
+        # if accidental: scoreError("Accidentals in chords not yet implemented:",word,line) # see TODOs below
         if '0' in figures: scoreError("Can't have rest in chord:",word,line)
         if 'x' in figures: scoreError("Can't have percussion beat in chord:",word,line)
     self.notesHad.append(figures)
@@ -693,6 +693,10 @@ def parseNote(word,origWord,line):
     if octaves: octave = octaves[0]
     else: octave = ""
     accidental = "".join(c for c in word if c in "#b")
+    if len(figures) > 1:
+        # we deal with them seperately
+        octave = ""
+        accidental = ""
     return figures,nBeams,dots,octave,accidental,tremolo
 
 def write_docs():
