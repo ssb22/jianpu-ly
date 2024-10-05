@@ -461,6 +461,7 @@ class NoteheadMarkup:
     # tremolo is "" or ":32"
     # word,line is for error handling
     if len(figures)>1:
+        if accidental and not_angka: scoreError("Accidentals in chords not yet implemented in Indonesian not-angka mode:",word,line)
         if '0' in figures: scoreError("Can't have rest in chord:",word,line)
         if 'x' in figures: scoreError("Can't have percussion beat in chord:",word,line)
     self.notesHad.append(figures)
@@ -474,10 +475,6 @@ class NoteheadMarkup:
     
     invisTieLast = dashes_as_ties and self.last_figures and figures=="-" and not self.last_was_rest
     self.last_was_rest = (figures=='0' or (figures=='-' and self.last_was_rest))
-    if not_angka:
-        # include accidental in the lookup key
-        # because it affects the notehead shape
-        figures += accidental # TODO: chords?
     aftrLastNonDash = tieEnd = ""
     add_cautionary_accidental = False
     if invisTieLast: # (so figures == "-")
@@ -489,7 +486,6 @@ class NoteheadMarkup:
             add_cautionary_accidental = self.last_accidental
             tremolo = self.last_tremolo
         else:
-            figures += self.last_figures # (so "-" + last)
             if self.barPos==0 and not midi and not western and not self.last_figures=="x": sys.stderr.write("Warning: jianpu barline-crossing tie won't be done right because your Lilypond version is older than 2.20\n")
             if self.barPos==0: tremolo = self.last_tremolo
         if self.current_chord: # a chord is currently in progress, and we're extending it with a tie
@@ -507,9 +503,8 @@ class NoteheadMarkup:
         self.last_tremolo = tremolo
         if isChord: self.current_chord = word
         else: self.current_chord = None
-    self.last_figures = figures
-    if len(self.last_figures)>1 and self.last_figures[0]=='-': self.last_figures = self.last_figures[1:]
-    if not accidental in ["","#","b"]: scoreError("Can't handle accidental "+accidental+" in",word,line)
+    if not figures=="-": self.last_figures = figures
+    if not isChord and not accidental in ["","#","b"]: scoreError("Can't handle accidental "+accidental+" in",word,line)
     self.last_accidental = accidental
 
     ret = ""
@@ -559,14 +554,21 @@ class NoteheadMarkup:
     if not midi and not western:
         if ret: ret = ret.rstrip()+"\n" # try to keep the .ly code vaguely readable
         if octave=="''" and not invisTieLast: ret += r"  \once \override Score.TextScript.outside-staff-priority = 45" # inside bar numbers etc
-        if isChord and not figures.startswith("-"):
+        if isChord and not figures=="-":
             ret += chord_ret
-        elif figures.startswith('-'):
-            figureDash=u"\u2013"
+        elif figures=="-":
+            if not_angka: figureDash=u"."
+            else: figureDash=u"\u2013"
             if not type(u"")==type(""):
                 figureDash=figureDash.encode('utf-8')
             ret += r' \note-mod "'+figureDash+'" '
-        else: ret += r' \note-mod "'+str(figures)+'" ' # single note
+        else: # single, non-dash note
+            s = str(figures)
+            if not_angka and accidental:
+                u338,u20e5=u"\u0338",u"\u20e5" # TODO: the \ looks better than the / in default font
+                if not type("")==type(u""): u338,u20e5=u338.encode('utf-8'),u20e5.encode('utf-8')
+                s += {'#':u338,'b':u20e5}[accidental]
+            ret += r' \note-mod "'+s+'" '
         if self.rplacNextIfStillInBeam and leftBeams and nBeams: replaceLast = self.rplacNextIfStillInBeam # didn't need the rest-hack here after all
         self.rplacNextIfStillInBeam = None
         if placeholder_chord == "r" and use_rest_hack and nBeams and not (leftBeams and not not_angka):
@@ -654,7 +656,7 @@ class NoteheadMarkup:
             b4last, aftrlast = "", " ~"
             if tremolo and placeholder_chord.startswith("<"):
                 aftrlast = "" # can't tie this kind of tremolo as of Lilypond 2.24 (get warning: Unattached TieEvent)
-        # elif not figures.startswith('-'): 
+        # elif not figures=='-': 
         #     b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
         else:
             b4last, aftrlast = "", ""
@@ -662,7 +664,7 @@ class NoteheadMarkup:
     if figures=="x" and western: ret = r"\once \override NoteHead.style = #'cross \once \override NoteHead.no-ledgers = ##t " + ret
     if inRestHack: ret += " } " # end temporary voice for the "-" (non)-note
     elif tieEnd: ret += ' '+tieEnd # end of JianpuTie curve
-    return aftrLastNonDash,figures.startswith('-'),b4last,replaceLast,aftrlast0+aftrlast,ret, need_space_for_accidental, nBeams,octave
+    return aftrLastNonDash,figures=='-',b4last,replaceLast,aftrlast0+aftrlast,ret, need_space_for_accidental, nBeams,octave
 
 def parseNote(word,origWord,line):
     if word==".": word = "-" # (for not angka, TODO: document that this is now acceptable as an input word?)
@@ -1408,7 +1410,7 @@ def getLY(score,headers=None,have_final_barline=True):
                     aftrnext = None
                 if not_angka and "'" in octave: maxBeams=max(maxBeams,len(octave)*.8+nBeams)
                 else: maxBeams=max(maxBeams,nBeams)
-                if isInHarmonic and not midi and not western and not figures.startswith('-'): out.append(r"\flageolet ")
+                if isInHarmonic and not midi and not western and not figures=='-': out.append(r"\flageolet ")
    if notehead_markup.barPos == 0 and notehead_markup.barNo == 1: errExit("No jianpu in score %d" % scoreNo)
    if notehead_markup.inBeamGroup and not midi and not western and not notehead_markup.inBeamGroup=="restHack": out[lastPtr] += ']' # needed if ending on an incomplete beat
    if inTranspose: out.append("}")
