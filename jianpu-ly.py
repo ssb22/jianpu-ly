@@ -434,7 +434,7 @@ class NoteheadMarkup:
       self.unicode_approx = []
       self.rplacNextIfStillInBeam = None
       self.isGrace = False
-      self.last_word = None
+      self.current_chord = None
   def endScore(self):
       if self.barPos == self.startBarPos: pass
       elif os.environ.get("j2ly_sloppy_bars",""): sys.stderr.write("Wrong bar length at end of score %d ignored (j2ly_sloppy_bars set)\n" % scoreNo)
@@ -461,23 +461,17 @@ class NoteheadMarkup:
     # tremolo is "" or ":32"
     # word,line is for error handling
     if len(figures)>1:
-        # if accidental: scoreError("Accidentals in chords not yet implemented:",word,line) # see TODOs below
         if '0' in figures: scoreError("Can't have rest in chord:",word,line)
         if 'x' in figures: scoreError("Can't have percussion beat in chord:",word,line)
     self.notesHad.append(figures)
-    def get_placeholder_chord(figures):
-        if len(figures)==1:
-            return placeholders[figures]
-        elif not midi and not western: return 'c' # we'll override its appearance
-        else: return "< "+" ".join(placeholders[f] for f in list(figures))+" >"
-    placeholder_chord = get_placeholder_chord(figures)
 
-    isChord = len(figures)>1 and not figures.startswith("-")
+    isChord = len(figures)>1
     if isChord:
-        # Process chords: reuse the word to process chords. remove durations
-        chord_ret,octave,placeholder_chord = chordNotes_markup(re.sub('[qsdh.]','',word))
+        chord_ret,octave,placeholder_chord = chordNotes_markup(re.sub('[qsdh.]','',word)) # word w/out durations
         if not midi and not western: placeholder_chord = "c"
-
+    else: # not isChord
+        placeholder_chord = placeholders[figures]
+    
     invisTieLast = dashes_as_ties and self.last_figures and figures=="-" and not self.last_was_rest
     self.last_was_rest = (figures=='0' or (figures=='-' and self.last_was_rest))
     if not_angka:
@@ -498,12 +492,12 @@ class NoteheadMarkup:
             figures += self.last_figures # (so "-" + last)
             if self.barPos==0 and not midi and not western and not self.last_figures=="x": sys.stderr.write("Warning: jianpu barline-crossing tie won't be done right because your Lilypond version is older than 2.20\n")
             if self.barPos==0: tremolo = self.last_tremolo
-        if self.last_word: # last is chord
+        if self.current_chord: # a chord is currently in progress, and we're extending it with a tie
             isChord = True
-            chord_ret,octave,placeholder_chord = chordNotes_markup(re.sub('[qsdh.]','',self.last_word))
+            chord_ret,octave,placeholder_chord = chordNotes_markup(re.sub('[qsdh.]','',self.current_chord))
             if not midi and not western: placeholder_chord = "c"
-        else: 
-            placeholder_chord = get_placeholder_chord(self.last_figures)
+        else: # not a chord, so we can assume len(self.last_figures)==1
+            placeholder_chord = placeholders[self.last_figures]
             octave = self.last_octave # for MIDI or 5-line
             accidental = self.last_accidental # ditto
     else: # not invisTieLast
@@ -511,8 +505,8 @@ class NoteheadMarkup:
         if not octave in [",,,",",,",",","","'","''","'''"]: scoreError("Can't handle octave "+octave+" in",word,line)
         self.last_octave = octave
         self.last_tremolo = tremolo
-        if isChord: self.last_word = word
-        else: self.last_word = None
+        if isChord: self.current_chord = word
+        else: self.current_chord = None
     self.last_figures = figures
     if len(self.last_figures)>1 and self.last_figures[0]=='-': self.last_figures = self.last_figures[1:]
     if not accidental in ["","#","b"]: scoreError("Can't handle accidental "+accidental+" in",word,line)
