@@ -425,7 +425,7 @@ class NoteheadMarkup:
       self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.noIndent = self.raggedLast = self.separateTimesig = self.withStaff = 0
       self.keepLength = 0
       self.last_octave = self.base_octave = ""
-      self.current_accidentals = {}
+      self.current_accidentals = {} # used to predict whether Lilypond will draw the accidental or not, for beam spacing purposes
       self.barNo = 1
       self.tuplet = (1,1)
       self.last_figures = None
@@ -689,10 +689,8 @@ def parseNote(word,origWord,line):
     if octaves: octave = octaves[0]
     else: octave = ""
     accidental = "".join(c for c in word if c in "#b")
-    if len(figures) > 1:
-        # we deal with them seperately
-        octave = ""
-        accidental = ""
+    if len(figures) > 1: # octave + accidental dealt with separately BUT still need to keep one for the beaming and need_space_for_accidental logic (TODO actually current_accidentals needs rewriting for chords, but this works in most cases for now)
+        accidental = accidental[:1] # we still need to keep one for 
     return figures,nBeams,dots,octave,accidental,tremolo
 
 def write_docs():
