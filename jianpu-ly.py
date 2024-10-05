@@ -3,8 +3,8 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.810 (c) 2012-2024 Silas S. Brown
-# v1.811 (c) 2024 Unbored
+# v1.81 (c) 2012-2024 Silas S. Brown
+# v1.82 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -690,7 +690,7 @@ def parseNote(word,origWord,line):
     else: octave = ""
     accidental = "".join(c for c in word if c in "#b")
     if len(figures) > 1: # octave + accidental dealt with separately BUT still need to keep one for the beaming and need_space_for_accidental logic (TODO actually current_accidentals needs rewriting for chords, but this works in most cases for now)
-        accidental = accidental[:1] # we still need to keep one for 
+        accidental = accidental[:1]
     return figures,nBeams,dots,octave,accidental,tremolo
 
 def write_docs():
