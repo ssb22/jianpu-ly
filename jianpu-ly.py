@@ -588,7 +588,8 @@ class NoteheadMarkup:
                 if self.inBeamGroup and not self.inBeamGroup=="restHack": aftrlast0 = "] "
     if placeholder_chord.startswith("<"): ret += placeholder_chord  # chord in western or midi
     elif not isChord or figures.startswith("-"): # single note or rest
-        ret += placeholder_chord + {"":"", "#":"is", "b":"es"}[accidental]
+        ret += placeholder_chord
+        if midi or western or not not_angka: ret += {"":"", "#":"is", "b":"es"}[accidental]
         if not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''","'''":"''''",",":"",",,":",",",,,":",,"}[octave] # for MIDI + Western, put it so no-mark starts near middle C
         if add_cautionary_accidental: ret += "!"
     ret += ("%d" % length) + dots
