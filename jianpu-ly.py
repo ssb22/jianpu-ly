@@ -229,7 +229,11 @@ note-mod =
      \tweak NoteHead.text
         \markup \lower #0.5 \sans \bold #text
      #note
-   #})
+   #})"""
+    if re.search(r"(\s|^)(angka|Indonesian)(\s|$)",inDat): r += r"""
+note-mod-angka = #(define-music-function (text note) (markup? ly:music?)
+   #{ \tweak NoteHead.stencil #ly:text-interface::print
+     \tweak NoteHead.text \markup \lower #0.5 \bold #text #note #})
 """
     if inner_beams_below: r += r"""
 #(define (flip-beams grob)
@@ -561,14 +565,14 @@ class NoteheadMarkup:
             else: figureDash=u"\u2013"
             if not type(u"")==type(""):
                 figureDash=figureDash.encode('utf-8')
-            ret += r' \note-mod "'+figureDash+'" '
+            ret += (r' \note-mod-angka "' if not_angka else r' \note-mod "')+figureDash+'" '
         else: # single, non-dash note
             s = str(figures)
             if not_angka and accidental:
                 u338,u20e5=u"\u0338",u"\u20e5" # TODO: the \ looks better than the / in default font
                 if not type("")==type(u""): u338,u20e5=u338.encode('utf-8'),u20e5.encode('utf-8')
                 s += {'#':u338,'b':u20e5}[accidental]
-            ret += r' \note-mod "'+s+'" '
+            ret += (r' \note-mod-angka "' if not_angka else r' \note-mod "')+s+'" '
         if self.rplacNextIfStillInBeam and leftBeams and nBeams: replaceLast = self.rplacNextIfStillInBeam # didn't need the rest-hack here after all
         self.rplacNextIfStillInBeam = None
         if placeholder_chord == "r" and use_rest_hack and nBeams and not (leftBeams and not not_angka):
@@ -1031,7 +1035,7 @@ def chordNotes_markup(notes):
         if ',' in f['octave']: baseline += offsets[f['octave']]
         if baseline > 0:
             ret += r"\tweak #'Y-offset #%.1f " % baseline
-        ret += r'\note-mod "'+f['figure']+'" '+placeholders[f['figure']]+{"":"", "#":"is", "b":"es"}[f['accidental']]
+        ret += (r'\note-mod-angka "' if not_angka else r'\note-mod "')+f['figure']+'" '+placeholders[f['figure']]+{"":"", "#":"is", "b":"es"}[f['accidental']]
         if "," in f['octave']: ret += f['octave'][:-1]+" "
         else: ret += f['octave']+"' "
         if "," in f['octave']: ret += r"\tweak #'Y-offset #%.1f " % (baseline -0.1 - 1.2 * offsets[f['octave']])
