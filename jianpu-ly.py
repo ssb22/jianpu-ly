@@ -66,7 +66,7 @@ Tuplets: 3[ q1 q1 q1 ]
 Grace notes before: g[#45] 1
 Grace notes after: 1 ['1]g
 Grace notes with duration change: g[d45s6] 1
-Simple chords: 135 1 13 1
+Simple chords: ,13'5 1 1b3 1 (chord numbers are sorted automatically)
 Da capo: 1 1 Fine 1 1 1 1 1 1 DC
 Repeat (with alternate endings): R{ 1 1 1 } A{ 2 | 3 }
 Short repeats (percent): R4{ 1 2 }
