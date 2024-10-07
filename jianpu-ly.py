@@ -1107,7 +1107,7 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
     # TODO: Add 's' helps to silent the strange warning and show the correct beams, 
     # but extra distance is put after the grace (probably because
     # 's' means 'skip note' so it leaves space for the skipped note
-    # - we need to figure out a different way to skip the beams that
+    # - we need to figure out a different way to fix the beams that
     # doesn't add in the extra space if possible....)
     # Currently the curve is extended to make it look better
     if notemark.inBeamGroup : mr.append('s]')
