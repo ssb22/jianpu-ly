@@ -801,6 +801,10 @@ class NoteheadMarkup:
         # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
         ret += '['
         self.inBeamGroup = 1
+        if self.isGrace and self.barPos + toAdd == self.barLength:
+            # Lilypond doesn't like isolated beamed notes in \grace
+            # Add as short a skip as possible
+            ret += "s64"
     self.barPos += toAdd
     # sys.stderr.write(accidental+figure+octave+dots+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
     if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figures,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
@@ -1071,6 +1075,15 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
     if not type("")==type(u""): thinspace = thinspace.encode('utf-8')
     notes = grace_octave_fix(notes) # ensures octaves come before notes
     notemark = NoteheadMarkup(isGrace=True)
+    # Calculate length of grace section and tell
+    # NoteheadMarkup that's the "bar length", so it
+    # ends the beams at the end of it for us
+    notemark.barLength = 0
+    curLen = 4 # default semiquaver, in 64th notes
+    for n in notes:
+        curLen = {'q':8,'s':4,'d':2,'h':1}.get(n,curLen)
+        if '0'<=n<='9': notemark.barLength += curLen
+    notemark.beatLength = notemark.barLength
     accidental = ""
     beams = 2 # default semiquaver
     figure = ""
@@ -1104,14 +1117,7 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
             beams = 2
             figure = ""
             octave = ""
-    # TODO: Add 's' helps to silent the strange warning and show the correct beams, 
-    # but extra distance is put after the grace (probably because
-    # 's' means 'skip note' so it leaves space for the skipped note
-    # - we need to figure out a different way to fix the beams that
-    # doesn't add in the extra space if possible....)
-    # Currently the curve is extended to make it look better
-    if notemark.inBeamGroup : mr.append('s]')
-    mr.insert(-1, r"\jianpuGraceCurveEnd ")
+    mr.append(r"\jianpuGraceCurveEnd ")
     mr = ''.join(mr)
     offset = "-2.5 . 0" if isAfter else "-0.5 . -0.5"
     return mr
