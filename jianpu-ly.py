@@ -107,7 +107,7 @@ def lilypond_minor_version():
         m=re.match(r".*ond-2\.([1-9][0-9])\.",cmd)
         if m: _lilypond_minor_version = int(m.group(1))
         else: _lilypond_minor_version = int(getoutput(cmd+" --version").split()[2].split('.')[1])
-    else: _lilypond_minor_version = 20 # 2.20
+    else: _lilypond_minor_version = 22 # assume 2.22 if we can't figure it out
     return _lilypond_minor_version
 
 def lilypond_command():
@@ -1071,6 +1071,7 @@ def fix_fullwidth(t):
     else: return utext.encode('utf-8')
 
 def graceNotes_markup(notes,isAfter,harmonic=False):
+    if lilypond_minor_version()<22: errExit("grace notes requires Lilypond 2.22+, we found 2."+str(lilypond_minor_version()))
     thinspace = u'\u2009'
     if not type("")==type(u""): thinspace = thinspace.encode('utf-8')
     notes = grace_octave_fix(notes) # ensures octaves come before notes
