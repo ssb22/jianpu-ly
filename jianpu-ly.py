@@ -272,7 +272,7 @@ note-mod-angka = #(define-music-function (text note) (markup? ly:music?)
           (x-start (* 0.5 (+ (car X-ext) (cdr X-ext))))
           (y-start (- (car Y-ext) 0.2))
           (x-start2 (if (eq? direction RIGHT)(+ x-start 0.5)(- x-start 0.5)))
-          (x-end (if (eq? direction RIGHT)(+ (cdr X-ext) 1)(- (car X-ext) 0.2)))
+          (x-end (if (eq? direction RIGHT)(+ (cdr X-ext) 0.2)(- (car X-ext) 0.2)))
           (y-end (- y-start 0.5))
           (stil (ly:make-stencil `(path 0.1
                                         (moveto ,x-start ,y-start
@@ -803,8 +803,8 @@ class NoteheadMarkup:
         self.inBeamGroup = 1
         if self.isGrace and self.barPos + toAdd == self.barLength:
             # Lilypond doesn't like isolated beamed notes in \grace
-            # Add as short a skip as possible
-            ret += "s64"
+            # Add simply 's' is the shortest
+            ret += "s"
     self.barPos += toAdd
     if self.isGrace and self.barPos == self.barLength:
         ret = r" \jianpuGraceCurveEnd " + ret
@@ -1085,7 +1085,9 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
     curLen = 4 # default semiquaver, in 64th notes
     for n in notes:
         curLen = {'q':8,'s':4,'d':2,'h':1}.get(n,curLen)
-        if '0'<=n<='9': notemark.barLength += curLen
+        if '0'<=n<='9': 
+            notemark.barLength += curLen
+            curLen = 4
     notemark.beatLength = notemark.barLength
     accidental = ""
     beams = 2 # default semiquaver
