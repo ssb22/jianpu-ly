@@ -806,6 +806,8 @@ class NoteheadMarkup:
             # Add as short a skip as possible
             ret += "s64"
     self.barPos += toAdd
+    if self.isGrace and self.barPos == self.barLength:
+        ret = r" \jianpuGraceCurveEnd " + ret
     # sys.stderr.write(accidental+figure+octave+dots+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
     if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figures,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
     if self.barPos%self.beatLength == 0 and self.inBeamGroup: # (self.inBeamGroup is set only if not midi/western)
@@ -1118,7 +1120,6 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
             beams = 2
             figure = ""
             octave = ""
-    mr.append(r"\jianpuGraceCurveEnd ")
     mr = ''.join(mr)
     offset = "-2.5 . 0" if isAfter else "-0.5 . -0.5"
     return mr
