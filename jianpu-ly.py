@@ -65,7 +65,7 @@ Add a Western staff doubling the tune: WithStaff
 Tuplets: 3[ q1 q1 q1 ]
 Grace notes before: g[#45] 1
 Grace notes after: 1 ['1]g
-Grace notes with duration change: g[d45s6] 1
+Grace notes with duration change: g[d4d5s6] 1
 Simple chords: ,13'5 1 1b3 1 (chord numbers are sorted automatically)
 Da capo: 1 1 Fine 1 1 1 1 1 1 DC
 Repeat (with alternate endings): R{ 1 1 1 } A{ 2 | 3 }
@@ -1087,7 +1087,7 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
         curLen = {'q':8,'s':4,'d':2,'h':1}.get(n,curLen)
         if '0'<=n<='9': 
             notemark.barLength += curLen
-            curLen = 4
+            curLen = 4 # reset after each note
     notemark.beatLength = notemark.barLength
     accidental = ""
     beams = 2 # default semiquaver
@@ -1119,7 +1119,7 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
             mr.append(notemark(figure, beams, "", octave, accidental, "", "", "")[5])
             if harmonic: mr[-1]+=r" \flageolet " # deal with harmonic articulations
             accidental = ""
-            beams = 2
+            beams = 2 # reset after each note
             figure = ""
             octave = ""
     mr = ''.join(mr)
