@@ -4,7 +4,7 @@
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
 # v1.81 (c) 2012-2024 Silas S. Brown
-# v1.821 (c) 2024 Unbored
+# v1.822 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -1105,8 +1105,11 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
             figure = ""
             octave = ""
     # TODO: Add 's' helps to silent the strange warning and show the correct beams, 
-    # but extra distance is put after the grace. don't know why yet.
-    # Currently the curve is extended to make it looks better
+    # but extra distance is put after the grace (probably because
+    # 's' means 'skip note' so it leaves space for the skipped note
+    # - we need to figure out a different way to skip the beams that
+    # doesn't add in the extra space if possible....)
+    # Currently the curve is extended to make it look better
     if notemark.inBeamGroup : mr.append('s]')
     mr.insert(-1, r"\jianpuGraceCurveEnd ")
     mr = ''.join(mr)
