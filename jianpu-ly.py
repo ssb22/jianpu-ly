@@ -134,7 +134,7 @@ three_dots = u"\u22EE"
 if not type(u"")==type(""): three_dots = three_dots.encode('utf-8') # Python 2
 
 # grace height can be adjusted if necessary
-grace_height = 3.5
+grace_height = 2.5
 
 def all_scores_start(inDat):
     r = r"""\version "2.%d.0"
@@ -801,13 +801,16 @@ class NoteheadMarkup:
         # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
         ret += '['
         self.inBeamGroup = 1
-        if self.isGrace and self.barPos + toAdd == self.barLength:
-            # Lilypond doesn't like isolated beamed notes in \grace
-            # Add simply 's' is the shortest
-            ret += "s"
     self.barPos += toAdd
     if self.isGrace and self.barPos == self.barLength:
+        is_isolated_note = ret.endswith("[")
         ret = r" \jianpuGraceCurveEnd " + ret
+        if is_isolated_note:
+            # Lilypond doesn't like isolated beamed notes in \grace
+            # so introduce a skip note for it to beam to.
+            # Putting the skip note BEFORE the grace note (not after)
+            # might help if aligning jianpu with 5-line staves.
+            ret = "s%d [ %s" % (length,ret.replace("[",""))
     # sys.stderr.write(accidental+figure+octave+dots+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
     if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figures,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
     if self.barPos%self.beatLength == 0 and self.inBeamGroup: # (self.inBeamGroup is set only if not midi/western)
