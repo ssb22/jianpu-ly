@@ -513,12 +513,6 @@ def jianpu_staff_start(inst=None,withStaff=False):
     %% Get rid of the stave but not the barlines:
     \override StaffSymbol #'line-count = #0 %% tested in 2.15.40, 2.16.2, 2.18.0, 2.18.2, 2.20.0 and 2.22.2
     \override BarLine #'bar-extent = #'(-2 . 2) %% LilyPond 2.18: please make barlines as high as the time signature even though we're on a RhythmicStaff (2.16 and 2.15 don't need this although its presence doesn't hurt; Issue 3685 seems to indicate they'll fix it post-2.18)
-    }
-    { """
-    j,voiceName = jianpu_voice_start()
-    r += j+r"""
-    \override Staff.TimeSignature #'style = #'numbered
-    \override Staff.Stem #'transparent = ##t
     $(add-grace-property 'Voice 'Stem 'direction DOWN)
     $(add-grace-property 'Voice 'Slur 'direction UP)
     $(add-grace-property 'Voice 'Stem 'length-fraction 0.5)
@@ -527,7 +521,13 @@ def jianpu_staff_start(inst=None,withStaff=False):
     $(add-grace-property 'Voice 'Beam 'after-line-breaking flip-beams)
     $(add-grace-property 'Voice 'Beam 'Y-offset %.1f)
     $(add-grace-property 'Voice 'NoteHead 'Y-offset %.1f)
-    """ % (grace_height, grace_height)
+    }
+    { """ % (grace_height, grace_height)
+    j,voiceName = jianpu_voice_start()
+    r += j+r"""
+    \override Staff.TimeSignature #'style = #'numbered
+    \override Staff.Stem #'transparent = ##t
+    """
     return r, voiceName
 def jianpu_staff_end():
      # \bar "|." is added separately if there's not a DC etc
