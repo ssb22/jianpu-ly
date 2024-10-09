@@ -134,7 +134,7 @@ three_dots = u"\u22EE"
 if not type(u"")==type(""): three_dots = three_dots.encode('utf-8') # Python 2
 
 # grace height can be adjusted if necessary
-grace_height = 2.5
+grace_height = 3.5
 
 def all_scores_start(inDat):
     r = r"""\version "2.%d.0"
@@ -610,7 +610,7 @@ def addOctaves(octave1,octave2):
     return octave2
 
 class NoteheadMarkup:
-  def __init__(self,isGrace=False):
+  def __init__(self,isGrace=0):
       self.initOneScore()
       self.isGrace = isGrace
   def initOneScore(self):
@@ -627,7 +627,7 @@ class NoteheadMarkup:
       self.notesHad = []
       self.unicode_approx = []
       self.rplacNextIfStillInBeam = None
-      self.isGrace = False
+      self.isGrace = 0
       self.current_chord = None
   def endScore(self):
       if self.barPos == self.startBarPos: pass
@@ -804,13 +804,17 @@ class NoteheadMarkup:
     self.barPos += toAdd
     if self.isGrace and self.barPos == self.barLength:
         is_isolated_note = ret.endswith("[")
-        ret = r" \jianpuGraceCurveEnd " + ret
         if is_isolated_note:
             # Lilypond doesn't like isolated beamed notes in \grace
             # so introduce a skip note for it to beam to.
-            # Putting the skip note BEFORE the grace note (not after)
+            # Putting the skip note BEFORE the grace note or AFTER the afterGrace note
             # might help if aligning jianpu with 5-line staves.
-            ret = "s%d [ %s" % (length,ret.replace("[",""))
+            if self.isGrace == 1:
+                ret = "s%d [ \\jianpuGraceCurveEnd %s" % (length,ret.replace("[",""))
+            else:
+                ret += r" \jianpuGraceCurveEnd s%d" % length
+        else:
+            ret = r" \jianpuGraceCurveEnd " + ret 
     # sys.stderr.write(accidental+figure+octave+dots+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
     if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figures,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
     if self.barPos%self.beatLength == 0 and self.inBeamGroup: # (self.inBeamGroup is set only if not midi/western)
@@ -1080,7 +1084,7 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
     thinspace = u'\u2009'
     if not type("")==type(u""): thinspace = thinspace.encode('utf-8')
     notes = grace_octave_fix(notes) # ensures octaves come before notes
-    notemark = NoteheadMarkup(isGrace=True)
+    notemark = NoteheadMarkup(isGrace=2 if isAfter else 1)
     # Calculate length of grace section and tell
     # NoteheadMarkup that's the "bar length", so it
     # ends the beams at the end of it for us
