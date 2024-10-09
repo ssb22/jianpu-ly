@@ -1,6 +1,6 @@
 # -*- mode: Makefile -*-
 # small demonstration for website:
 jianpu-ly.png: jianpu-ly.py Makefile.demo
-	(echo "#(ly:set-option 'crop #t)";echo "q1 \\mp s3 s5 q1'. sb7 ~ sb7 s6 s4 s#4 5" | python3 jianpu-ly.py) > jianpu-ly.ly
+	(echo "#(ly:set-option 'crop #t) #(ly:set-option 'anti-alias-factor 8)";echo "q1 \\mp s3 s5 q1'. sb7 ~ sb7 s6 s4 s#4 5" | python3 jianpu-ly.py) > jianpu-ly.ly
 	lilypond --png jianpu-ly.ly
 	convert -trim jianpu-ly.cropped.png $@
