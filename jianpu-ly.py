@@ -4,7 +4,7 @@
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
 # v1.81 (c) 2012-2024 Silas S. Brown
-# v1.821 (c) 2024 Unbored
+# v1.822 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -65,7 +65,7 @@ Add a Western staff doubling the tune: WithStaff
 Tuplets: 3[ q1 q1 q1 ]
 Grace notes before: g[#45] 1
 Grace notes after: 1 ['1]g
-Grace notes with duration change: g[d45s6] 1
+Grace notes with durations: g[d4d5s6] 1
 Simple chords: ,13'5 1 1b3 1 (chord numbers are sorted automatically)
 Da capo: 1 1 Fine 1 1 1 1 1 1 DC
 Repeat (with alternate endings): R{ 1 1 1 } A{ 2 | 3 }
@@ -107,7 +107,7 @@ def lilypond_minor_version():
         m=re.match(r".*ond-2\.([1-9][0-9])\.",cmd)
         if m: _lilypond_minor_version = int(m.group(1))
         else: _lilypond_minor_version = int(getoutput(cmd+" --version").split()[2].split('.')[1])
-    else: _lilypond_minor_version = 20 # 2.20
+    else: _lilypond_minor_version = 22 # assume 2.22 if we can't figure it out
     return _lilypond_minor_version
 
 def lilypond_command():
@@ -132,6 +132,9 @@ lyric_size = float(os.environ.get("j2ly_lyric_size",staff_size))
 
 three_dots = u"\u22EE"
 if not type(u"")==type(""): three_dots = three_dots.encode('utf-8') # Python 2
+
+# grace height can be adjusted if necessary
+grace_height = 3.5
 
 def all_scores_start(inDat):
     r = r"""\version "2.%d.0"
@@ -247,6 +250,176 @@ note-mod-angka = #(define-music-function (text note) (markup? ly:music?)
         (* (- (car (ly:stencil-extent stl Y)) (car (ly:stencil-extent centered-stl Y))) 0) Y))
      (cons 0 -0.8))))
 """
+# Draw grace curve according to start and end mark.
+# Modify from https://lists.gnu.org/archive/html/lilypond-user/2015-01/msg00142.html
+    r += r"""
+%=======================================================
+#(define-event-class 'jianpu-grace-curve-event 'span-event)
+
+#(define (add-grob-definition grob-name grob-entry)
+   (set! all-grob-descriptions
+         (cons ((@@ (lily) completize-grob-entry)
+                (cons grob-name grob-entry))
+               all-grob-descriptions)))
+
+#(define (jianpu-grace-curve-stencil grob)
+   (let* ((elts (ly:grob-object grob 'elements))
+          (refp-X (ly:grob-common-refpoint-of-array grob elts X))
+          (X-ext (ly:relative-group-extent elts refp-X X))
+          (refp-Y (ly:grob-common-refpoint-of-array grob elts Y))
+          (Y-ext (ly:relative-group-extent elts refp-Y Y))
+          (direction (ly:grob-property grob 'direction RIGHT))
+          (x-start (* 0.5 (+ (car X-ext) (cdr X-ext))))
+          (y-start (- (car Y-ext) 0.2))
+          (x-start2 (if (eq? direction RIGHT)(+ x-start 0.5)(- x-start 0.5)))
+          (x-end (if (eq? direction RIGHT)(+ (cdr X-ext) 0.2)(- (car X-ext) 0.2)))
+          (y-end (- y-start 0.5))
+          (stil (ly:make-stencil `(path 0.1
+                                        (moveto ,x-start ,y-start
+                                         curveto ,x-start ,y-end ,x-start ,y-end ,x-start2 ,y-end
+                                         lineto ,x-end ,y-end))
+                                  X-ext
+                                  Y-ext))
+          (offset (ly:grob-relative-coordinate grob refp-X X)))
+     (ly:stencil-translate-axis stil (- offset) X)))
+
+#(add-grob-definition
+  'JianpuGraceCurve
+  `(
+     (stencil . ,jianpu-grace-curve-stencil)
+     (meta . ((class . Spanner)
+              (interfaces . ())))))
+
+#(define jianpu-grace-curve-types
+   '(
+      (JianpuGraceCurveEvent
+       . ((description . "Used to signal where curve encompassing music start and stop.")
+          (types . (general-music jianpu-grace-curve-event span-event event))
+          ))
+      ))
+
+#(set!
+  jianpu-grace-curve-types
+  (map (lambda (x)
+         (set-object-property! (car x)
+           'music-description
+           (cdr (assq 'description (cdr x))))
+         (let ((lst (cdr x)))
+           (set! lst (assoc-set! lst 'name (car x)))
+           (set! lst (assq-remove! lst 'description))
+           (hashq-set! music-name-to-property-table (car x) lst)
+           (cons (car x) lst)))
+    jianpu-grace-curve-types))
+
+#(set! music-descriptions
+       (append jianpu-grace-curve-types music-descriptions))
+
+#(set! music-descriptions
+       (sort music-descriptions alist<?))
+
+
+#(define (add-bound-item spanner item)
+   (if (null? (ly:spanner-bound spanner LEFT))
+       (ly:spanner-set-bound! spanner LEFT item)
+       (ly:spanner-set-bound! spanner RIGHT item)))
+
+jianpuGraceCurveEngraver =
+#(lambda (context)
+   (let ((span '())
+         (finished '())
+         (current-event '())
+         (event-start '())
+         (event-stop '()))
+     
+     `((listeners
+        (jianpu-grace-curve-event .
+          ,(lambda (engraver event)
+             (if (= START (ly:event-property event 'span-direction))
+                 (set! event-start event)
+                 (set! event-stop event)))))
+       
+       (acknowledgers
+        (note-column-interface .
+          ,(lambda (engraver grob source-engraver)
+             (if (ly:spanner? span)
+                 (begin
+                  (ly:pointer-group-interface::add-grob span 'elements grob)
+                  (add-bound-item span grob)))
+             (if (ly:spanner? finished)
+                 (begin
+                  (ly:pointer-group-interface::add-grob finished 'elements grob)
+                  (add-bound-item finished grob)))))
+        
+        (inline-accidental-interface .
+          ,(lambda (engraver grob source-engraver)
+             (if (ly:spanner? span)
+                 (begin
+                  (ly:pointer-group-interface::add-grob span 'elements grob)))
+             (if (ly:spanner? finished)
+                 (ly:pointer-group-interface::add-grob finished 'elements grob))))
+        
+        (script-interface .
+          ,(lambda (engraver grob source-engraver)
+             (if (ly:spanner? span)
+                 (begin
+                  (ly:pointer-group-interface::add-grob span 'elements grob)))
+             (if (ly:spanner? finished)
+                 (ly:pointer-group-interface::add-grob finished 'elements grob))))
+        
+        ;; add additional interfaces to acknowledge here
+        )
+       
+       (process-music .
+         ,(lambda (trans)
+            (if (ly:stream-event? event-stop)
+                (if (null? span)
+                    (ly:warning "No start to this curve.")
+                    (begin
+                     (set! finished span)
+                     (ly:engraver-announce-end-grob trans finished event-start)
+                     (set! span '())
+                     (set! event-stop '()))))
+            (if (ly:stream-event? event-start)
+                (begin
+                 (set! span (ly:engraver-make-grob trans 'JianpuGraceCurve event-start))
+                 (set! event-start '())))))
+       
+       (stop-translation-timestep .
+         ,(lambda (trans)
+            (if (and (ly:spanner? span)
+                     (null? (ly:spanner-bound span LEFT)))
+                (ly:spanner-set-bound! span LEFT
+                  (ly:context-property context 'currentMusicalColumn)))
+            (if (ly:spanner? finished)
+                (begin
+                 (if (null? (ly:spanner-bound finished RIGHT))
+                     (ly:spanner-set-bound! finished RIGHT
+                       (ly:context-property context 'currentMusicalColumn)))
+                 (set! finished '())
+                 (set! event-start '())
+                 (set! event-stop '())))))
+       
+       (finalize
+        (lambda (trans)
+          (if (ly:spanner? finished)
+              (begin
+               (if (null? (ly:spanner-bound finished RIGHT))
+                   (set! (ly:spanner-bound finished RIGHT)
+                         (ly:context-property context 'currentMusicalColumn)))
+               (set! finished '())))
+          (if (ly:spanner? span)
+              (begin
+               (ly:warning "unterminated curve :-(")
+               (ly:grob-suicide! span)
+               (set! span '()))))))))
+
+jianpuGraceCurveStart =
+#(make-span-event 'JianpuGraceCurveEvent START)
+
+jianpuGraceCurveEnd =
+#(make-span-event 'JianpuGraceCurveEvent STOP)
+%===========================================================
+"""
     return r+"\n%{ The jianpu-ly input was:\n" + inDat.strip().replace("%}","%/}")+"\n%}\n\n"
 
 def score_start():
@@ -275,7 +448,16 @@ def score_end(**headers):
     if notehead_markup.raggedLast: layoutExtra += ' ragged-last = ##t '
     if notehead_markup.noBarNums: layoutExtra += r' \context { \Score \remove "Bar_number_engraver" } '
     if midi: ret += r"\midi { \context { \Score tempoWholesPerMinute = #(ly:make-moment 84 4)}}" # will be overridden by any \tempo command used later
-    else: ret += r"\layout{"+layoutExtra+"}"
+    else: ret += r"\layout{"+layoutExtra+r"""
+  \context {
+    \Global
+    \grobdescriptions #all-grob-descriptions
+  }
+  \context {
+    \Score
+    \consists \jianpuGraceCurveEngraver % for spans
+  }
+""" + "}"
     return ret + " }"
 
 def uniqName():
@@ -331,8 +513,16 @@ def jianpu_staff_start(inst=None,withStaff=False):
     %% Get rid of the stave but not the barlines:
     \override StaffSymbol #'line-count = #0 %% tested in 2.15.40, 2.16.2, 2.18.0, 2.18.2, 2.20.0 and 2.22.2
     \override BarLine #'bar-extent = #'(-2 . 2) %% LilyPond 2.18: please make barlines as high as the time signature even though we're on a RhythmicStaff (2.16 and 2.15 don't need this although its presence doesn't hurt; Issue 3685 seems to indicate they'll fix it post-2.18)
+    $(add-grace-property 'Voice 'Stem 'direction DOWN)
+    $(add-grace-property 'Voice 'Slur 'direction UP)
+    $(add-grace-property 'Voice 'Stem 'length-fraction 0.5)
+    $(add-grace-property 'Voice 'Beam 'beam-thickness 0.1)
+    $(add-grace-property 'Voice 'Beam 'length-fraction 0.3)
+    $(add-grace-property 'Voice 'Beam 'after-line-breaking flip-beams)
+    $(add-grace-property 'Voice 'Beam 'Y-offset %.1f)
+    $(add-grace-property 'Voice 'NoteHead 'Y-offset %.1f)
     }
-    { """
+    { """ % (grace_height, grace_height)
     j,voiceName = jianpu_voice_start()
     r += j+r"""
     \override Staff.TimeSignature #'style = #'numbered
@@ -420,7 +610,7 @@ def addOctaves(octave1,octave2):
     return octave2
 
 class NoteheadMarkup:
-  def __init__(self,isGrace=False):
+  def __init__(self,isGrace=0):
       self.initOneScore()
       self.isGrace = isGrace
   def initOneScore(self):
@@ -437,7 +627,7 @@ class NoteheadMarkup:
       self.notesHad = []
       self.unicode_approx = []
       self.rplacNextIfStillInBeam = None
-      self.isGrace = False
+      self.isGrace = 0
       self.current_chord = None
   def endScore(self):
       if self.barPos == self.startBarPos: pass
@@ -612,6 +802,19 @@ class NoteheadMarkup:
         ret += '['
         self.inBeamGroup = 1
     self.barPos += toAdd
+    if self.isGrace and self.barPos == self.barLength:
+        is_isolated_note = ret.endswith("[")
+        if is_isolated_note:
+            # Lilypond doesn't like isolated beamed notes in \grace
+            # so introduce a skip note for it to beam to.
+            # Putting the skip note BEFORE the grace note or AFTER the afterGrace note
+            # might help if aligning jianpu with 5-line staves.
+            if self.isGrace == 1:
+                ret = "s%d [ \\jianpuGraceCurveEnd %s" % (length,ret.replace("[",""))
+            else:
+                ret += r" \jianpuGraceCurveEnd s%d" % length
+        else:
+            ret = r" \jianpuGraceCurveEnd " + ret 
     # sys.stderr.write(accidental+figure+octave+dots+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
     if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figures,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
     if self.barPos%self.beatLength == 0 and self.inBeamGroup: # (self.inBeamGroup is set only if not midi/western)
@@ -637,19 +840,22 @@ class NoteheadMarkup:
                    ",,,":r"-\tweak #'Y-offset #-2.7 ",
                 }
           ret += oDict.get(octave,"")
+      elif self.isGrace:
+          oDict = {",":r"-\tweak #'Y-offset #%.1f " % (grace_height-1-nBeams*0.3),
+                   ",,":r"-\tweak #'Y-offset #%.1f " % (grace_height-1.6-nBeams*0.3),
+                   ",,,":r"-\tweak #'Y-offset #%.1f " % (grace_height-2-nBeams*0.3),
+                }
+          ret += oDict.get(octave,"")
       # Ugly fix for grace dot positions
       x_offset=0.6
-      extra_offset=0
-      if self.isGrace: 
-          x_offset=0.4
-          extra_offset=-1.0
+      if self.isGrace: x_offset=0.4
       oDict = {"":"",
             "'":"^.",
-            "''":r"-\tweak #'X-offset #%f ^\two-dots " % x_offset,
-            "'''":r"-\tweak #'X-offset #%f ^\three-dots " % x_offset,
-            ",":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _. " % (x_offset,extra_offset),
-            ",,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\two-dots " % (x_offset,extra_offset),
-            ",,,":r"-\tweak #'X-offset #%f -\tweak #'extra-offset #'(0 . %f) _\three-dots " % (x_offset,extra_offset)}
+            "''":r"-\tweak #'X-offset #%.1f ^\two-dots " % x_offset,
+            "'''":r"-\tweak #'X-offset #%.1f ^\three-dots " % x_offset,
+            ",":r"-\tweak #'X-offset #%.1f _. " % x_offset,
+            ",,":r"-\tweak #'X-offset #%.1f _\two-dots " % x_offset,
+            ",,,":r"-\tweak #'X-offset #%.1f _\three-dots " % x_offset}
       if not_angka: oDict.update({
               "'":r"-\tweak #'extra-offset #'(0.4 . 2.7) -\markup{\bold .}",
               "''":r"-\tweak #'extra-offset #'(0.4 . 3.5) -\markup{\bold :}",
@@ -874,18 +1080,29 @@ def fix_fullwidth(t):
     else: return utext.encode('utf-8')
 
 def graceNotes_markup(notes,isAfter,harmonic=False):
-    if isAfter: cmd = "jianpu-grace-after"
-    else: cmd = "jianpu-grace"
-    r = [] ; aftrNext = None
+    if lilypond_minor_version()<22: errExit("grace notes requires Lilypond 2.22+, we found 2."+str(lilypond_minor_version()))
     thinspace = u'\u2009'
     if not type("")==type(u""): thinspace = thinspace.encode('utf-8')
     notes = grace_octave_fix(notes) # ensures octaves come before notes
-    notemark = NoteheadMarkup(isGrace=True)
+    notemark = NoteheadMarkup(isGrace=2 if isAfter else 1)
+    # Calculate length of grace section and tell
+    # NoteheadMarkup that's the "bar length", so it
+    # ends the beams at the end of it for us
+    notemark.barLength = 0
+    curLen = 4 # default semiquaver, in 64th notes
+    for n in notes:
+        curLen = {'q':8,'s':4,'d':2,'h':1}.get(n,curLen)
+        if '0'<=n<='9': 
+            notemark.barLength += curLen
+            curLen = 4 # reset after each note
+    notemark.beatLength = notemark.barLength
     accidental = ""
     beams = 2 # default semiquaver
     figure = ""
     octave = ""
     mr = []
+    if isAfter: mr.append(r"\once \override Score.JianpuGraceCurve.direction = #LEFT ")
+    mr.append(r"\jianpuGraceCurveStart ")
     for i in xrange(len(notes)):
         n = notes[i]
         if n=='#':
@@ -907,15 +1124,14 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
             # number should be the last char of a note
             figure = n
             mr.append(notemark(figure, beams, "", octave, accidental, "", "", "")[5])
-            if harmonic: mr.append(r"\flageolet ") # deal with harmonic articulations
+            if harmonic: mr[-1]+=r" \flageolet " # deal with harmonic articulations
             accidental = ""
-            beams = 2
+            beams = 2 # reset after each note
             figure = ""
             octave = ""
-    if notemark.inBeamGroup : mr.append(']')
     mr = ''.join(mr)
     offset = "-2.5 . 0" if isAfter else "-0.5 . -0.5"
-    return r"^\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside ^\tweak #'extra-offset #'(%s) ^\markup \%s { %s }" % (offset,cmd,mr)
+    return mr
 def grace_octave_fix(notes): return re.sub(
         "(.*)([1-7])([^1-7]+)$",
         lambda m:grace_octave_fix(m.group(1))+m.group(3)+m.group(2),
@@ -1257,130 +1473,10 @@ def getLY(score,headers=None,have_final_barline=True):
                 notehead_markup.tuplet = (1,1)
             elif re.match(r"g\[[#b',1-9qsdh]+\]$",word):
                 if midi or western: out.append(r"\grace { " + gracenotes_western(word[2:-1]) + " }")
-                else:
-                    aftrnext = graceNotes_markup(word[2:-1],0,isInHarmonic)
-                    if not notehead_markup.withStaff: out.append(r"\once \textLengthOn ")
-                    if not defined_jianpuGrace:
-                        defined_jianpuGrace = True
-                        # TODO: jianpu-grace and jianpu-grace-after code are mostly duplcated
-                        out.append(r"""                                   
-#(define-markup-command (jianpu-grace-curve layout props text)
-(markup?) "Draw right-pointing jianpu grace under text."
-(let ((textWidth (cdr (ly:stencil-extent (interpret-markup layout props (markup (#:fontsize -4 text))) 0))))
-(interpret-markup layout props
-(markup
-  #:line
-  (#:right-align
-   (#:override
-    (cons (quote baseline-skip) 0.2)
-    (#:column
-     (#:line
-      (#:fontsize -4 text)
-      #:line
-      (#:pad-to-box
-       (cons -0.1 0)  ; X padding before grace
-       (cons -1.6 0)  ; affects height of grace
-       (#:path
-        0.1
-        (list (list (quote moveto) (* textWidth 0.5) -0.3)
-              (list (quote curveto) (* textWidth 0.5) -1 (* textWidth 0.5) -1 textWidth -1)))))))))))) 
-                                   
-#(define-markup-command (jianpu-grace layout props text) (string-or-music?)
-   (interpret-markup layout props
-                     #{
-                       \markup  \jianpu-grace-curve  {
-                         \score{
-                           \layout {indent = 0}
-                           \new RhythmicStaff \with {
-                             \consists "Accidental_engraver"
-                             %% Get rid of the stave but not the barlines:
-                             \override StaffSymbol.line-count = #0 %% tested in 2.15.40, 2.16.2, 2.18.0, 2.18.2, 2.20.0 and 2.22.2
-                             \override BarLine.bar-extent = #'(-2 . 2) %% LilyPond 2.18: please make barlines as high as the time signature even though we're on a RhythmicStaff (2.16 and 2.15 don't need this although its presence doesn't hurt; Issue 3685 seems to indicate they'll fix it post-2.18)
-                             \magnifyStaff #(magstep -4)
-                             \remove Time_signature_engraver
-                           }
-                           {
-                             \new Voice="G" {
-                               \override Beam.transparent = ##f
-                               \override Stem.direction = #DOWN
-                               \override Tie.staff-position = #2.5
-                               \tupletUp
-                               \override Stem.length-fraction = #0
-                               \override Beam.beam-thickness = #0.1
-                               \override Beam.length-fraction = #0.5""" + (r" \override Beam.after-line-breaking = #flip-beams" if inner_beams_below else "") + r"""
-                               \override Voice.Rest.style = #'neomensural % this size tends to line up better (we'll override the appearance anyway)
-                               \override Accidental.font-size = #-4
-                               \override TupletBracket.bracket-visibility = ##t
-                               \set Voice.chordChanges = ##t %% 2.19 bug workaround
-
-                               \override Staff.TimeSignature.style = #'numbered
-                               \override Staff.Stem.transparent = ##t
-                               #text
-                       }}}}
-                     #}))
-                                   """)
+                else: out.append(r"\grace { " + graceNotes_markup(word[2:-1],0,isInHarmonic) + " }")
             elif re.match(r"\[[#b',1-9,q,s,d,h]+\]g$",word):
                 if midi or western: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + gracenotes_western(word[1:-2]) + " }"
-                else:
-                    if not notehead_markup.withStaff:
-                        out[lastPtr] = r"\once \textLengthOn " + out[lastPtr]
-                    out.insert(lastPtr+1,graceNotes_markup(word[1:-2],1,isInHarmonic))
-                    if not defined_JGR:
-                        defined_JGR = True
-                        out[lastPtr] = r"""#(define-markup-command (jianpu-grace-after-curve layout props text)
-(markup?) "Draw left-pointing jianpu grace under text."
-(let ((textWidth (cdr (ly:stencil-extent (interpret-markup layout props (markup (#:fontsize -4 text))) 0))))
-(interpret-markup layout props
-(markup
-  #:line
-  (#:halign -4
-   (#:override
-    (cons (quote baseline-skip) 0.2)
-    (#:column
-     (#:line
-      (#:fontsize -4 text)
-      #:line
-      (#:pad-to-box (cons 0 0)
-       (cons -1.6 0)  ; affects height of grace
-      (#:path
-       0.1
-       (list (list (quote moveto) (* textWidth 0.5) -0.3)
-             (list (quote curveto) (* textWidth 0.5) -1 (* textWidth 0.5) -1 0 -1)))))))))))) 
-             
-#(define-markup-command (jianpu-grace-after layout props text) (string-or-music?)
-   (interpret-markup layout props
-                     #{
-                       \markup  \jianpu-grace-after-curve  {
-                         \score{
-                           \layout {indent = 0}
-                           \new RhythmicStaff \with {
-                             \consists "Accidental_engraver"
-                             %% Get rid of the stave but not the barlines:
-                             \override StaffSymbol.line-count = #0 %% tested in 2.15.40, 2.16.2, 2.18.0, 2.18.2, 2.20.0 and 2.22.2
-                             \override BarLine.bar-extent = #'(-2 . 2) %% LilyPond 2.18: please make barlines as high as the time signature even though we're on a RhythmicStaff (2.16 and 2.15 don't need this although its presence doesn't hurt; Issue 3685 seems to indicate they'll fix it post-2.18)
-                             \magnifyStaff #(magstep -4)
-                             \remove Time_signature_engraver
-                           }
-                           {
-                             \new Voice="G" {
-                               \override Beam.transparent = ##f
-                               \override Stem.direction = #DOWN
-                               \override Tie.staff-position = #2.5
-                               \tupletUp
-                               \override Stem.length-fraction = #0
-                               \override Beam.beam-thickness = #0.1
-                               \override Beam.length-fraction = #0.5""" + (r" \override Beam.after-line-breaking = #flip-beams" if inner_beams_below else "") + r"""
-                               \override Voice.Rest.style = #'neomensural % this size tends to line up better (we'll override the appearance anyway)
-                               \override Accidental.font-size = #-4
-                               \override TupletBracket.bracket-visibility = ##t
-                               \set Voice.chordChanges = ##t %% 2.19 bug workaround
-
-                               \override Staff.TimeSignature.style = #'numbered
-                               \override Staff.Stem.transparent = ##t
-                               #text
-                       }}}}
-                     #}))
-             """ + out[lastPtr]
+                else: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + graceNotes_markup(word[1:-2],1,isInHarmonic) + " }"
             elif word=="Fine":
                 need_final_barline = False
                 out.append(r'''\once \override Score.RehearsalMark #'break-visibility = #begin-of-line-invisible \once \override Score.RehearsalMark #'self-alignment-X = #RIGHT \mark "Fine" \bar "|."''')
@@ -1413,7 +1509,7 @@ def getLY(score,headers=None,have_final_barline=True):
                     aftrnext = None
                 if not_angka and "'" in octave: maxBeams=max(maxBeams,len(octave)*.8+nBeams)
                 else: maxBeams=max(maxBeams,nBeams)
-                if isInHarmonic and not midi and not western and not figures=='-': out.append(r"\flageolet ")
+                if isInHarmonic and not midi and not western and not figures=='-': out[-1]+=r" \flageolet "
    if notehead_markup.barPos == 0 and notehead_markup.barNo == 1: errExit("No jianpu in score %d" % scoreNo)
    if notehead_markup.inBeamGroup and not midi and not western and not notehead_markup.inBeamGroup=="restHack": out[lastPtr] += ']' # needed if ending on an incomplete beat
    if inTranspose: out.append("}")
