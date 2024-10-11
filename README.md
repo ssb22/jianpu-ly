@@ -89,7 +89,7 @@ Grace notes before: `g[#45] 1`
 
 Grace notes after: `1 ['1]g`
 
-Grace notes with duration change: `g[d45s6] 1`
+Grace notes with durations: `g[d4d5s6] 1`
 
 Simple chords: `,13'5 1 1b3 1` (chord numbers are sorted automatically)
 

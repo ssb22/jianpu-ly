@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.81 (c) 2012-2024 Silas S. Brown
+# v1.823 (c) 2012-2024 Silas S. Brown
 # v1.822 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -133,8 +133,21 @@ lyric_size = float(os.environ.get("j2ly_lyric_size",staff_size))
 three_dots = u"\u22EE"
 if not type(u"")==type(""): three_dots = three_dots.encode('utf-8') # Python 2
 
-# grace height can be adjusted if necessary
-grace_height = 3.5
+def find_grace_height(music):
+    # Need 3.5 if there's demisemiquavers with 2 octaves below.
+    # Can have 2.5 if there aren't any of those
+    # (Probably looks better if height is the same throughout the score,
+    # so we scan ahead to find what the most complex thing is.
+    # Could also change height every time, but would need to
+    # check if high-quality published music does that.
+    # Change every time would require differently parameterised versions of jianpu-grace-curve-stencil though.)
+    global grace_height
+    grace_height = 2.5
+    for word in music.split():
+        if word.startswith("g[") or word.endswith("]g"):
+            if "d" in word or ",," in word:
+                grace_height = 3.5 ; break
+                # TODO: more options, e.g. 3.0 if "d" but not ",," ?  (will need to update grace_height dictionary in all_scores_start also)
 
 def all_scores_start(inDat):
     r = r"""\version "2.%d.0"
@@ -253,7 +266,7 @@ note-mod-angka = #(define-music-function (text note) (markup? ly:music?)
 # Draw grace curve according to start and end mark.
 # Modify from https://lists.gnu.org/archive/html/lilypond-user/2015-01/msg00142.html
     r += r"""
-%=======================================================
+%%=======================================================
 #(define-event-class 'jianpu-grace-curve-event 'span-event)
 
 #(define (add-grob-definition grob-name grob-entry)
@@ -270,7 +283,7 @@ note-mod-angka = #(define-music-function (text note) (markup? ly:music?)
           (Y-ext (ly:relative-group-extent elts refp-Y Y))
           (direction (ly:grob-property grob 'direction RIGHT))
           (x-start (* 0.5 (+ (car X-ext) (cdr X-ext))))
-          (y-start (- (car Y-ext) 0.2))
+          (y-start (+ (car Y-ext) %g))
           (x-start2 (if (eq? direction RIGHT)(+ x-start 0.5)(- x-start 0.5)))
           (x-end (if (eq? direction RIGHT)(+ (cdr X-ext) 0.2)(- (car X-ext) 0.2)))
           (y-end (- y-start 0.5))
@@ -418,8 +431,8 @@ jianpuGraceCurveStart =
 
 jianpuGraceCurveEnd =
 #(make-span-event 'JianpuGraceCurveEvent STOP)
-%===========================================================
-"""
+%%===========================================================
+""" % {3.5: -0.2, 2.5: +0.32}[grace_height]
     return r+"\n%{ The jianpu-ly input was:\n" + inDat.strip().replace("%}","%/}")+"\n%}\n\n"
 
 def score_start():
@@ -610,9 +623,9 @@ def addOctaves(octave1,octave2):
     return octave2
 
 class NoteheadMarkup:
-  def __init__(self,isGrace=0):
+  def __init__(self,graceType=None):
       self.initOneScore()
-      self.isGrace = isGrace
+      self.graceType = graceType
   def initOneScore(self):
       self.barLength = 64 ; self.beatLength = 16 # in 64th notes
       self.barPos = self.startBarPos = F(0)
@@ -627,7 +640,7 @@ class NoteheadMarkup:
       self.notesHad = []
       self.unicode_approx = []
       self.rplacNextIfStillInBeam = None
-      self.isGrace = 0
+      self.graceType = None
       self.current_chord = None
   def endScore(self):
       if self.barPos == self.startBarPos: pass
@@ -802,15 +815,15 @@ class NoteheadMarkup:
         ret += '['
         self.inBeamGroup = 1
     self.barPos += toAdd
-    if self.isGrace and self.barPos == self.barLength:
+    if self.graceType and self.barPos == self.barLength:
         is_isolated_note = ret.endswith("[")
         if is_isolated_note:
             # Lilypond doesn't like isolated beamed notes in \grace
             # so introduce a skip note for it to beam to.
             # Putting the skip note BEFORE the grace note or AFTER the afterGrace note
             # might help if aligning jianpu with 5-line staves.
-            if self.isGrace == 1:
-                ret = "s%d [ \\jianpuGraceCurveEnd %s" % (length,ret.replace("[",""))
+            if self.graceType == "before":
+                ret = r"s%d [ \jianpuGraceCurveEnd %s" % (length,ret.replace("[",""))
             else:
                 ret += r" \jianpuGraceCurveEnd s%d" % length
         else:
@@ -840,7 +853,7 @@ class NoteheadMarkup:
                    ",,,":r"-\tweak #'Y-offset #-2.7 ",
                 }
           ret += oDict.get(octave,"")
-      elif self.isGrace:
+      elif self.graceType:
           oDict = {",":r"-\tweak #'Y-offset #%.1f " % (grace_height-1-nBeams*0.3),
                    ",,":r"-\tweak #'Y-offset #%.1f " % (grace_height-1.6-nBeams*0.3),
                    ",,,":r"-\tweak #'Y-offset #%.1f " % (grace_height-2-nBeams*0.3),
@@ -848,7 +861,7 @@ class NoteheadMarkup:
           ret += oDict.get(octave,"")
       # Ugly fix for grace dot positions
       x_offset=0.6
-      if self.isGrace: x_offset=0.4
+      if self.graceType: x_offset=0.4
       oDict = {"":"",
             "'":"^.",
             "''":r"-\tweak #'X-offset #%.1f ^\two-dots " % x_offset,
@@ -1084,7 +1097,7 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
     thinspace = u'\u2009'
     if not type("")==type(u""): thinspace = thinspace.encode('utf-8')
     notes = grace_octave_fix(notes) # ensures octaves come before notes
-    notemark = NoteheadMarkup(isGrace=2 if isAfter else 1)
+    notemark = NoteheadMarkup(graceType="after" if isAfter else "before")
     # Calculate length of grace section and tell
     # NoteheadMarkup that's the "bar length", so it
     # ends the beams at the end of it for us
@@ -1560,6 +1573,7 @@ def process_input(inDat):
  uniqCount = 0 ; notehead_markup = NoteheadMarkup()
  scoreNo = 0 # incr'd to 1 below
  western = False
+ find_grace_height(inDat)
  for score in re.split(r"\sNextScore\s"," "+inDat+" "):
   if not score.strip(): continue
   scoreNo += 1
