@@ -4,7 +4,7 @@
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
 # v1.823 (c) 2012-2024 Silas S. Brown
-# v1.822 (c) 2024 Unbored
+# v1.824 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -810,6 +810,36 @@ class NoteheadMarkup:
             else: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.5 . 2.1) \postscript "1.1 0.4 moveto 2.1 1.4 lineto 1.3 0.2 moveto 2.3 1.2 lineto 1.5 0.0 moveto 2.5 1.0 lineto stroke" } %{ requires Lilypond 2.22+ %} """
         elif dots: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.8 . 2.6) \postscript "1.4 1.6 moveto 2.4 2.6 lineto 1.6 1.4 moveto 2.6 2.4 lineto 1.8 1.2 moveto 2.8 2.2 lineto stroke" } %{ requires Lilypond 2.20 %} """
         else: ret += r"""_\tweak outside-staff-priority ##f ^\tweak avoid-slur #'inside _\markup {\with-dimensions #'(0 . 0) #'(2.5 . 2.6) \postscript "1.1 1.6 moveto 2.1 2.6 lineto 1.3 1.4 moveto 2.3 2.4 lineto 1.5 1.2 moveto 2.5 2.2 lineto stroke" } %{ requires Lilypond 2.20 %} """
+    # Octave dots:
+    if not midi and not western and not '-' in figures:
+      if not nBeams:
+          oDict = {",":r"-\tweak #'Y-offset #-1.2 ",
+                   ",,":r"-\tweak #'Y-offset #-2 ",
+                   ",,,":r"-\tweak #'Y-offset #-2.7 ",
+                }
+          ret += oDict.get(octave,"")
+      elif self.graceType:
+          oDict = {",":r"-\tweak #'Y-offset #%.1f " % (grace_height-1-nBeams*0.3),
+                   ",,":r"-\tweak #'Y-offset #%.1f " % (grace_height-1.6-nBeams*0.3),
+                   ",,,":r"-\tweak #'Y-offset #%.1f " % (grace_height-2-nBeams*0.3),
+                }
+          ret += oDict.get(octave,"")
+      # Ugly fix for grace dot positions
+      x_offset=0.6
+      if self.graceType: x_offset=0.4
+      oDict = {"":"",
+            "'":"^.",
+            "''":r"-\tweak #'X-offset #%.1f ^\two-dots " % x_offset,
+            "'''":r"-\tweak #'X-offset #%.1f ^\three-dots " % x_offset,
+            ",":r"-\tweak #'X-offset #%.1f _. " % x_offset,
+            ",,":r"-\tweak #'X-offset #%.1f _\two-dots " % x_offset,
+            ",,,":r"-\tweak #'X-offset #%.1f _\three-dots " % x_offset}
+      if not_angka: oDict.update({
+              "'":r"-\tweak #'extra-offset #'(0.4 . 2.7) -\markup{\bold .}",
+              "''":r"-\tweak #'extra-offset #'(0.4 . 3.5) -\markup{\bold :}",
+              "'''":r"-\tweak #'extra-offset #'(0.4 . 4.3) -\markup{\bold "+three_dots+"}",
+              })
+      ret += oDict[octave]
     if nBeams and (not self.inBeamGroup or (self.inBeamGroup=="restHack" and not replaceLast) or inRestHack) and not midi and not western:
         # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
         ret += '['
@@ -845,36 +875,6 @@ class NoteheadMarkup:
         self.unicode_approx[-1]=self.unicode_approx[-1].rstrip()+u'\u2502'
         self.barPos = 0 ; self.barNo += 1
         self.current_accidentals = {}
-    # Octave dots:
-    if not midi and not western and not '-' in figures:
-      if not nBeams:
-          oDict = {",":r"-\tweak #'Y-offset #-1.2 ",
-                   ",,":r"-\tweak #'Y-offset #-2 ",
-                   ",,,":r"-\tweak #'Y-offset #-2.7 ",
-                }
-          ret += oDict.get(octave,"")
-      elif self.graceType:
-          oDict = {",":r"-\tweak #'Y-offset #%.1f " % (grace_height-1-nBeams*0.3),
-                   ",,":r"-\tweak #'Y-offset #%.1f " % (grace_height-1.6-nBeams*0.3),
-                   ",,,":r"-\tweak #'Y-offset #%.1f " % (grace_height-2-nBeams*0.3),
-                }
-          ret += oDict.get(octave,"")
-      # Ugly fix for grace dot positions
-      x_offset=0.6
-      if self.graceType: x_offset=0.4
-      oDict = {"":"",
-            "'":"^.",
-            "''":r"-\tweak #'X-offset #%.1f ^\two-dots " % x_offset,
-            "'''":r"-\tweak #'X-offset #%.1f ^\three-dots " % x_offset,
-            ",":r"-\tweak #'X-offset #%.1f _. " % x_offset,
-            ",,":r"-\tweak #'X-offset #%.1f _\two-dots " % x_offset,
-            ",,,":r"-\tweak #'X-offset #%.1f _\three-dots " % x_offset}
-      if not_angka: oDict.update({
-              "'":r"-\tweak #'extra-offset #'(0.4 . 2.7) -\markup{\bold .}",
-              "''":r"-\tweak #'extra-offset #'(0.4 . 3.5) -\markup{\bold :}",
-              "'''":r"-\tweak #'extra-offset #'(0.4 . 4.3) -\markup{\bold "+three_dots+"}",
-              })
-      ret += oDict[octave]
     if invisTieLast:
         if midi or western:
             b4last, aftrlast = "", " ~"
