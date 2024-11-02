@@ -493,7 +493,8 @@ def jianpu_voice_start(isTemp=0):
     else: r += r"""
     \override Stem #'direction = #DOWN
     \override Tie #'staff-position = #2.5
-    \tupletUp"""
+    \tupletUp
+    \tieUp"""
     r += (r"""
     \override Stem #'length-fraction = #%s
     \override Beam #'beam-thickness = #0.1
