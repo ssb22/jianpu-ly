@@ -343,14 +343,14 @@ jianpuGraceCurveEngraver =
          (current-event '())
          (event-start '())
          (event-stop '()))
-     
-     `((listeners
+     `(
+       (listeners
         (jianpu-grace-curve-event .
           ,(lambda (engraver event)
              (if (= START (ly:event-property event 'span-direction))
                  (set! event-start event)
                  (set! event-stop event)))))
-       
+
        (acknowledgers
         (note-column-interface .
           ,(lambda (engraver grob source-engraver)
@@ -362,7 +362,6 @@ jianpuGraceCurveEngraver =
                  (begin
                   (ly:pointer-group-interface::add-grob finished 'elements grob)
                   (add-bound-item finished grob)))))
-        
         (inline-accidental-interface .
           ,(lambda (engraver grob source-engraver)
              (if (ly:spanner? span)
@@ -370,17 +369,13 @@ jianpuGraceCurveEngraver =
                   (ly:pointer-group-interface::add-grob span 'elements grob)))
              (if (ly:spanner? finished)
                  (ly:pointer-group-interface::add-grob finished 'elements grob))))
-        
         (script-interface .
           ,(lambda (engraver grob source-engraver)
              (if (ly:spanner? span)
                  (begin
                   (ly:pointer-group-interface::add-grob span 'elements grob)))
              (if (ly:spanner? finished)
-                 (ly:pointer-group-interface::add-grob finished 'elements grob))))
-        
-        ;; add additional interfaces to acknowledge here
-        )
+                 (ly:pointer-group-interface::add-grob finished 'elements grob)))))
        
        (process-music .
          ,(lambda (trans)
@@ -419,12 +414,8 @@ jianpuGraceCurveEngraver =
                (if (null? (ly:spanner-bound finished RIGHT))
                    (set! (ly:spanner-bound finished RIGHT)
                          (ly:context-property context 'currentMusicalColumn)))
-               (set! finished '())))
-          (if (ly:spanner? span)
-              (begin
-               (ly:warning "unterminated curve :-(")
-               (ly:grob-suicide! span)
-               (set! span '()))))))))
+               (set! finished '())))))
+       )))
 
 jianpuGraceCurveStart =
 #(make-span-event 'JianpuGraceCurveEvent START)
