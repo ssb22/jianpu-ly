@@ -244,12 +244,18 @@ note-mod =
      \tweak NoteHead.stencil #ly:text-interface::print
      \tweak NoteHead.text
         \markup \lower #0.5 \sans \bold #text
+     \tweak Rest.stencil #ly:text-interface::print
+     \tweak Rest.text
+        \markup \lower #0.5 \sans \bold #text
      #note
    #})"""
     if re.search(r"(\s|^)(angka|Indonesian)(\s|$)",inDat): r += r"""
 note-mod-angka = #(define-music-function (text note) (markup? ly:music?)
    #{ \tweak NoteHead.stencil #ly:text-interface::print
-     \tweak NoteHead.text \markup \lower #0.5 \bold #text #note #})
+     \tweak NoteHead.text \markup \lower #0.5 \bold #text
+     \tweak Rest.stencil #ly:text-interface::print
+     \tweak Rest.text \markup \lower #0.5 \bold #text
+     #note #})
 """
     if inner_beams_below: r += r"""
 #(define (flip-beams grob)
@@ -1461,7 +1467,7 @@ def getLY(score,headers=None,have_final_barline=True):
                 notehead_markup.barPos = oldBarPos
                 repeatStack.append((numBraces,oldBarPos,extraRepeats+1,rStartP))
                 out[rStartP] = out[rStartP].replace(('volta %d ' % (extraRepeats+1)),('volta %d ' % (extraRepeats+2))) # ensure there's enough repeats for the alternatives
-            elif word.startswith("\\") or word in ["(",")","~","->","|"] or word.startswith('^"') or word.startswith('_"'):
+            elif word.startswith("\\") or word.startswith('^\\') or word.startswith('_\\') or word in ["(",")","~","->","|"] or word.startswith('^"') or word.startswith('_"'):
                 # Lilypond command, \p, ^"text", barline check (undocumented, see above), etc
                 if word=="~" and not midi and not western and lastNonDashPtr < lastPtr and lilypond_minor_version()>=20: # tie from the number, not the last dash
                     out.insert(lastNonDashPtr+1,r'\=JianpuTie(')
