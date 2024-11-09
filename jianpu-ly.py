@@ -150,9 +150,10 @@ def find_grace_height(music):
                 # TODO: more options, e.g. 3.0 if "d" but not ",," ?  (will need to update grace_height dictionary in all_scores_start also)
 
 def all_scores_start(inDat):
+    if lilypond_minor_version() < 20: errExit("Lilypond 2.18 and below is no longer supported") # 2.20 is in Ubuntu 20.04 LTS and 2.22 can be installed on a 2011 Mac; if you're stuck on an older EOL'd distro without Internet, use jianpu-ly 1.825 or earlier
     r = r"""\version "2.%d.0"
 #(set-global-staff-size %g)""" % ((
-    20 if lilypond_minor_version()>=20 else 18),staff_size)
+    22 if "g[" in inDat or "]g" in inDat else 20),staff_size)
     r += r"""
 
 % un-comment the next line to remove Lilypond tagline:
@@ -180,7 +181,7 @@ def all_scores_start(inDat):
   % un-comment the next line for a more space-saving header layout:
   % scoreTitleMarkup = \markup { \center-column { \fill-line { \magnify #1.5 { \bold { \fromproperty #'header:dedication } } \magnify #1.5 { \bold { \fromproperty #'header:title } } \fromproperty #'header:composer } \fill-line { \fromproperty #'header:instrument \fromproperty #'header:subtitle \smaller{\fromproperty #'header:subsubtitle } } } }
 """
-    if os.path.exists("/Library/Fonts/Arial Unicode.ttf") and lilypond_minor_version()>=20: r += r"""
+    if os.path.exists("/Library/Fonts/Arial Unicode.ttf"): r += r"""
   % As jianpu-ly was run on a Mac, we include a Mac fonts workaround.
   % The Mac version of Lilypond 2.18 used Arial Unicode MS as a
   % fallback even in the Serif font, but 2.20 drops this in Serif
@@ -244,12 +245,18 @@ note-mod =
      \tweak NoteHead.stencil #ly:text-interface::print
      \tweak NoteHead.text
         \markup \lower #0.5 \sans \bold #text
+     \tweak Rest.stencil #ly:text-interface::print
+     \tweak Rest.text
+        \markup \lower #0.5 \sans \bold #text
      #note
    #})"""
     if re.search(r"(\s|^)(angka|Indonesian)(\s|$)",inDat): r += r"""
 note-mod-angka = #(define-music-function (text note) (markup? ly:music?)
    #{ \tweak NoteHead.stencil #ly:text-interface::print
-     \tweak NoteHead.text \markup \lower #0.5 \bold #text #note #})
+     \tweak NoteHead.text \markup \lower #0.5 \bold #text
+     \tweak Rest.stencil #ly:text-interface::print
+     \tweak Rest.text \markup \lower #0.5 \bold #text
+     #note #})
 """
     if inner_beams_below: r += r"""
 #(define (flip-beams grob)
@@ -677,7 +684,7 @@ class NoteheadMarkup:
     aftrLastNonDash = tieEnd = ""
     add_cautionary_accidental = False
     if invisTieLast: # (so figures == "-")
-        if self.barPos==0 and not midi and not western and lilypond_minor_version()>=20 and not self.last_figures=="x":
+        if self.barPos==0 and not midi and not western and not self.last_figures=="x":
             # dash over barline: write as new note
             figures = self.last_figures
             aftrLastNonDash = r'\=JianpuTie('
@@ -790,7 +797,6 @@ class NoteheadMarkup:
     ret += ("%d" % length) + dots
     if self.rplacNextIfStillInBeam: self.rplacNextIfStillInBeam += ("r%d" % length) + dots + '['
     if tremolo:
-        if lilypond_minor_version()<20: errExit("tremolo requires Lilypond 2.20+, we found 2."+str(lilypond_minor_version()))
         if midi or western:
             if placeholder_chord.startswith("<") and len(placeholder_chord.split())==4:
                 previous,n1,n2,gtLenDot = ret.rsplit(None,3)
@@ -1452,9 +1458,9 @@ def getLY(score,headers=None,have_final_barline=True):
                 notehead_markup.barPos = oldBarPos
                 repeatStack.append((numBraces,oldBarPos,extraRepeats+1,rStartP))
                 out[rStartP] = out[rStartP].replace(('volta %d ' % (extraRepeats+1)),('volta %d ' % (extraRepeats+2))) # ensure there's enough repeats for the alternatives
-            elif word.startswith("\\") or word in ["(",")","~","->","|"] or word.startswith('^"') or word.startswith('_"'):
+            elif word.startswith("\\") or word.startswith('^\\') or word.startswith('_\\') or word in ["(",")","~","->","|"] or word.startswith('^"') or word.startswith('_"'):
                 # Lilypond command, \p, ^"text", barline check (undocumented, see above), etc
-                if word=="~" and not midi and not western and lastNonDashPtr < lastPtr and lilypond_minor_version()>=20: # tie from the number, not the last dash
+                if word=="~" and not midi and not western and lastNonDashPtr < lastPtr: # tie from the number, not the last dash
                     out.insert(lastNonDashPtr+1,r'\=JianpuTie(')
                     lastPtr += 1
                     aftrnext2 = r'\=JianpuTie)'
@@ -1665,7 +1671,7 @@ For Unicode approximation on this system, please do one of these things:
         except: pass
         cmd = lilypond_command()
         if cmd:
-            if lilypond_minor_version() >= 20: cmd += ' -dstrokeadjust' # if will be viewed on-screen rather than printed, and it's not a Retina display
+            cmd += ' -dstrokeadjust' # if will be viewed on-screen rather than printed, and it's not a Retina display
             os.system(cmd+" "+quote(fn))
             if sys.platform=='darwin':
                 os.system("open "+quote(pdf))
