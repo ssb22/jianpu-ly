@@ -1,7 +1,13 @@
 # -*- mode: Makefile -*-
-check-if-jianpuly-version-is-changing:
-	@if grep '^# v[0-9][^.]*[.][0-9][0-9][0-9][0-9]' jianpu-ly.py; then echo "4+ decimal digits in version number will now need another -e 's/[.][0-9][0-9][0-9]$$/&0/' in Makefile.pypi's sed expression"; false; fi
+
+# This file contains rules to update the jianpu-ly PyPI package.
+# It is run automatically by my homepage update scripts before a commit.
+# Current limitations: if I've merged a pull request from another contributor, unless I'm making follow-on changes this will need a manual `make -f Makefile.pypi update-jianpuly-pypi` I have to remember to do.
+
+check-if-jianpuly-version-is-changing: test
 	if (git diff;git diff --staged)|grep '^[+]# v[0-9]'; then make -f Makefile.pypi update-jianpuly-pypi; else true; fi
+test:
+	@if grep '^# v[0-9][^.]*[.][0-9][0-9][0-9][0-9]' jianpu-ly.py; then echo "4+ decimal digits in version number will now need another -e 's/[.][0-9][0-9][0-9]$$/&0/' in Makefile.pypi's sed expression"; false; fi
 update-jianpuly-pypi:
 	mkdir jianpu_ly
 	cp jianpu-ly.py jianpu_ly/__init__.py

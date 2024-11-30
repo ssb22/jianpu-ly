@@ -15,5 +15,6 @@ test:
 
 	python3 test-import.py
 	python2.7 test-import.py
+	make -f Makefile.pypi test
 
 .PHONY: test
