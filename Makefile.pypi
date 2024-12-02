@@ -20,3 +20,4 @@ update-jianpuly-pypi:
 	rm -r jianpu_ly.egg-info dist jianpu_ly setup.py
 .PHONY: check-if-jianpuly-version-is-changing
 .PHONY: update-jianpuly-pypi
+.PHONY: test
