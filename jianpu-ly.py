@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.823 (c) 2012-2024 Silas S. Brown
+# v1.823 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -919,7 +919,7 @@ def write_docs():
     # Write an HTML or Markdown version of the doc string
     def htmlify(l):
         if "--html" in sys.argv:
-            return l.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+            return re.sub('([hdDs]emi)',r'\1&shy;',l.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;"))
         else: return l
     inTable = 0 ; justStarted=1
     for line in __doc__.split("\n"):
