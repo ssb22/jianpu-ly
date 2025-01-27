@@ -919,7 +919,7 @@ def write_docs():
     # Write an HTML or Markdown version of the doc string
     def htmlify(l):
         if "--html" in sys.argv:
-            return re.sub('([hdDs]emi)',r'\1&shy;',l.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;"))
+            return re.sub('([hdDs]emi)',r'\1&shy;',l.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")).replace("approximation","approx&shy;imation")
         else: return l
     inTable = 0 ; justStarted=1
     for line in __doc__.split("\n"):
