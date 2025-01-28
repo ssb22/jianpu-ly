@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.823 (c) 2012-2025 Silas S. Brown
+# v1.827 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -464,10 +464,6 @@ def score_end(**headers):
     \Global
     \grobdescriptions #all-grob-descriptions
   }
-  \context {
-    \Score
-    \consists \jianpuGraceCurveEngraver % for spans
-  }
 """ + "}"
     return ret + " }"
 
@@ -516,6 +512,8 @@ def jianpu_staff_start(inst=None,withStaff=False):
 %% === BEGIN JIANPU STAFF ===
     \new RhythmicStaff \with {
     \consists "Accidental_engraver" """
+    r += r"""
+    \consists \jianpuGraceCurveEngraver"""
     if inst: r += 'instrumentName = "'+inst+'"'
     if withStaff: r+=r"""
    %% Limit space between Jianpu and corresponding-Western staff
@@ -718,6 +716,7 @@ class NoteheadMarkup:
         ret += "| " # barline in Lilypond file: not strictly necessary but may help readability
         if self.onePage and not midi: ret += r"\noPageBreak "
         ret += "%{ bar "+str(self.barNo)+": %} "
+        self.notesHad.insert(-1,"|")
     if not octave in self.current_accidentals: self.current_accidentals[octave] = [""]*7
     if nBeams==None: # unspecified
         if self.keepLength:
@@ -990,14 +989,19 @@ def xml2jianpu(x):
     from xml.parsers.expat import ParserCreate
     xmlparser = ParserCreate()
     ret = [] ; dat = ["",""]
-    partList=[""];time=["4","4"];tempo=["4","60"]
-    note=[[""]*10];naturalType=[""];note1=["C"]
+    partList=[""];time=["4","4"];tempo=["",""]
+    note=[[""]*11];keySig=[['']*7];barSig=[['']*7,None];note1=["C"]
     tSig=[None,0];prevChord=[None]
     types={"64th":"h","32nd":"d","16th":"s","eighth":"q","quarter":"","half":" -","whole":" - - -"}
     typesDot={"64th":"h.","32nd":"d.","16th":"s.","eighth":"q.","quarter":".","half":" - -","whole":" - - - - -"}
     typesMM={"64th":"64","32nd":"32","16th":"16","eighth":"8","quarter":"4","half":"2","whole":"1"}
     quavers={"64th":0.125,"32nd":0.25,"16th":0.5,"eighth":1,"quarter":2,"half":4,"whole":8}
-    def s(name,attrs): dat[0],dat[1]="",attrs.get("type","")
+    def s(name,attrs):
+        dat[0],dat[1]="",attrs.get("type","")
+        if name=="measure":
+            oldBarsig = barSig[0]
+            barSig[0] = keySig[0].copy()
+            if barSig[1] is not None: barSig[0][barSig[1]]=oldBarsig[barSig[1]] # for tie
     def c(data): dat[0] += data
     def e(name):
         d0 = dat[0].strip()
@@ -1011,8 +1015,13 @@ def xml2jianpu(x):
                 del partList[0]
             ret.append("WithStaff NextPart")
         elif name=="fifths":
-            if d0.startswith('-'): naturalType[0]='#'
-            else: naturalType[0]='b'
+            keySig[0]=['']*7
+            if d0.startswith('-'): keyAcc,start,inc='b',4-1,4 # Bb (b)4
+            else: keyAcc,start,inc='#',7-1,3 # F# (#)7
+            for i in range(abs(int(d0))):
+                keySig[0][start] = keyAcc
+                start = (start+inc) % 7
+            barSig[0] = keySig[0].copy()
             key = ["Gb","Db","Ab","Eb","Bb","F","C","G","D","A","E","B","F#"][int(d0)+6]
             note1[0]=key[0]
             ret.append("1="+key)
@@ -1027,12 +1036,14 @@ def xml2jianpu(x):
             if not tSig[1]==int(time[0])*8/int(time[1]): ret[tSig[0]]+=","+{0.5:"16",0.75:"16.",1:"8",1.5:"8.",2:"4",3:"4.",4:"2",6:"2.",8:"1",12:"1."}[tSig[1]] # anacrusis
             tSig[0]=None
         elif name=="beat-unit": tempo[0]=typesMM.get(name,"4")
-        elif name=="beat-minute": tempo[1]=d0
-        elif name=="metronome": ret.append("=".join(tempo))
+        elif name=="beat-minute" or name=="per-minute": tempo[1]=d0
+        elif name=="metronome":
+            if tempo[0] and tempo[1]: ret.append("=".join(tempo))
+            tempo[0]=tempo[1]="" # for now we ignore <metronome> elements that don't specify all parameters
         elif name=="step": note[0][0]=d0
         elif name=="rest": note[0][0]="r"
         elif name=="octave": note[0][1]=int(d0)
-        elif name=="accidental": note[0][2]={"flat":"b","sharp":"#","natural":naturalType[0]}.get(d0,"") # TODO: what if it's natural-ing something that wasn't sharp or flat in the key signature
+        elif name=="accidental": note[0][2]=d0
         elif name=="type": note[0][3]=d0
         elif name=="dot": note[0][4]=1
         elif name=="slur": note[0][5]={"start":"(","stop":")"}[dat[1]]
@@ -1040,9 +1051,10 @@ def xml2jianpu(x):
         elif name=="actual-notes": note[0][7]=d0
         elif name=="tuplet": note[0][8]=dat[1]
         elif name=="chord": note[0][9]=True
+        elif name=="grace": note[0][10]=True
         elif name=="note":
-            step,octave,acc,nType,dot,slur,tie,tuplet,tState,chord = note[0]
-            note[0]=[""]*10
+            step,octave,acc,nType,dot,slur,tie,tuplet,tState,chord,grace = note[0]
+            note[0]=[""]*11
             if step=="r": r="0"
             else:
                 dTone=ord(step[0])-ord(note1[0])+7*(octave-4)
@@ -1052,9 +1064,21 @@ def xml2jianpu(x):
                     r+="," ; dTone+=7
                 while dTone>6:
                     r+="'" ; dTone-=7
+                acc=barSig[0][dTone%7]={"flat":"b","sharp":"#","natural":""}.get(acc,barSig[0][dTone%7])
+                barSig[1]=(dTone%7) if tie else None
+                if keySig[0][dTone%7]=="#": acc="" if acc=="#" else "b"
+                if keySig[0][dTone%7]=="b": acc="" if acc=="b" else "#"
             if chord:
                 ret[prevChord[0]] += r ; return
             if tState=="start": ret.append(tuplet+"[")
+            if not nType:
+                wantQ = int(time[0])*8/int(time[1])
+                nn = [k for k,v in quavers.items() if v==wantQ]
+                if nn: nType = nn[0]
+                else:
+                    nn = [k for k,v in quavers.items() if v*1.5==wantQ]
+                    if nn: nType,dot = nn[0],1
+                    else: assert 0, "Full-measure note or rest at unrecognised bar length" # will probably need to split
             if not tSig[0]==None: # we're counting the length of the first bar, for anacrusis
                 tSig[1] += quavers[nType]
                 if dot: tSig[1] += quavers[nType]/2.0
@@ -1062,7 +1086,9 @@ def xml2jianpu(x):
             else: d = types
             r += acc+d[nType]+' '
             prevChord[0]=len(ret)
-            ret.append(r[:r.index(' ')]+' '+tie+' '+slur+r[r.index(' '):])
+            w1,w2 = r[:r.index(' ')],r[r.index(' '):]
+            if grace: w1="g["+w1+"]"
+            ret.append(w1+' '+slur+w2+' '+tie)
             if tState=="stop": ret.append("]")
     xmlparser.StartElementHandler = s
     xmlparser.CharacterDataHandler = c
@@ -1287,6 +1313,7 @@ def getLY(score,headers=None,have_final_barline=True):
    aftrnext = defined_jianpuGrace = defined_JGR = None
    aftrnext2 = None
    isInHarmonic = False
+   score=re.sub(r"(?<=\s)(g\[[#b',1-9qsdh]+\]\s*)+g\[([#b',1-9qsdh]+)\](?=\s)",lambda m:re.sub(r"\]\s*g\[","",m.group()),score) # merge multiple grace groups
    for line in score.split("\n"):
     line = fix_fullwidth(line).strip()
     line=re.sub(r"^%%\s*tempo:\s*(\S+)\s*$",r"\1",line) # to provide an upgrade path for jihuan-tian's fork
@@ -1657,7 +1684,7 @@ For Unicode approximation on this system, please do one of these things:
         # New in jianpu-ly v1.61.
         if len(sys.argv)>1: fn=os.path.split(sys.argv[1])[1]
         else: fn = 'jianpu'
-        if os.extsep in fn: fn=fn[:-fn.rindex(os.extsep)]
+        if os.extsep in fn: fn=fn[:fn.rindex(os.extsep)]
         fn += ".ly"
         import tempfile
         cwd = os.getcwd()
