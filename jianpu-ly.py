@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.827 (c) 2012-2025 Silas S. Brown
+# v1.828 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,8 +26,8 @@ r"""
 # and in China: https://gitee.com/ssb22/jianpu-ly
 
 # (The following docstring format is fixed, see --html)
-Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file)
-Text files are whitespace-separated and can contain:
+Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file).  There is experimental support for importing MusicXML (.mxl) instead of jianpu-ly's text input format, but this does not work for all pieces.
+Normal text files are whitespace-separated and can contain:
 Scale going up: 1 2 3 4 5 6 7 1'
 Accidentals: 1 #1 2 b2 1
 Octaves: 1,, 1, 1 1' 1''
@@ -918,7 +918,7 @@ def write_docs():
     # Write an HTML or Markdown version of the doc string
     def htmlify(l):
         if "--html" in sys.argv:
-            return re.sub('([hdDs]emi)',r'\1&shy;',l.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")).replace("approximation","approx&shy;imation")
+            return re.sub('([hdDsS]emi)',r'\1&shy;',l.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")).replace("approximation","approx&shy;imation").replace("instrument=Flute","instrument=<wbr>Flute")
         else: return l
     inTable = 0 ; justStarted=1
     for line in __doc__.split("\n"):
@@ -1046,14 +1046,20 @@ def xml2jianpu(x):
         elif name=="accidental": note[0][2]=d0
         elif name=="type": note[0][3]=d0
         elif name=="dot": note[0][4]=1
-        elif name=="slur": note[0][5]={"start":"(","stop":")"}[dat[1]]
+        elif name=="slur": note[0][5]+={"start":" (","stop":" )"}[dat[1]]
         elif name=="tie": note[0][6]={"start":"~","stop":""}[dat[1]]
         elif name=="actual-notes": note[0][7]=d0
         elif name=="tuplet": note[0][8]=dat[1]
         elif name=="chord": note[0][9]=True
         elif name=="grace": note[0][10]=True
+        elif name=="fermata": note[0][5]    += r" \fermata"
+        elif name=="staccato": note[0][5]   += r" \staccato"
+        elif name=="tenuto": note[0][5]     += r" \tenuto"
+        elif name=="accent": note[0][5]     += r" \accent"
+        elif name=="trill-mark": note[0][5] += r" \trill"
+        elif name=="mordent": note[0][5]    += r" \mordent"
         elif name=="note":
-            step,octave,acc,nType,dot,slur,tie,tuplet,tState,chord,grace = note[0]
+            step,octave,acc,nType,dot,extras,tie,tuplet,tState,chord,grace = note[0]
             note[0]=[""]*11
             if step=="r": r="0"
             else:
@@ -1088,7 +1094,7 @@ def xml2jianpu(x):
             prevChord[0]=len(ret)
             w1,w2 = r[:r.index(' ')],r[r.index(' '):]
             if grace: w1="g["+w1+"]"
-            ret.append(w1+' '+slur+w2+' '+tie)
+            ret.append(w1+extras+' '+w2+' '+tie)
             if tState=="stop": ret.append("]")
     xmlparser.StartElementHandler = s
     xmlparser.CharacterDataHandler = c

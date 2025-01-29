@@ -11,9 +11,9 @@ Using jianpu-ly requires some technical knowledge.  If you don't know what a com
 If you have problems, try a different Lilypond version.
 jianpu-ly works with Lilypond 2.20, 2.22 and 2.24.
 
-Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file)
+Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file).  There is experimental support for importing MusicXML (.mxl) instead of jianpu-ly's text input format, but this does not work for all pieces.
 
-Text files are whitespace-separated and can contain:
+Normal text files are whitespace-separated and can contain:
 
 Scale going up: `1 2 3 4 5 6 7 1'`
 
