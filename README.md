@@ -11,9 +11,9 @@ Using jianpu-ly requires some technical knowledge.  If you don't know what a com
 If you have problems, try a different Lilypond version.
 jianpu-ly works with Lilypond 2.20, 2.22 and 2.24.
 
-Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file).  There is experimental support for importing MusicXML (.mxl) instead of jianpu-ly's text input format, but this does not work for all pieces.
+Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file).  There is experimental support for importing MusicXML via jianpu-ly piece.xml (or jianpu-ly piece.mxl > ly-file) but this does not work for all pieces.
 
-Normal text files are whitespace-separated and can contain:
+Normal text files are whitespace-separated and can contain words like the following.  Usually the order of characters within a note does not matter, hence #1 is the same as 1# and '1 is the same as 1' and s1 is the same as 1s.
 
 Scale going up: `1 2 3 4 5 6 7 1'`
 
@@ -28,6 +28,10 @@ Percussion beat: `x`
 Change base octave: `< >`
 
 Semiquaver, quaver, crotchet (16/8/4th notes): `s1 q1 1`
+
+Alternate way to input semiquaver, quaver, crotchet: `1\\ 1\ 1` (any \ must go after the pitch not before)
+
+Sticky durations (4 semiquavers then crotchet): `KeepLength s1 1 1 1 c1`
 
 Dotted versions of the above (50% longer): `s1. q1. 1.`
 
@@ -81,6 +85,8 @@ Old-style time signature: `SeparateTimesig 1=C 4/4`
 
 Indonesian 'not angka' style: `angka`
 
+Alternate Indonesian-style minim, dotted minim and semibreve: `1 . 1 . . 1 . . .` (dot is treated as dash)
+
 Add a Western staff doubling the tune: `WithStaff`
 
 Tuplets: `3[ q1 q1 q1 ]`
@@ -124,6 +130,8 @@ Harmonic symbols above main notes: `Harm: (music) :Harm` (main music)
 Other Lilypond code: `LP: (block of code) :LP` (each delimeter at start of its line)
 
 Unicode approximation instead of Lilypond: `Unicode`
+
+Split MIDI files per part: `PartMidi`
 
 Ignored: `% a comment`
 

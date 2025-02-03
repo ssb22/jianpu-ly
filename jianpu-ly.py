@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.828 (c) 2012-2025 Silas S. Brown
+# v1.829 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,8 +26,9 @@ r"""
 # and in China: https://gitee.com/ssb22/jianpu-ly
 
 # (The following docstring format is fixed, see --html)
-Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file).  There is experimental support for importing MusicXML (.mxl) instead of jianpu-ly's text input format, but this does not work for all pieces.
-Normal text files are whitespace-separated and can contain:
+Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file).  There is experimental support for importing MusicXML via jianpu-ly piece.xml (or jianpu-ly piece.mxl > ly-file) but this does not work for all pieces.
+# (Currently, MusicXML import must use .mxl extension and not redirect)
+Normal text files are whitespace-separated and can contain words like the following.  Usually the order of characters within a note does not matter, hence #1 is the same as 1# and '1 is the same as 1' and s1 is the same as 1s.
 Scale going up: 1 2 3 4 5 6 7 1'
 Accidentals: 1 #1 2 b2 1
 Octaves: 1,, 1, 1 1' 1''
@@ -35,6 +36,8 @@ Shortcuts for 1' and 2': 8 9
 Percussion beat: x
 Change base octave: < >
 Semiquaver, quaver, crotchet (16/8/4th notes): s1 q1 1
+Alternate way to input semiquaver, quaver, crotchet: 1\\ 1\ 1 (any \ must go after the pitch not before)
+Sticky durations (4 semiquavers then crotchet): KeepLength s1 1 1 1 c1
 Dotted versions of the above (50% longer): s1. q1. 1.
 Demisemiquaver, hemidemisemiquaver (32/64th notes): d1 h1
 Minims (half notes) use dashes: 1 -
@@ -61,6 +64,7 @@ Suppress first-line indent: NoIndent
 Ragged last line: RaggedLast
 Old-style time signature: SeparateTimesig 1=C 4/4
 Indonesian 'not angka' style: angka
+Alternate Indonesian-style minim, dotted minim and semibreve: 1 . 1 . . 1 . . . (dot is treated as dash)
 Add a Western staff doubling the tune: WithStaff
 Tuplets: 3[ q1 q1 q1 ]
 Grace notes before: g[#45] 1
@@ -83,6 +87,7 @@ Text: ^"above note" _"below note"
 Harmonic symbols above main notes: Harm: (music) :Harm (main music)
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
 Unicode approximation instead of Lilypond: Unicode
+Split MIDI files per part: PartMidi
 Ignored: % a comment
 """
 
@@ -888,7 +893,7 @@ class NoteheadMarkup:
     return aftrLastNonDash,figures=='-',b4last,replaceLast,aftrlast0+aftrlast,ret, need_space_for_accidental, nBeams,octave
 
 def parseNote(word,origWord,line):
-    if word==".": word = "-" # (for not angka, TODO: document that this is now acceptable as an input word?)
+    if word==".": word = "-"
     word = word.replace("8","1'").replace("9","2'")
     if type(u"")==type(""): word = word.replace(u"\u2019","'")
     else: word=word.replace(u"\u2019".encode('utf-8'),"'")
@@ -899,7 +904,7 @@ def parseNote(word,origWord,line):
     figures = ''.join(re.findall('[01234567x-]',word))
     dots = "".join(c for c in word if c==".")
     nBeams = ''.join(re.findall(r'[cqsdh\\]',word))
-    if re.match(r"[\\]+$",nBeams): nBeams=len(nBeams) # requested by a user who found British note-length names hard to remember; won't work if the \ is placed at the start, as that'll be a Lilypond command, so to save confusion we won't put this in the docstring
+    if re.match(r"[\\]+$",nBeams): nBeams=len(nBeams) # requested by a user who found British note-length names hard to remember; won't work if the \ is placed at the start, as that'll be a Lilypond command
     elif nBeams:
         try: nBeams = list("cqsdh").index(nBeams)
         except ValueError: scoreError("Can't calculate number of beams from "+nBeams+" in",origWord,line)
@@ -947,7 +952,13 @@ def write_docs():
 def getInput0():
   inDat = []
   for f in sys.argv[1:]:
-    if f.endswith(".mxl"): inDat.append(re.sub(r"<[?]xml.*?/container>\s*","",getoutput("unzip -qc "+quote(f)).replace("application/vnd.recordare.musicxml","").strip(),flags=re.DOTALL))
+    if f.endswith(".mxl"):
+        import zipfile ; z=zipfile.ZipFile(f)
+        for F in z.infolist():
+            if not F.filename=="META-INF/container.xml":
+                b = z.read(F)
+                if type("")==type(u""): b=b.decode('utf-8')
+                inDat.append(b)
     else:
       try:
         try: inDat.append(open(f,encoding="utf-8").read()) # Python 3: try UTF-8 first
@@ -1000,7 +1011,7 @@ def xml2jianpu(x):
         dat[0],dat[1]="",attrs.get("type","")
         if name=="measure":
             oldBarsig = barSig[0]
-            barSig[0] = keySig[0].copy()
+            barSig[0] = keySig[0][:]
             if barSig[1] is not None: barSig[0][barSig[1]]=oldBarsig[barSig[1]] # for tie
     def c(data): dat[0] += data
     def e(name):
@@ -1021,7 +1032,7 @@ def xml2jianpu(x):
             for i in range(abs(int(d0))):
                 keySig[0][start] = keyAcc
                 start = (start+inc) % 7
-            barSig[0] = keySig[0].copy()
+            barSig[0] = keySig[0][:]
             key = ["Gb","Db","Ab","Eb","Bb","F","C","G","D","A","E","B","F#"][int(d0)+6]
             note1[0]=key[0]
             ret.append("1="+key)
@@ -1100,7 +1111,9 @@ def xml2jianpu(x):
     xmlparser.CharacterDataHandler = c
     xmlparser.EndElementHandler = e
     xmlparser.Parse(x,True)
-    return '\n'.join(ret)
+    ret = '\n'.join(ret)
+    if not type("")==type(ret): ret=ret.encode('utf-8') # Python 2
+    return ret
 
 def fix_utf8(stream,mode):
     if type("")==type(u""): # Python 3: please use UTF-8 for Lilypond, even if the system locale says something else
@@ -1440,7 +1453,7 @@ def getLY(score,headers=None,have_final_barline=True):
                 if notehead_markup.onePage: sys.stderr.write("WARNING: Duplicate OnePage, did you miss out a NextScore?\n")
                 notehead_markup.onePage=1
             elif word=="KeepOctave": pass # undocumented option removed in 1.7, no effect
-            elif word=="KeepLength": # TODO: document this.  If this is on, you have to use c in a note to go back to crotchets.
+            elif word=="KeepLength":
                 notehead_markup.keepLength=1
             elif word=="NoBarNums":
                 if notehead_markup.noBarNums: sys.stderr.write("WARNING: Duplicate NoBarNums, did you miss out a NextScore?\n")
@@ -1613,7 +1626,7 @@ def process_input(inDat):
   for midi in [False,True]:
    not_angka = False # may be set by getLY
    if scoreNo==1 and not midi: ret.append(all_scores_start(inDat)) # now we've established non-empty
-   separate_score_per_part = midi and re.search(r"\sPartMidi\s"," "+score+" ") and len(parts)>1 # TODO: document this (results in 1st MIDI file containing all parts, then each MIDI file containing one part, if there's more than 1 part)
+   separate_score_per_part = midi and re.search(r"\sPartMidi\s"," "+score+" ") and len(parts)>1 # (results in 1st MIDI file containing all parts, then each MIDI file containing one part, if there's more than 1 part)
    for separate_scores in [False,True] if separate_score_per_part else [False]:
     headers = {} # will accumulate below
     for partNo,part in enumerate(parts):
@@ -1711,7 +1724,7 @@ For Unicode approximation on this system, please do one of these things:
             elif sys.platform.startswith('win'):
                 import subprocess
                 subprocess.Popen([quote(pdf)],shell=True)
-            elif hasattr(shutil,'which') and shutil.which('evince'): os.system("evince "+quote(pdf))
+            elif (shutil.which('evince') if hasattr(shutil,'which') else os.path.exists('/usr/bin/evince')): os.system("evince "+quote(pdf))
         os.chdir(cwd) ; return
     fix_utf8(sys.stdout,'w').write(outDat)
 
