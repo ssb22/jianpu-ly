@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.829 (c) 2012-2025 Silas S. Brown
+# v1.830 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1332,7 +1332,11 @@ def getLY(score,headers=None,have_final_barline=True):
    aftrnext = defined_jianpuGrace = defined_JGR = None
    aftrnext2 = None
    isInHarmonic = False
-   score=re.sub(r"(?<=\s)(g\[[#b',1-9qsdh]+\]\s*)+g\[([#b',1-9qsdh]+)\](?=\s)",lambda m:re.sub(r"\]\s*g\[","",m.group()),score) # merge multiple grace groups
+   # Please be careful adding extra re.sub's here: they will apply
+   # to the WHOLE SCORE, including Lilypond blocks, headers, etc.
+   # See comment below for a place where you can add re.sub's that
+   # apply just to the jianpu parts after we've already dealt with
+   # Lilypond blocks, headers and lyrics.
    for line in score.split("\n"):
     line = fix_fullwidth(line).strip()
     line=re.sub(r"^%%\s*tempo:\s*(\S+)\s*$",r"\1",line) # to provide an upgrade path for jihuan-tian's fork
@@ -1387,7 +1391,33 @@ def getLY(score,headers=None,have_final_barline=True):
             errExit("Changing header '%s' from '%s' to '%s' (is there a missing %s?)" % (hName,headers[hName],hValue,missing))
         headers[hName] = hValue
     else:
-        line=re.sub('(?<= )[_^]"[^" ]* [^"]*"(?= |$)',lambda m:m.group().replace(' ',chr(0))," "+line)[1:] # multi-word text above/below stave
+        # If we get HERE, we know we're not in a Lilypond header, a
+        # lyrics line, or Lilypond code.  This is a good place to
+        # put any regex replacements we want to apply only to the
+        # jianpu parts of the input before we split into words.
+        # First, merge multiple grace notes.  This is needed for the
+        # output of some MusicXML conversions, and might be useful to
+        # have around anyway:
+        line=re.sub(r"(?<=\s)(g\[[#b',1-9qsdh]+\]\s*)+g\[([#b',1-9qsdh]+)\](?=\s)",lambda m:re.sub(r"\]\s*g\[","",m.group()),line)
+        # To support multi-word text above/below the stave, we'll
+        # replace space with chr(0) inside quoted strings so they
+        # end up being one word per item (we'll put it back to space
+        # before giving it to Lilypond)
+        line=re.sub('(?<= )[_^]"[^" ]* [^"]*"(?= |$)',lambda m:m.group().replace(' ',chr(0))," "+line)[1:]
+        # and YesGH's suggestion: allow slurs and ties to be attached
+        # to the right-hand side of the notes to which they apply
+        # (i.e. auto insert the space if there's not one already).
+        # Not yet doing this with \ Lilypond commands, because
+        # currently \ can indicate a duration if used anywhere other
+        # than the first character of a note, so it could be quite
+        # tricky to identify exactly when we can definitely say it's
+        # a Lilypond command and not a duration (but if your
+        # particular input doesn't use \ for duration then you could
+        # do the replacement in another tool before jianpu-ly).
+        # So currently you still need a space before \command, but
+        # don't need a space before ( or ) or ~ after the note
+        # (and more than one of these can be added to the same note)
+        line=re.sub(r"((?:^|\s)[0-9x.,'cqsdh#b-][0-9x.,'cqsdh\#b-]*)([()~]+)(?=\s|$)", lambda m:" ".join([m.group(1)]+list(m.group(2))), line)
         for word in line.split():
             word=word.replace(chr(0)," ")
             if word in ["souyin","harmonic","up","down","bend","tilde"]: word="Fr="+word # (Fr= before these is optional)
