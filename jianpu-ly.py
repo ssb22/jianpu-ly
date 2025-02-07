@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.830 (c) 2012-2025 Silas S. Brown
+# v1.831 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -634,6 +634,7 @@ class NoteheadMarkup:
       self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.noIndent = self.raggedLast = self.separateTimesig = self.withStaff = 0
       self.keepLength = 0
       self.last_octave = self.base_octave = ""
+      self.octavesSeen = []
       self.current_accidentals = {} # used to predict whether Lilypond will draw the accidental or not, for beam spacing purposes
       self.barNo = 1
       self.tuplet = (1,1)
@@ -709,6 +710,7 @@ class NoteheadMarkup:
         if not isChord: octave=addOctaves(octave,self.base_octave)
         if not octave in [",,,",",,",",","","'","''","'''"]: scoreError("Can't handle octave "+octave+" in",word,line)
         self.last_octave = octave
+        self.octavesSeen.append({",,,":-3,",,":-2,",":-1,"":0,"'":1,"''":2,"'''":3}[octave]) # for figuring out the best clef with WithStaff
         self.last_tremolo = tremolo
         if isChord: self.current_chord = word
         else: self.current_chord = None
@@ -999,16 +1001,18 @@ def get_input():
 def xml2jianpu(x):
     from xml.parsers.expat import ParserCreate
     xmlparser = ParserCreate()
-    ret = [] ; dat = ["",""]
+    mxlPosition,positionsInProgress,partsInProgress = [0,0],[0],[[]]
+    paddingRestList, paddingRestDict = [], {0:0}
+    ret = [] ; dat = ["",{}]
     partList=[""];time=["4","4"];tempo=["",""]
     note=[[""]*11];keySig=[['']*7];barSig=[['']*7,None];note1=["C"]
-    tSig=[None,0];prevChord=[None]
+    tSig=[None,0];prevChord=[None,None]
     types={"64th":"h","32nd":"d","16th":"s","eighth":"q","quarter":"","half":" -","whole":" - - -"}
     typesDot={"64th":"h.","32nd":"d.","16th":"s.","eighth":"q.","quarter":".","half":" - -","whole":" - - - - -"}
     typesMM={"64th":"64","32nd":"32","16th":"16","eighth":"8","quarter":"4","half":"2","whole":"1"}
     quavers={"64th":0.125,"32nd":0.25,"16th":0.5,"eighth":1,"quarter":2,"half":4,"whole":8}
     def s(name,attrs):
-        dat[0],dat[1]="",attrs.get("type","")
+        dat[0],dat[1]="",attrs
         if name=="measure":
             oldBarsig = barSig[0]
             barSig[0] = keySig[0][:]
@@ -1016,15 +1020,24 @@ def xml2jianpu(x):
     def c(data): dat[0] += data
     def e(name):
         d0 = dat[0].strip()
-        if name in ['work-title','movement-title']: ret.append('title='+d0)
-        elif name=='creator' and dat[1]=="composer": ret.append('composer='+d0)
+        if name in ['work-title','movement-title'] or name=='credit-words' and dat[1].get("justify","")=="center":
+            ret.append('title='+d0)
+        elif name=='creator' and dat[1].get("type","")=="composer" or name=='credit-words' and dat[1].get("justify","")=="right":
+            ret.append('composer='+d0)
         elif name=="part-name" or name=="instrument-name": partList[-1]=d0
         elif name=="score-part": partList.append("")
         elif name=="part": # we're assuming score-partwise
-            if partList:
-                ret.append('instrument='+partList[0])
-                del partList[0]
-            ret.append("WithStaff NextPart")
+            for p in partsInProgress:
+                if partList: ret.append('instrument='+partList[0])
+                ret.append("\n".join(p))
+                ret.append("WithStaff NextPart")
+            del partsInProgress[:] ; del positionsInProgress[:]
+            positionsInProgress.append(0);partsInProgress.append([])
+            mxlPosition[0]=mxlPosition[1]=0 ; del paddingRestList[:]
+            for k in list(paddingRestDict.keys()):
+                del paddingRestDict[k]
+            paddingRestDict[0] = 0
+            if partList: del partList[0]
         elif name=="fifths":
             keySig[0]=['']*7
             if d0.startswith('-'): keyAcc,start,inc='b',4-1,4 # Bb (b)4
@@ -1035,21 +1048,46 @@ def xml2jianpu(x):
             barSig[0] = keySig[0][:]
             key = ["Gb","Db","Ab","Eb","Bb","F","C","G","D","A","E","B","F#"][int(d0)+6]
             note1[0]=key[0]
-            ret.append("1="+key)
+            paddingRestList.append("1="+key)
+            for k,v in list(paddingRestDict.items()):
+                if v==len(paddingRestList)-1: paddingRestDict[k] += 1
+            for n,p in enumerate(partsInProgress):
+                if positionsInProgress[n]==max(positionsInProgress):
+                    p.append("1="+key)
         elif name=="beats": time[0]=d0
         elif name=="beat-type": time[1]=d0
         elif name=="time":
-            tSig[0] = len(ret) # so anacrusis logic can come back and add to this
+            tSig[0] = [len(paddingRestList)] # so anacrusis logic can come back and add to this
             tSig[1] = 0 # count quavers in 1st bar
-            ret.append("/".join(time))
-        elif name=="backup" or name=="forward": errExit("MusicXML import: multiple voices per part not implemented")
+            paddingRestList.append("/".join(time))
+            for k,v in list(paddingRestDict.items()):
+                if v==len(paddingRestList)-1: paddingRestDict[k] += 1
+            for n,p in enumerate(partsInProgress):
+                if positionsInProgress[n]==max(positionsInProgress):
+                    tSig[0].append(len(p))
+                    p.append("/".join(time))
+                else: tSig[0].append(None) # and hope anacrusis is fixed in paddingRestList before time signature gets copied to this part (TODO in theory this might not happen with all MusicXML generators)
+        elif name=="duration": mxlPosition[1] = int(dat[0].strip()) # last duration (could be inside note or backup,forward: handle when close)
+        elif name=="backup":
+            mxlPosition[0] -= mxlPosition[1]
+            mxlPosition[1] = 0
+        elif name=="forward":
+            mxlPosition[0] += mxlPosition[1]
+            mxlPosition[1] = 0
         elif name=="measure" and not tSig[0]==None:
-            if not tSig[1]==int(time[0])*8/int(time[1]): ret[tSig[0]]+=","+{0.5:"16",0.75:"16.",1:"8",1.5:"8.",2:"4",3:"4.",4:"2",6:"2.",8:"1",12:"1."}[tSig[1]] # anacrusis
+            if not tSig[1]==int(time[0])*8/int(time[1]):
+                a = ","+{0.5:"16",0.75:"16.",1:"8",1.5:"8.",2:"4",3:"4.",4:"2",6:"2.",8:"1",12:"1."}[tSig[1]] # anacrusis
+                paddingRestList[tSig[0][0]] += a
+                for n,p in enumerate(tSig[0][1:]):
+                    if not p is None: partsInProgress[n][p]+=a
             tSig[0]=None
         elif name=="beat-unit": tempo[0]=typesMM.get(name,"4")
         elif name=="beat-minute" or name=="per-minute": tempo[1]=d0
         elif name=="metronome":
-            if tempo[0] and tempo[1]: ret.append("=".join(tempo))
+            if tempo[0] and tempo[1]:
+                for n,p in enumerate(partsInProgress):
+                    if positionsInProgress[n]==max(positionsInProgress):
+                        p.append("=".join(tempo)) ; break
             tempo[0]=tempo[1]="" # for now we ignore <metronome> elements that don't specify all parameters
         elif name=="step": note[0][0]=d0
         elif name=="rest": note[0][0]="r"
@@ -1057,10 +1095,10 @@ def xml2jianpu(x):
         elif name=="accidental": note[0][2]=d0
         elif name=="type": note[0][3]=d0
         elif name=="dot": note[0][4]=1
-        elif name=="slur": note[0][5]+={"start":" (","stop":" )"}[dat[1]]
-        elif name=="tie": note[0][6]={"start":"~","stop":""}[dat[1]]
+        elif name=="slur": note[0][5]+={"start":" (","stop":" )"}[dat[1].get("type","")]
+        elif name=="tie": note[0][6]={"start":"~","stop":""}[dat[1].get("type","")]
         elif name=="actual-notes": note[0][7]=d0
-        elif name=="tuplet": note[0][8]=dat[1]
+        elif name=="tuplet": note[0][8]=dat[1].get("type","")
         elif name=="chord": note[0][9]=True
         elif name=="grace": note[0][10]=True
         elif name=="fermata": note[0][5]    += r" \fermata"
@@ -1070,6 +1108,24 @@ def xml2jianpu(x):
         elif name=="trill-mark": note[0][5] += r" \trill"
         elif name=="mordent": note[0][5]    += r" \mordent"
         elif name=="note":
+            # Try to find which voice it goes onto, if we're MuseScore
+            # or similar and have parts as voices within a part.
+            # TODO: sometimes the XML will give us a voice or staff number; for now we just find the first one to fit
+            ourRet = ourI = None
+            for i,p in enumerate(positionsInProgress):
+                if p == mxlPosition[0]: # exact match
+                    ourRet,ourI = partsInProgress[i],i ; break
+            if ourRet is None:
+                for i,p in enumerate(positionsInProgress):
+                    if p < mxlPosition[0]: # match but need padding
+                        ourRet,ourI = partsInProgress[i],i
+                        ourRet.append(' '.join(paddingRestList[paddingRestDict[p]:])) # TODO: collapse to whole-bar rests when needed (low priority because this should not happen often)
+                        break
+            if ourRet is None: # need new part
+                partsInProgress.append(paddingRestList[:paddingRestDict[mxlPosition[0]]]) # TODO: collapse to whole-bar rests when needed (as above)
+                positionsInProgress.append(mxlPosition[0])
+                ourRet,ourI = partsInProgress[-1],len(partsInProgress)-1
+            # Now OK to add the note to the part (voice)
             step,octave,acc,nType,dot,extras,tie,tuplet,tState,chord,grace = note[0]
             note[0]=[""]*11
             if step=="r": r="0"
@@ -1086,8 +1142,12 @@ def xml2jianpu(x):
                 if keySig[0][dTone%7]=="#": acc="" if acc=="#" else "b"
                 if keySig[0][dTone%7]=="b": acc="" if acc=="b" else "#"
             if chord:
-                ret[prevChord[0]] += r ; return
-            if tState=="start": ret.append(tuplet+"[")
+                rr = prevChord[1][prevChord[0]]
+                prevChord[1][prevChord[0]] = rr.split()[0]+r+''.join([' '+x for x in rr.split()[1:]])
+                return
+            if tState=="start":
+                ourRet.append(tuplet+"[")
+                paddingRestList.append(tuplet+"[")
             if not nType:
                 wantQ = int(time[0])*8/int(time[1])
                 nn = [k for k,v in quavers.items() if v==wantQ]
@@ -1096,17 +1156,23 @@ def xml2jianpu(x):
                     nn = [k for k,v in quavers.items() if v*1.5==wantQ]
                     if nn: nType,dot = nn[0],1
                     else: assert 0, "Full-measure note or rest at unrecognised bar length" # will probably need to split
-            if not tSig[0]==None: # we're counting the length of the first bar, for anacrusis
+            if not tSig[0]==None and ourI==0: # we're counting the length of the first bar, for anacrusis
                 tSig[1] += quavers[nType]
                 if dot: tSig[1] += quavers[nType]/2.0
             if dot: d=typesDot
             else: d = types
             r += acc+d[nType]+' '
-            prevChord[0]=len(ret)
+            paddingRestList.append("0"+d[nType])
+            prevChord[0],prevChord[1]=len(ourRet),ourRet
             w1,w2 = r[:r.index(' ')],r[r.index(' '):]
             if grace: w1="g["+w1+"]"
-            ret.append(w1+extras+' '+w2+' '+tie)
-            if tState=="stop": ret.append("]")
+            ourRet.append(w1+extras+' '+w2+' '+tie)
+            if tState=="stop":
+                ourRet.append("]") ; paddingRestList.append("]")
+            mxlPosition[0] += mxlPosition[1]
+            positionsInProgress[ourI] += mxlPosition[1]
+            mxlPosition[1] = 0
+            paddingRestDict[mxlPosition[0]] = len(paddingRestList)
     xmlparser.StartElementHandler = s
     xmlparser.CharacterDataHandler = c
     xmlparser.EndElementHandler = e
@@ -1687,6 +1753,8 @@ def process_input(inDat):
        if notehead_markup.withStaff:
            western=True
            staffStart,voiceName = western_staff_start(inst)
+           average_octave = sum(notehead_markup.octavesSeen)*1.0/len(notehead_markup.octavesSeen)
+           if average_octave < -0.5: staffStart += r" \clef bass" # might want to say <0 but being conservative for now
            ret.append(staffStart+" "+getLY(part,have_final_barline=False)[0]+" "+western_staff_end())
            western = False
        if lyrics: ret.append("".join(lyrics_start(voiceName)+l+" "+lyrics_end()+" " for l in lyrics))
