@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.831 (c) 2012-2025 Silas S. Brown
+# v1.832 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -48,12 +48,12 @@ Time signature with quaver anacrusis (8th-note pickup): 4/4,8
 Key signature (major): 1=Bb
 Key signature (minor): 6=F#
 Tempo: 4=85
-Lyrics: L: here are the syl- la- bles (all on one line)
+Lyrics: L: here are the syl- la- bles (all on one line, or newline after the : and double newline to end)
 Lyrics (verse 1): L: 1. Here is verse one
 Lyrics (verse 2): L: 2. Here is verse two
 Hanzi lyrics (auto space): H: hanzi (with or without spaces)
 Lilypond headers: title=the title (on a line of its own)
-Guitar chords: chords=c2. g:7 c (on own line)
+Guitar chords: chords=c2. g:7 c (on own line, or newline after the = and double newline to end)
 Fret diagrams: frets=guitar (on own line)
 Multiple parts: NextPart
 Instrument of current part: instrument=Flute (on a line of its own)
@@ -1403,6 +1403,7 @@ def getLY(score,headers=None,have_final_barline=True):
    # See comment below for a place where you can add re.sub's that
    # apply just to the jianpu parts after we've already dealt with
    # Lilypond blocks, headers and lyrics.
+   score = re.sub("(?s)(^|\n)(L:|H:|chords=)\n(.*?)(\n\n|$)",lambda m:"\n"+" ".join(m.group().split())+"\n",score) # this one DOES apply to lyrics etc: if newline immediately after, collapse until next double newline
    for line in score.split("\n"):
     line = fix_fullwidth(line).strip()
     line=re.sub(r"^%%\s*tempo:\s*(\S+)\s*$",r"\1",line) # to provide an upgrade path for jihuan-tian's fork

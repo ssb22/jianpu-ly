@@ -53,7 +53,7 @@ Key signature (minor): `6=F#`
 
 Tempo: `4=85`
 
-Lyrics: `L: here are the syl- la- bles` (all on one line)
+Lyrics: `L: here are the syl- la- bles` (all on one line, or newline after the : and double newline to end)
 
 Lyrics (verse 1): `L: 1. Here is verse one`
 
@@ -63,7 +63,7 @@ Hanzi lyrics (auto space): `H: hanzi` (with or without spaces)
 
 Lilypond headers: `title=the title` (on a line of its own)
 
-Guitar chords: `chords=c2. g:7 c` (on own line)
+Guitar chords: `chords=c2. g:7 c` (on own line, or newline after the = and double newline to end)
 
 Fret diagrams: `frets=guitar` (on own line)
 
