@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # (can be run with either Python 2 or Python 3)
-
+## (v1832.1)
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
 # v1.832 (c) 2012-2025 Silas S. Brown
@@ -1484,7 +1484,8 @@ def getLY(score,headers=None,have_final_barline=True):
         # So currently you still need a space before \command, but
         # don't need a space before ( or ) or ~ after the note
         # (and more than one of these can be added to the same note)
-        line=re.sub(r"((?:^|\s)[0-9x.,'cqsdh#b-][0-9x.,'cqsdh\#b-]*)([()~]+)(?=\s|$)", lambda m:" ".join([m.group(1)]+list(m.group(2))), line)
+        ## line=re.sub(r"((?:^|\s)[0-9x.,'cqsdh#b-][0-9x.,'cqsdh\#b-]*)([()~]+)(?=\s|$)", lambda m:" ".join([m.group(1)]+list(m.group(2))), line)
+        line=re.sub(r"([0-9x.,'cqsdh\\#b-]+)([()~_^\\])", r"\1 \2", line) ## add a space after note
         for word in line.split():
             word=word.replace(chr(0)," ")
             if word in ["souyin","harmonic","up","down","bend","tilde"]: word="Fr="+word # (Fr= before these is optional)
