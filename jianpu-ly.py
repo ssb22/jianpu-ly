@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.832 (c) 2012-2025 Silas S. Brown
+# v1.833 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1021,14 +1021,18 @@ def xml2jianpu(x):
     def e(name):
         d0 = dat[0].strip()
         if name in ['work-title','movement-title'] or name=='credit-words' and dat[1].get("justify","")=="center":
-            ret.append('title='+d0)
+            if not(any(r.startswith("title=") for r in ret)):
+                ret.append('title='+d0)
         elif name=='creator' and dat[1].get("type","")=="composer" or name=='credit-words' and dat[1].get("justify","")=="right":
-            ret.append('composer='+d0)
+            if not(any(r.startswith("composer=") for r in ret)):
+                ret.append('composer='+d0)
         elif name=="part-name" or name=="instrument-name": partList[-1]=d0
         elif name=="score-part": partList.append("")
         elif name=="part": # we're assuming score-partwise
-            for p in partsInProgress:
+            for n,p in enumerate(partsInProgress):
                 if partList: ret.append('instrument='+partList[0])
+                if positionsInProgress[n] < max(positionsInProgress) and positionsInProgress[n] in paddingRestDict: p.append(' '.join(paddingRestList[paddingRestDict[positionsInProgress[n]]:]))
+                else: os.environ["j2ly_sloppy_bars"] = "1"
                 ret.append("\n".join(p))
                 ret.append("WithStaff NextPart")
             del partsInProgress[:] ; del positionsInProgress[:]
@@ -1117,9 +1121,10 @@ def xml2jianpu(x):
                     ourRet,ourI = partsInProgress[i],i ; break
             if ourRet is None:
                 for i,p in enumerate(positionsInProgress):
-                    if p < mxlPosition[0]: # match but need padding
+                    if p < mxlPosition[0] and p in paddingRestDict: # match but need padding
                         ourRet,ourI = partsInProgress[i],i
-                        ourRet.append(' '.join(paddingRestList[paddingRestDict[p]:])) # TODO: collapse to whole-bar rests when needed (low priority because this should not happen often)
+                        ourRet.append(' '.join(paddingRestList[paddingRestDict[p]:paddingRestDict[mxlPosition[0]]])) # TODO: collapse to whole-bar rests when needed (low priority because this should not happen often)
+                        positionsInProgress[i] = mxlPosition[0]
                         break
             if ourRet is None: # need new part
                 partsInProgress.append(paddingRestList[:paddingRestDict[mxlPosition[0]]]) # TODO: collapse to whole-bar rests when needed (as above)
@@ -1147,7 +1152,7 @@ def xml2jianpu(x):
                 return
             if tState=="start":
                 ourRet.append(tuplet+"[")
-                paddingRestList.append(tuplet+"[")
+                if ourI==0: paddingRestList.append(tuplet+"[")
             if not nType:
                 wantQ = int(time[0])*8/int(time[1])
                 nn = [k for k,v in quavers.items() if v==wantQ]
@@ -1162,17 +1167,19 @@ def xml2jianpu(x):
             if dot: d=typesDot
             else: d = types
             r += acc+d[nType]+' '
-            paddingRestList.append("0"+d[nType])
+            if ourI==0: paddingRestList.append("0"+d[nType]) # we hope the subsequent voices are not cross-rhythm with the first voice, at least not at points where <backup> and <forward> occur
             prevChord[0],prevChord[1]=len(ourRet),ourRet
             w1,w2 = r[:r.index(' ')],r[r.index(' '):]
             if grace: w1="g["+w1+"]"
             ourRet.append(w1+extras+' '+w2+' '+tie)
             if tState=="stop":
-                ourRet.append("]") ; paddingRestList.append("]")
+                ourRet.append("]")
+                if ourI==0: paddingRestList.append("]")
             mxlPosition[0] += mxlPosition[1]
-            positionsInProgress[ourI] += mxlPosition[1]
+            positionsInProgress[ourI] = mxlPosition[0]
             mxlPosition[1] = 0
-            paddingRestDict[mxlPosition[0]] = len(paddingRestList)
+            if ourI==0:
+                paddingRestDict[mxlPosition[0]] = len(paddingRestList)
     xmlparser.StartElementHandler = s
     xmlparser.CharacterDataHandler = c
     xmlparser.EndElementHandler = e
