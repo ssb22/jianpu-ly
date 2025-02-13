@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.833 (c) 2012-2025 Silas S. Brown
+# v1.834 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -901,7 +901,7 @@ def parseNote(word,origWord,line):
     else: word=word.replace(u"\u2019".encode('utf-8'),"'")
     if "///" in word: tremolo,word=":32",word.replace("///","",1)
     else: tremolo = ""
-    if not re.match(r"[0-7x.,'cqsdh\\#b-]+$",word): # unrecognised stuff in it: flag as error, rather than ignoring and possibly getting a puzzling barsync fail
+    if not re.match(note_regex+"$",word): # unrecognised stuff in it: flag as error, rather than ignoring and possibly getting a puzzling barsync fail
         scoreError("Unrecognised command",origWord,line)
     figures = ''.join(re.findall('[01234567x-]',word))
     dots = "".join(c for c in word if c==".")
@@ -1392,6 +1392,14 @@ def chordNotes_markup(notes):
     ret += ">"
     return ret,bottom_octave,placeholder_chord
 
+note_regex = (
+    # Define a note regex as precisely as we can, as different from Lilypond commands etc.
+    # Optionally before the figure:
+    r"(?:[.,'cqsdh#b]" + # non-\ note attribute
+    r"[.,'cqsdh\\#b]*)?" + # and possibly other note attributes that can include \ (just not as the first character).
+    r"[0-9x-]" + # At least one figure (or rest or continuation)
+    r"[0-9x.,'cqsdh\\#b-]*") # and other figures or attrs after
+
 def getLY(score,headers=None,have_final_barline=True):
    if not headers: headers = {} # Python 2 persists this dict if it's in the default args
    lyrics = []
@@ -1491,7 +1499,7 @@ def getLY(score,headers=None,have_final_barline=True):
         # So currently you still need a space before \command, but
         # don't need a space before ( or ) or ~ after the note
         # (and more than one of these can be added to the same note)
-        line=re.sub(r"((?:^|\s)[0-9x.,'cqsdh#b-][0-9x.,'cqsdh\#b-]*)([()~]+)(?=\s|$)", lambda m:" ".join([m.group(1)]+list(m.group(2))), line)
+        line=re.sub(r"((?:^|\s)"+note_regex+r")([()~]+)(?=\s|$)", lambda m:" ".join([m.group(1)]+list(m.group(2))), line)
         for word in line.split():
             word=word.replace(chr(0)," ")
             if word in ["souyin","harmonic","up","down","bend","tilde"]: word="Fr="+word # (Fr= before these is optional)
