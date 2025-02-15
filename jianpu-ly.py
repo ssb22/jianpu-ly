@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.834 (c) 2012-2025 Silas S. Brown
+# v1.835 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -957,7 +957,7 @@ def getInput0():
     if f.endswith(".mxl"):
         import zipfile ; z=zipfile.ZipFile(f)
         for F in z.infolist():
-            if not F.filename=="META-INF/container.xml":
+            if not F.filename in ["mimetype","META-INF/container.xml"]:
                 b = z.read(F)
                 if type("")==type(u""): b=b.decode('utf-8')
                 inDat.append(b)
