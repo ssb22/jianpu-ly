@@ -135,6 +135,7 @@ Unicode approximation instead of Lilypond: `Unicode`
 
 忽略： `% 这是注释`
 
+目前已知问题：1、汉字歌词排列有时会对不齐 2、多声部符号太丑了 3、强制换行（强制将小节换到下一行）的命令没找到 4、波音的命令没找到
 
 Copyright and Trademarks
 ------------------------
