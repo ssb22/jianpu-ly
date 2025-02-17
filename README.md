@@ -29,7 +29,7 @@ Change base octave: `< >`
 
 十六分音符、八分音符、四分音符： `s1 q1 1`
 
-十六分音符、八分音符、四分音符的替代方案： `1\\ 1\ 1` (any \ must go after the pitch not before)
+十六分音符、八分音符、四分音符的替代方案： `1\\ 1\ 1` （任何\必须写在音高之后而不是之前）
 
 Sticky durations (4 semiquavers then crotchet): `KeepLength s1 1 1 1 c1`
 
