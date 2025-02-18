@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.835 (c) 2012-2025 Silas S. Brown
+# v1.837 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -884,8 +884,9 @@ class NoteheadMarkup:
             b4last, aftrlast = "", " ~"
             if tremolo and placeholder_chord.startswith("<"):
                 aftrlast = "" # can't tie this kind of tremolo as of Lilypond 2.24 (get warning: Unattached TieEvent)
-        # elif not figures=='-': 
-        #     b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
+        elif figures=='-' and not tremolo:
+            # For attaching lyrics to long notes:
+            b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
         else:
             b4last, aftrlast = "", ""
     else: b4last,aftrlast = "",""
@@ -957,7 +958,7 @@ def getInput0():
     if f.endswith(".mxl"):
         import zipfile ; z=zipfile.ZipFile(f)
         for F in z.infolist():
-            if not F.filename in ["mimetype","META-INF/container.xml"]:
+            if not F.filename in ["mimetype","META-INF/","META-INF/container.xml"]:
                 b = z.read(F)
                 if type("")==type(u""): b=b.decode('utf-8')
                 inDat.append(b)
@@ -1022,10 +1023,10 @@ def xml2jianpu(x):
         d0 = dat[0].strip()
         if name in ['work-title','movement-title'] or name=='credit-words' and dat[1].get("justify","")=="center":
             if not(any(r.startswith("title=") for r in ret)):
-                ret.append('title='+d0)
+                ret.append('title='+d0.replace("\n"," "))
         elif name=='creator' and dat[1].get("type","")=="composer" or name=='credit-words' and dat[1].get("justify","")=="right":
             if not(any(r.startswith("composer=") for r in ret)):
-                ret.append('composer='+d0)
+                ret.append('composer='+d0.replace("\n"," "))
         elif name=="part-name" or name=="instrument-name": partList[-1]=d0
         elif name=="score-part": partList.append("")
         elif name=="part": # we're assuming score-partwise
