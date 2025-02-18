@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.836 (c) 2012-2025 Silas S. Brown
+# v1.837 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -884,8 +884,9 @@ class NoteheadMarkup:
             b4last, aftrlast = "", " ~"
             if tremolo and placeholder_chord.startswith("<"):
                 aftrlast = "" # can't tie this kind of tremolo as of Lilypond 2.24 (get warning: Unattached TieEvent)
-        # elif not figures=='-': 
-        #     b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
+        elif figures=='-' and not tremolo:
+            # For attaching lyrics to long notes:
+            b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
         else:
             b4last, aftrlast = "", ""
     else: b4last,aftrlast = "",""
