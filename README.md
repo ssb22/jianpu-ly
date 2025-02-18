@@ -19,7 +19,7 @@ Normal text files are whitespace-separated and can contain words like the follow
 
 变音记号： `1 #1 2 b2 1`
 
-八度音阶 `1,, 1, 1 1' 1''`
+八度音阶： `1,, 1, 1 1' 1''`
 
 1'和 2' 的快捷键: `8 9`
 
@@ -39,7 +39,7 @@ Sticky durations (4 semiquavers then crotchet): `KeepLength s1 1 1 1 c1`
 
 二分音符： `1 -`
 
-附点二分音符 `1 - -`
+附点二分音符： `1 - -`
 
 全音符： `1 - - -`
 
@@ -97,7 +97,7 @@ Alternate Indonesian-style minim, dotted minim and semibreve: `1 . 1 . . 1 . . .
 
 Grace notes with durations: `g[d4d5s6] 1`
 
-简单和弦 `,13'5 1 1b3 1` （根据音高自动排序）
+简单和弦： `,13'5 1 1b3 1` （根据音高自动排序）
 
 从头反复： `1 1 Fine 1 1 1 1 1 1 DC`
 
@@ -119,7 +119,7 @@ Rehearsal letters: `letterA letterB`
 
 Multibar rest: `R*8`
 
-力度变化（适用于之前的音符） `\p \mp \f`
+力度变化（适用于之前的音符）： `\p \mp \f`
 
 其它Lilypond命令： `\fermata \> \! \( \) etc`
 
@@ -134,8 +134,6 @@ Unicode approximation instead of Lilypond: `Unicode`
 按声部导出MIDI文件： `PartMidi`
 
 忽略： `% 注释`
-
-目前已知问题：1、汉字歌词排列有时会对不齐 2、多声部符号太丑了 3、强制换行（强制将小节换到下一行）的命令没找到 4、波音的命令没找到
 
 Copyright and Trademarks
 ------------------------
