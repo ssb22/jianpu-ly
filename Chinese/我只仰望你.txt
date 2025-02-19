@@ -4,7 +4,6 @@ composer=佚名 词曲
 poet=1=G 4/4
 % poet原为作词人，今代替调号和拍号
 
-tagline = ##f
 NoIndent
 
 q3, 5, q6, 5, - 
