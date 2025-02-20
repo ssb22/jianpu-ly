@@ -1,0 +1,30 @@
+title=我只仰望你
+subtitle=我心旋律《天父》（1998）
+composer=佚名 词曲
+poet=1=G 4/4
+% poet原为作词人，今代替调号和拍号
+
+LP: \once \override Staff.TimeSignature #'stencil = ##f
+:LP
+NoIndent
+
+q3, 5, q6, 5, - 
+q6, 6, q5, 6,. q1 
+q2 q2 q2 q2 2 q1 q2 
+3 - - - \break 
+q3, 5, q6, 5, - 
+q6, 6, q5, 6,. q1 
+2. q5, q5 q3 q3 q2 
+1 - - - \break 
+LP: \bar "||"
+:LP
+q3 q5 q5 q3 3 - 
+q2 q3 q3 q2 1 - 
+q2 2 q2 q2 q2 q3 q1 
+2 - - - \break 
+q3 q5 q5 q3 3 - 
+q2 q3 q3 q2 1. q1 
+q2 2 q5, q5 q3 q3 q2 
+1 - - - 
+
+H: 你是我主，我的盼望，是我坚固磐石和力量。我要向你切切恳求，请作我一生的救主。你是我的主，你是我的王，你是我高台和盾牌。我的心渴慕，要讨你喜悦，我诚心向你屈膝敬拜。
