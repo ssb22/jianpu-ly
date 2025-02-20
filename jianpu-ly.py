@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.837 (c) 2012-2025 Silas S. Brown
+# v1.838 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -701,7 +701,7 @@ class NoteheadMarkup:
         if self.current_chord: # a chord is currently in progress, and we're extending it with a tie
             isChord = True
             chord_ret,octave,placeholder_chord = chordNotes_markup(re.sub('[qsdh.]','',self.current_chord))
-            if not midi and not western: placeholder_chord = "c"
+            if not midi and not western: placeholder_chord = placeholder_chord[:-1].split()[-1] # just have one note of it for dashes
         else: # not a chord, so we can assume len(self.last_figures)==1
             placeholder_chord = placeholders[self.last_figures]
             octave = self.last_octave # for MIDI or 5-line
@@ -798,7 +798,7 @@ class NoteheadMarkup:
     elif not isChord or figures.startswith("-"): # single note or rest
         ret += placeholder_chord
         if midi or western or not not_angka: ret += {"":"", "#":"is", "b":"es"}[accidental]
-        if not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''","'''":"''''",",":"",",,":",",",,,":",,"}[octave] # for MIDI + Western, put it so no-mark starts near middle C
+        if (midi or western) and not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''","'''":"''''",",":"",",,":",",",,,":",,"}[octave] # so no-mark starts near middle C
         if add_cautionary_accidental: ret += "!"
     ret += ("%d" % length) + dots
     if self.rplacNextIfStillInBeam: self.rplacNextIfStillInBeam += ("r%d" % length) + dots + '['
@@ -879,17 +879,13 @@ class NoteheadMarkup:
         self.unicode_approx[-1]=self.unicode_approx[-1].rstrip()+u'\u2502'
         self.barPos = 0 ; self.barNo += 1
         self.current_accidentals = {}
+    b4last,aftrlast = "",""
     if invisTieLast:
         if midi or western:
-            b4last, aftrlast = "", " ~"
-            if tremolo and placeholder_chord.startswith("<"):
-                aftrlast = "" # can't tie this kind of tremolo as of Lilypond 2.24 (get warning: Unattached TieEvent)
-        elif figures=='-' and not tremolo:
+            if not (tremolo and placeholder_chord.startswith("<")): aftrlast = " ~"
+        elif not tremolo:
             # For attaching lyrics to long notes:
             b4last,aftrlast = r"\once \override Tie #'transparent = ##t \once \override Tie #'staff-position = #0 "," ~"
-        else:
-            b4last, aftrlast = "", ""
-    else: b4last,aftrlast = "",""
     if figures=="x" and western: ret = r"\once \override NoteHead.style = #'cross \once \override NoteHead.no-ledgers = ##t " + ret
     if inRestHack: ret += " } " # end temporary voice for the "-" (non)-note
     elif tieEnd: ret += ' '+tieEnd # end of JianpuTie curve
@@ -1112,6 +1108,10 @@ def xml2jianpu(x):
         elif name=="accent": note[0][5]     += r" \accent"
         elif name=="trill-mark": note[0][5] += r" \trill"
         elif name=="mordent": note[0][5]    += r" \mordent"
+        elif name in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz".split(): note[0][5] += " \\"+name
+        elif name=="words":
+            toAdd = r' ^"'+dat[0].strip().replace('"',"'")+'"'
+            if not toAdd in note[0][5]: note[0][5] += toAdd
         elif name=="note":
             # Try to find which voice it goes onto, if we're MuseScore
             # or similar and have parts as voices within a part.
@@ -1710,13 +1710,13 @@ def getLY(score,headers=None,have_final_barline=True):
                (3,"","2."), # 3 crotchets = dotted minim
                (2,r"\.","2."), # in 6/8, 2 dotted crotchets = dotted minim
                (2,"","2")]: # 2 crotchets = minim
-           out = re.sub("(?P<note>[^<][^ ]*|<[^>]*>)4"+dot+r"((?::32)?) +~(( \\[^ ]+)*) "+" +~ ".join(["(?P=note)4"+dot]*(numNotes-1)),r"\g<1>"+result+r"\g<2>\g<3>",out)
+           out = re.sub("(?P<note>[^<][^ ]*|<[^>]*>)4"+dot+r'((?::32)?) +~(( \\[^ ]+| [_^]"[^"]*")*) '+" +~ ".join(["(?P=note)4"+dot]*(numNotes-1)),r"\g<1>"+result+r"\g<2>\g<3>",out)
+           out = re.sub("r4"+dot+r'(( \\[^ ]+| [_^]"[^"]*")*) '+" ".join(["r4"+dot]*(numNotes-1)),"r"+result+r"\g<1>",out)
            if dot: chkLen=6
            else: chkLen = 4
            out = re.sub(r"\\repeat tremolo "+str(chkLen)+r" { (?P<note1>[^ ]+)32 (?P<note2>[^ ]+)32 } +~(( \\[^ ]+)*) "+" +~ ".join(["< (?P=note1) (?P=note2) >4"+dot]*(numNotes-1)),r"\\repeat tremolo "+str(chkLen*numNotes)+r" { \g<1>32 \g<2>32 }\g<3>",out)
-           out = out.replace(" ".join(["r4"+dot]*numNotes),"r"+result)
        out = re.sub(r"(\\repeat tremolo [^{]+{ [^ ]+)( [^}]+ })(( +\\[^b][^ ]*)+)",r"\g<1>\g<3>\g<2>",out) # dynamics need to attach inside the tremolo (but \bar doesn't)
-       out = re.sub(r"(%\{ bar [0-9]*: %\} | \\major ) *r(?=[^ ]* [| ]* (?:\\noPageBreak )?%\{ bar|\\bar)",r"\g<1>R",out)
+       out = re.sub(r'(%\{ bar [0-9]*: %\} | \\major ) *r(?=[^ ]*(?: [_^]"[^"]*")?[| ]* (?:\\noPageBreak )?(?:%\{ bar|\\bar|\}$))',r"\g<1>R",out)
        out = out.replace(r"\new RhythmicStaff \with {",r"\new RhythmicStaff \with { \override VerticalAxisGroup.default-staff-staff-spacing = #'((basic-distance . 6) (minimum-distance . 6) (stretchability . 0)) ") # don't let it hang too far up in the air
    if not_angka: out=out.replace("make-bold-markup","make-simple-markup")
    return out,maxBeams,lyrics,headers
