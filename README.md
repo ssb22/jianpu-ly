@@ -1,19 +1,18 @@
 # jianpu-ly
 
-Jianpu in Lilypond, from http://ssb22.user.srcf.net/mwrhome/jianpu-ly.html
+Lilypond 简谱，来自 http://ssb22.user.srcf.net/mwrhome/jianpu-ly.html
 
-(also mirrored at http://ssb22.gitlab.io/mwrhome/jianpu-ly.html just in case, and available via `pip install jianpu-ly` or `pipx run jianpu-ly`)
+（为以防万一，还在 http://ssb22.gitlab.io/mwrhome/jianpu-ly.html 上做了镜像，可通过 pip install jianpu-ly 或 pipx run jianpu-ly 获取）。
 
-jianpu-ly is a Python program (compatible with both Python 2 and Python 3) that assists with printing jianpu (numbered musical notation) in the GNU Lilypond music typesetter. The jianpu is written on a modiﬁed-appearance “stave” in Lilypond, which means Lilypond’s typesetting capabilities (lyric spacing, slurs, beams etc) will apply to the jianpu without needing to add a 5-line stave. If you prefer, the generated code for the jianpu stave may also be placed in a score with other types of stave.
+jianpu-ly 是一个 Python 程序（兼容 Python 2 和 Python 3），用于协助在 GNU 软件 Lilypond 中打印简谱（数字谱）。简谱是写在 Lilypond 中经过修改的 “谱表 ”上的，这意味着 Lilypond 的排版功能（歌词间距、圆滑线、符杠等）将适用于简谱，而无需增加 一个五线谱。如果你愿意，生成的简谱代码也可以与其他类型的谱表一起放在乐谱中。
 
-使用 jianpu-ly 需要一些技术知识。如果你不知道什么是命令行，什么是文本编辑器，什么是目录，或者什么是Python，那么请在尝试使用 jianpu-ly 之前了解这些内容。它不是像 Frescobaldi 那样的 Lilypond 前端扩展;它是一个预处理器，目前需要你有命令行经验。
+使用 jianpu-ly 需要一些技术知识。如果你不知道什么是命令行，什么是文本编辑器，什么是目录，或者什么是Python，那么请在尝试使用 jianpu-ly 之前了解这些内容。它不是像 Frescobaldi 那样的 Lilypond 前端扩展；它是一个预处理器，目前需要你有命令行经验。
 
-If you have problems, try a different Lilypond version.
-jianpu-ly works with Lilypond 2.20, 2.22 and 2.24.
+如果你有问题，可以尝试不同的 Lilypond 版本。jianpu-ly 适用于 Lilypond 2.20、2.22 和 2.24。
 
-Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file).  There is experimental support for importing MusicXML via jianpu-ly piece.xml (or jianpu-ly piece.mxl > ly-file) but this does not work for all pieces.
+运行 jianpu-ly < 文件名.txt > 文件名.ly（或 jianpu-ly 文件名.txt > 文件名.ly）。通过jianpu-ly piece.xml （或 jianpu-ly piece.mxl > 文件名.ly）可以导入MusicXML，但这是实验性质的，并不适合所有乐曲。
 
-Normal text files are whitespace-separated and can contain words like the following.  Usually the order of characters within a note does not matter, hence #1 is the same as 1# and '1 is the same as 1' and s1 is the same as 1s.
+普通文本文件以空格分隔的，可以包含类似下面这样的字词。通常，音符中字符的顺序并不重要，因此 #1 与 1# 相同，'1 与 1 相同'，s1 与 1s 相同。
 
 上行音阶： `1 2 3 4 5 6 7 1'`
 
@@ -135,11 +134,9 @@ Unicode approximation instead of Lilypond: `Unicode`
 
 忽略： `% 注释`
 
-Copyright and Trademarks
+版权和商标
 ------------------------
 
-(c) Silas S. Brown, licensed under Apache 2.
+(c) Silas S. Brown，经 Apache 2.0 许可。
 
-Apache is a registered trademark of The Apache Software Foundation.
-Python is a trademark of the Python Software Foundation.
-Any other trademarks I mentioned without realising are trademarks of their respective holders.
+Apache 是 Apache 软件基金会的注册商标。Python 是 Python 软件基金会的商标。我无意中提到的任何其他商标均为其各自持有人的商标。
