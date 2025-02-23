@@ -3,7 +3,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.838 (c) 2012-2025 Silas S. Brown
+# v1.839 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1419,7 +1419,7 @@ def getLY(score,headers=None,have_final_barline=True):
    # See comment below for a place where you can add re.sub's that
    # apply just to the jianpu parts after we've already dealt with
    # Lilypond blocks, headers and lyrics.
-   score = re.sub("(?s)(^|\n)(L:|H:|chords=)\n(.*?)(\n\n|$)",lambda m:"\n"+" ".join(m.group().split())+"\n",score) # this one DOES apply to lyrics etc: if newline immediately after, collapse until next double newline
+   score = re.sub("(?s)(^|\n)(L:|H:|chords=)\n(.*?)(?=\n\n|$)",lambda m:"\n"+" ".join(m.group().split()),score) # this one DOES apply to lyrics etc: if newline immediately after, collapse until next double newline
    for line in score.split("\n"):
     line = fix_fullwidth(line).strip()
     line=re.sub(r"^%%\s*tempo:\s*(\S+)\s*$",r"\1",line) # to provide an upgrade path for jihuan-tian's fork
