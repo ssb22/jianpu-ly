@@ -1,4 +1,5 @@
 # jianpu-ly
+[**简体中文**](README_zh_CN.md)
 
 Jianpu in Lilypond, from http://ssb22.user.srcf.net/mwrhome/jianpu-ly.html
 
