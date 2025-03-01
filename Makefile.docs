@@ -1,0 +1,19 @@
+# -*- mode: Makefile -*-
+
+# This file contains rules to update README from the help text.
+# It is run automatically by my homepage update scripts before a commit.
+# This is why all changes to the Usage section should be made in the jianpu-ly.py doc string.
+
+# TODO: do the same for hyucheng3721's translation?
+# as it would be nice to ensure each usage line has 2 languages
+# nearby each other so we remember to change both when updating
+# (maybe interleave the languages in jianpu-ly.py doc string)
+
+update-readme:
+	awk -- 'BEGIN {p=1} /^Run jianpu-ly / {p=0} // {if(p) print}' < README.md > n
+	python jianpu-ly.py --markdown | awk -- 'BEGIN {p=0} /^Run jianpu-ly / {p=1} // {if(p) print}' >> n
+	echo >> n
+	awk -- 'BEGIN {p=0} /^Copyright and Trademarks/ {p=1} // {if(p) print}' < README.md >> n
+	mv n README.md
+
+.PHONY: update-readme
