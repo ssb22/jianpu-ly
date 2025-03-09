@@ -922,7 +922,7 @@ def write_docs():
     # Write an HTML or Markdown version of the doc string
     def htmlify(l):
         if "--html" in sys.argv:
-            return re.sub('([hdDsS]emi)',r'\1&shy;',l.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")).replace("approximation","approx&shy;imation").replace("instrument=Flute","instrument=<wbr>Flute")
+            return re.sub('([hdDsS]emi)',r'\1&shy;',l.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")).replace("approximation","approx&shy;imation").replace("instrument=Flute","instrument=<wbr>Flute").replace("automatically","automat&shy;ically").replace("SeparateTimesig","Separate&shy;Timesig") # not sure about that last one because we don't want to hide that it's 1 word, but we do want Chrome on small devices in not-so-small print to fit it on a line rather than zoom out the whole page
         else: return l
     inTable = 0 ; justStarted=1
     for line in __doc__.split("\n"):
