@@ -1,9 +1,10 @@
 #!/usr/bin/env python
+# -*- coding: utf-8 -*-
 # (can be run with either Python 2 or Python 3)
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.839 (c) 2012-2025 Silas S. Brown
+# v1.84 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,70 +26,138 @@ r"""
 # and at https://gitlab.developers.cam.ac.uk/ssb22/jianpu-ly
 # and in China: https://gitee.com/ssb22/jianpu-ly
 
-# (The following docstring format is fixed, see --html)
+# The following docstring format is fixed, and is used by the options
+# --html           (generates the HTML table for the website)
+# --html --chinese (generates a Chinese version of this table)
+# --markdown       (generates the Markdown table for the Readme)
+# --markdown --chinese (generates the Markdown table for the Chinese Readme)
+# Currently, any non-ASCII character in a line indicates it's the Chinese version.
+
 Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file).  There is experimental support for importing MusicXML via jianpu-ly piece.xml (or jianpu-ly piece.mxl > ly-file) but this does not work for all pieces.
 # (Currently, MusicXML import must use .mxl extension and not redirect)
+运行 jianpu-ly < 文件名.txt > 文件名.ly（或 jianpu-ly 文件名.txt > 文件名.ly）。通过jianpu-ly piece.xml （或 jianpu-ly piece.mxl > 文件名.ly）可以导入MusicXML，但这是实验性质的，并不适合所有乐曲。
 Normal text files are whitespace-separated and can contain words like the following.  Usually the order of characters within a note does not matter, hence #1 is the same as 1# and '1 is the same as 1' and s1 is the same as 1s.
+普通文本文件以空格分隔的，可以包含类似下面这样的字词。通常，音符中字符的顺序并不重要，因此 #1 与 1# 相同，'1 与 1' 相同，s1 与 1s 相同。
 Scale going up: 1 2 3 4 5 6 7 1'
+上行音阶： 1 2 3 4 5 6 7 1'
 Accidentals: 1 #1 2 b2 1
+变音记号： 1 #1 2 b2 1
 Octaves: 1,, 1, 1 1' 1''
+八度音阶： 1,, 1, 1 1' 1''
 Shortcuts for 1' and 2': 8 9
+1'和 2' 的快捷键： 8 9
 Percussion beat: x
+打击乐节拍： x
 Change base octave: < >
+高低八度记号： < >
 Semiquaver, quaver, crotchet (16/8/4th notes): s1 q1 1
+十六分音符、八分音符、四分音符： s1 q1 1
 Alternate way to input semiquaver, quaver, crotchet: 1\\ 1\ 1 (any \ must go after the pitch not before)
+十六分音符、八分音符、四分音符的替代方案： 1\\ 1\ 1 （任何\必须写在音高之后而不是之前）
 Sticky durations (4 semiquavers then crotchet): KeepLength s1 1 1 1 c1
+保持不变的时值 （4个十六分音符+1个四分音符）： KeepLength s1 1 1 1 c1
 Dotted versions of the above (50% longer): s1. q1. 1.
+前文提到的音符的附点版本： s1. q1. 1.
 Demisemiquaver, hemidemisemiquaver (32/64th notes): d1 h1
+三十二分音符、六十四分音符： d1 h1
 Minims (half notes) use dashes: 1 -
+二分音符： 1 -
 Dotted minim: 1 - -
+附点二分音符： 1 - -
 Semibreve (whole note): 1 - - -
+全音符： 1 - - -
 Time signature: 4/4
+拍号： 4/4
 Time signature with quaver anacrusis (8th-note pickup): 4/4,8
+以八分音符的时值弱起的拍号： 4/4,8
 Key signature (major): 1=Bb
+调号（大调）： 1=Bb
 Key signature (minor): 6=F#
+调号（小调）： 6=F#
 Tempo: 4=85
+速度： 4=85
 Lyrics: L: here are the syl- la- bles (all on one line, or newline after the : and double newline to end)
+歌词： L: here are the syl- la- bles （单独一行，或在:之后换行输入，并以2个空行结束）
 Lyrics (verse 1): L: 1. Here is verse one
+歌词（第一节）： L: 1. Here is verse one
 Lyrics (verse 2): L: 2. Here is verse two
+歌词（第二节）： L: 2. Here is verse two
 Hanzi lyrics (auto space): H: hanzi (with or without spaces)
+中文歌词： H: 中文 （有无空格都可）
 Lilypond headers: title=the title (on a line of its own)
+Lilypond 页头： title=标题 （单独一行）
 Guitar chords: chords=c2. g:7 c (on own line, or newline after the = and double newline to end)
+吉他和弦符号： chords=c2. g:7 c （单独一行，或在=之后换行输入，并以2个空行结束）
 Fret diagrams: frets=guitar (on own line)
+和弦指板图： frets=guitar （单独一行）
 Multiple parts: NextPart
+多声部： NextPart
 Instrument of current part: instrument=Flute (on a line of its own)
+当前分谱使用的乐器： instrument=Flute （单独一行）
 Multiple movements: NextScore
+多个乐章： NextScore
 Prohibit page breaks until end of this movement: OnePage
+在乐章结束前禁止换页： OnePage
 Suppress bar numbers: NoBarNums
+禁止为小节编号： NoBarNums
 Suppress first-line indent: NoIndent
+禁止首行缩进： NoIndent
 Ragged last line: RaggedLast
+最后一行不规则对齐： RaggedLast
 Old-style time signature: SeparateTimesig 1=C 4/4
+旧式拍号： SeparateTimesig 1=C 4/4
 Indonesian 'not angka' style: angka
+印尼 not angka 风格： angka
 Alternate Indonesian-style minim, dotted minim and semibreve: 1 . 1 . . 1 . . . (dot is treated as dash)
+交替使用印尼风格的二分音符、附点二分音符和全音符： 1 . 1 . . 1 . . . （点被视为破折号）
 Add a Western staff doubling the tune: WithStaff
+增加一个西方五线谱来显示双谱： WithStaff
 Tuplets: 3[ q1 q1 q1 ]
+连音： 3[ q1 q1 q1 ]
 Grace notes before: g[#45] 1
+前倚音： g[#45] 1
 Grace notes after: 1 ['1]g
+后倚音： 1 ['1]g
 Grace notes with durations: g[d4d5s6] 1
+带时值的倚音： g[d4d5s6] 1
 Simple chords: ,13'5 1 1b3 1 (chord numbers are sorted automatically)
+简单和弦： ,13'5 1 1b3 1 （根据音高自动排序）
 Da capo: 1 1 Fine 1 1 1 1 1 1 DC
+从头反复： 1 1 Fine 1 1 1 1 1 1 DC
 Repeat (with alternate endings): R{ 1 1 1 } A{ 2 | 3 }
+反复跳跃记号： R{ 1 1 1 } A{ 2 | 3 }
 Short repeats (percent): R4{ 1 2 }
+小节反复： R4{ 1 2 }
 Ties (like Lilypond's, if you don't want dashes): 1 ~ 1
+延音线（同 Lilypond，如果你不想用短横线）： 1 ~ 1
 Slurs (like Lilypond's): 1 ( 2 )
+圆滑线（同 Lilypond）： 1 ( 2 )
 Erhu fingering (applies to previous note): Fr=0 Fr=4
+二胡指法符号（适用于前一个音符）： Fr=0 Fr=4
 Erhu symbol (applies to previous note): souyin harmonic up down bend tilde
+二胡其它符号（适用于前一个音符）： souyin harmonic up down bend tilde
 Tremolo: 1/// - 1///5 -
+震音： 1/// - 1///5 -
 Rehearsal letters: letterA letterB
+排练记号： letterA letterB
 Multibar rest: R*8
+多小节休止： R*8
 Dynamics (applies to previous note): \p \mp \f
+力度记号（适用于之前的音符）： \p \mp \f
 Other 1-word Lilypond \ commands: \fermata \> \! \( \) etc
+其它 Lilypond 指令： \fermata \> \! \( \) 等等
 Text: ^"above note" _"below note"
+文本： ^"音符上方" _"音符下方"
 Harmonic symbols above main notes: Harm: (music) :Harm (main music)
+主音符上的泛音符号： Harm: (音乐) :Harm （主音乐）
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
+其它 Lilypond 代码： LP: (代码块) :LP （每个分隔符必须位于各行行首）
 Unicode approximation instead of Lilypond: Unicode
+用 Unicode 近似值代替 Lilypond 代码： Unicode
 Split MIDI files per part: PartMidi
+按声部导出MIDI文件： PartMidi
 Ignored: % a comment
+忽略： % 注释
 """
 
 import sys,os,re,shutil
@@ -927,8 +996,11 @@ def write_docs():
     inTable = 0 ; justStarted=1
     for line in __doc__.split("\n"):
         if line.startswith("#") or not line.strip(): continue
-        if ":" in line and line.split(":",1)[1].strip():
-            toGet,shouldType = line.split(":",1)
+        hasNonAscii = any(ord(c)>127 for c in line)
+        if hasNonAscii ^ ("--chinese" in sys.argv): continue
+        splitOn = "：" if "：" in line else ":"
+        if splitOn in line and line.split(splitOn,1)[1].strip():
+            toGet,shouldType = line.split(splitOn,1)
             if not inTable:
                 if "--html" in sys.argv:
                     print ("<table border>") # "<tr><th>To get:</th><th>Type:</th></tr>"
@@ -937,9 +1009,12 @@ def write_docs():
             if re.match(r".*[A-Za-z]\)$",shouldType):
                 shouldType,note = shouldType.rsplit("(",1)
                 note = " ("+note
+            elif re.match(r".*）$",shouldType):
+                shouldType,note = shouldType.rsplit("（",1)
+                note = " （"+note
             else: note = ""
             if "--html" in sys.argv: print ("<tr><td>"+htmlify(toGet.strip())+"</td><td><kbd>"+htmlify(shouldType.strip())+"</kbd>"+htmlify(note)+"</td>")
-            else: print (toGet.strip()+": `"+shouldType.strip()+"`"+note+"\n")
+            else: print (toGet.strip()+splitOn+" `"+shouldType.strip()+"`"+note+"\n")
         else:
             if "--markdown" in sys.argv: print ("")
             elif inTable: print ("</table>")
