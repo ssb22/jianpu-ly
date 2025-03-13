@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.84 (c) 2012-2025 Silas S. Brown
+# v1.841 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -83,7 +83,7 @@ Lyrics (verse 1): L: 1. Here is verse one
 Lyrics (verse 2): L: 2. Here is verse two
 歌词（第二节）： L: 2. Here is verse two
 Hanzi lyrics (auto space): H: hanzi (with or without spaces)
-中文歌词： H: 中文 （有无空格都可）
+汉字歌词： H: 汉字 （有无空格都可）
 Lilypond headers: title=the title (on a line of its own)
 Lilypond 页头： title=标题 （单独一行）
 Guitar chords: chords=c2. g:7 c (on own line, or newline after the = and double newline to end)
@@ -127,7 +127,7 @@ Da capo: 1 1 Fine 1 1 1 1 1 1 DC
 Repeat (with alternate endings): R{ 1 1 1 } A{ 2 | 3 }
 反复跳跃记号： R{ 1 1 1 } A{ 2 | 3 }
 Short repeats (percent): R4{ 1 2 }
-小节反复： R4{ 1 2 }
+小节反复（％）： R4{ 1 2 }
 Ties (like Lilypond's, if you don't want dashes): 1 ~ 1
 延音线（同 Lilypond，如果你不想用短横线）： 1 ~ 1
 Slurs (like Lilypond's): 1 ( 2 )
@@ -145,9 +145,9 @@ Multibar rest: R*8
 Dynamics (applies to previous note): \p \mp \f
 力度记号（适用于之前的音符）： \p \mp \f
 Other 1-word Lilypond \ commands: \fermata \> \! \( \) etc
-其它 Lilypond 指令： \fermata \> \! \( \) 等等
+其它一語 Lilypond \ 指令： \fermata \> \! \( \) 等等
 Text: ^"above note" _"below note"
-文本： ^"音符上方" _"音符下方"
+文字： ^"音符上方" _"音符下方"
 Harmonic symbols above main notes: Harm: (music) :Harm (main music)
 主音符上的泛音符号： Harm: (音乐) :Harm （主音乐）
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
