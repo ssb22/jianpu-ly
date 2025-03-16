@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.841 (c) 2012-2025 Silas S. Brown
+# v1.842 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -588,7 +588,7 @@ def jianpu_staff_start(inst=None,withStaff=False):
     \consists "Accidental_engraver" """
     r += r"""
     \consists \jianpuGraceCurveEngraver"""
-    if inst: r += 'instrumentName = "'+inst+'"'
+    if inst: r += '\ninstrumentName = "'+inst+'"'
     if withStaff: r+=r"""
    %% Limit space between Jianpu and corresponding-Western staff
    \override VerticalAxisGroup.staff-staff-spacing = #'((minimum-distance . 7) (basic-distance . 7) (stretchability . 0))

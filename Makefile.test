@@ -1,23 +1,21 @@
 # -*- mode: makefile -*-
 SHELL=/bin/bash
 test:
-	echo WithStaff 1 - 0 - | python3 jianpu-ly.py | grep r2 >/dev/null # check collapsing regexes still work
-	echo WithStaff 1 - 0 - | python2.7 jianpu-ly.py | grep r2 >/dev/null
-	echo 'WithStaff 1 \p - - -' | python3 jianpu-ly.py |grep "c'1 \\\\p" >/dev/null
-	echo 'WithStaff 1 \p - - -' | python2.7 jianpu-ly.py |grep "c'1 \\\\p" >/dev/null
-	echo 'WithStaff 3/4 135 \p - -' | python3 jianpu-ly.py | grep "c' e' g' >2. "'\\p' >/dev/null
-	echo 'WithStaff 3/4 135 \p - -' | python2.7 jianpu-ly.py | grep "c' e' g' >2. "'\\p' >/dev/null
-	echo 'KeepOctave 2/4 <<1 - >1 - >1 - >1 - >1 -' | python3 jianpu-ly.py | grep "c'''2" >/dev/null
-	echo 'KeepOctave 2/4 <<1 - >1 - >1 - >1 - >1 -' | python2.7 jianpu-ly.py | grep "c'''2" >/dev/null
-	echo "WithStaff 1( 2)~ 2( 3)" | python3 jianpu-ly.py | grep "c'4 [(] d'4 [)] ~ d'4 [(] e'4 [)]" >/dev/null
-	echo "WithStaff 1( 2)~ 2( 3)" | python2.7 jianpu-ly.py | grep "c'4 [(] d'4 [)] ~ d'4 [(] e'4 [)]" >/dev/null
-
-	python3 jianpu-ly.py <(echo WithStaff 1 - 0 -) </dev/null | grep r2 >/dev/null # check read from non-stdin still works
-	python2.7 jianpu-ly.py <(echo WithStaff 1 - 0 -) </dev/null | grep r2 >/dev/null
-
-	python3 test-import.py
-	python2.7 test-import.py
+	make -f Makefile.test testOnePythonVersion P=python3
+	make -f Makefile.test testOnePythonVersion P=python2.7
 	make -f Makefile.pypi test
 	@echo Makefile.test: all tests passed
 
-.PHONY: test
+testOnePythonVersion:
+	echo WithStaff 1 - 0 - | $(P) jianpu-ly.py | grep r2 >/dev/null # check collapsing regexes still work
+	echo 'WithStaff 1 \p - - -' | $(P) jianpu-ly.py |grep "c'1 \\\\p" >/dev/null
+	echo 'WithStaff 3/4 135 \p - -' | $(P) jianpu-ly.py | grep "c' e' g' >2. "'\\p' >/dev/null
+	echo 'KeepOctave 2/4 <<1 - >1 - >1 - >1 - >1 -' | $(P) jianpu-ly.py | grep "c'''2" >/dev/null
+	echo "WithStaff 1( 2)~ 2( 3)" | $(P) jianpu-ly.py | grep "c'4 [(] d'4 [)] ~ d'4 [(] e'4 [)]" >/dev/null
+	(echo instrument=S;echo 1 1 1 1 NextPart instrument=A;echo 1 1 1 1) | $(P) jianpu-ly.py | grep "^ *instrumentName" >/dev/null
+
+	$(P) jianpu-ly.py <(echo WithStaff 1 - 0 -) </dev/null | grep r2 >/dev/null # check read from non-stdin still works
+
+	$(P) test-import.py
+
+.PHONY: test testOnePythonVersion
