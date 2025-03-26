@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.842 (c) 2012-2025 Silas S. Brown
+# v1.843 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1627,7 +1627,7 @@ def getLY(score,headers=None,have_final_barline=True):
                 if ',' in word: # anacrusis
                     word,anac = word.split(",",1)
                 else: anac=""
-                if notehead_markup.separateTimesig and not midi: out.append(r'\mark \markup{'+word+'}')
+                if notehead_markup.separateTimesig and not midi: out.append(r'\mark \markup{'+((lambda x:x if type("")==type(u"") else lambda x:x.encode('utf-8'))(unichr(0xA0)*5) if notehead_markup.noIndent else '')+word+'}')
                 out.append(r'\time '+word)
                 num,denom = word.split('/')
                 notehead_markup.setTime(int(num),int(denom))
