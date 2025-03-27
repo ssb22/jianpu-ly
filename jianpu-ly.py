@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.843 (c) 2012-2025 Silas S. Brown
+# v1.844 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -789,7 +789,7 @@ class NoteheadMarkup:
 
     ret = ""
     if self.barPos==0 and self.barNo > 1:
-        ret += "| " # barline in Lilypond file: not strictly necessary but may help readability
+        ret += "| " # barline
         if self.onePage and not midi: ret += r"\noPageBreak "
         ret += "%{ bar "+str(self.barNo)+": %} "
         self.notesHad.insert(-1,"|")
@@ -1619,7 +1619,7 @@ def getLY(score,headers=None,have_final_barline=True):
               if not type("")==type(u""): finger = finger.encode('utf-8') # Python 2
               out.append(r'\finger \markup { \fontsize #-4 "%s" } ' % finger)
             elif re.match("letter[A-Z]$",word):
-                out.append(r'\mark \markup { \box { "%s" } }' % word[-1]) # TODO: not compatible with key change at same point, at least not in lilypond 2.20 (2nd mark mentioned will be dropped)
+                out.append(r'\mark \markup{ \box { "%s" } }' % word[-1])
             elif re.match(r"R\*[1-9][0-9]*$",word):
                 if not western: out.append(r"\set Score.skipBars = ##t \override MultiMeasureRest #'expand-limit = #1 ") # \compressFullBarRests on Lilypond 2.20, \compressEmptyMeasures on 2.22, both map to \set Score.skipBars
                 out.append(r"R"+notehead_markup.wholeBarRestLen()+word[1:])
@@ -1627,7 +1627,7 @@ def getLY(score,headers=None,have_final_barline=True):
                 if ',' in word: # anacrusis
                     word,anac = word.split(",",1)
                 else: anac=""
-                if notehead_markup.separateTimesig and not midi: out.append(r'\mark \markup{'+((lambda x:x if type("")==type(u"") else lambda x:x.encode('utf-8'))(unichr(0xA0)*5) if notehead_markup.noIndent else '')+word+'}')
+                if notehead_markup.separateTimesig and not midi: out.append(r'\mark \markup{'+word+'}') # don't try to add RehearsalMark overrides here: it will go wrong during mark merging; we do that later
                 out.append(r'\time '+word)
                 num,denom = word.split('/')
                 notehead_markup.setTime(int(num),int(denom))
@@ -1762,16 +1762,24 @@ def getLY(score,headers=None,have_final_barline=True):
    if escaping: errExit("Unterminated LP: in score %d" % scoreNo)
    notehead_markup.endScore() # perform checks
    if have_final_barline and need_final_barline and not midi: out.append(r'\bar "|."')
-   i=0
+   # Merge \mark commands (at least Lilypond 2.20..2.24 can't take more than one in one place)
+   i,needLeftAlign = 0, notehead_markup.noIndent and not midi and not western
    while i < len(out)-1:
-       while i<len(out)-1 and out[i].startswith(r'\mark \markup{') and out[i].endswith('}') and out[i+1].startswith(r'\mark \markup{') and out[i+1].endswith('}'):
-           # merge time/key signatures
+       if out[i].startswith(r'\mark \markup{'):
+         if needLeftAlign: out[i]=r"\once \override Score.RehearsalMark #'self-alignment-X = #LEFT "+out[i]
+         j=i+1
+         while j<len(out):
+          if out[j].startswith(r'\mark \markup{') and out[j].endswith('}'):
            nbsp = u'\u00a0'
            if not type(u"")==type(""): # Python 2
                nbsp = nbsp.encode('utf-8')
-           out[i]=out[i][:-1]+nbsp+' '+out[i+1][len(r'\mark \markup{'):]
-           del out[i+1]
+           out[i]=out[i][:-1]+nbsp+' '+out[j][len(r'\mark \markup{'):]
+           del out[j]
+          elif out[j].startswith(r"\time"): j += 1
+          else: break
+       elif out[i].startswith("| "): needLeftAlign = False
        i += 1
+   # format and combine:
    for i in xrange(len(out)-1):
        if not out[i].endswith('\n'):
            if '\n' in out[i] or len(out[i])>60:
