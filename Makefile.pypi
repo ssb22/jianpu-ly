@@ -5,7 +5,7 @@
 # Now also detects if PyPI needs update even if new version number has already been committed (e.g. if a pull request got merged)
 
 check-if-jianpuly-version-is-changing: test
-	if (git diff;git diff --staged)|grep '^[+]# v[0-9]' || ! grep '^# v[0-9]' < jianpu-ly.py | sort -n | tail -1 | grep "$(pip index versions jianpu-ly 2>/dev/null|grep ^jianpu-ly|sed -e 's/.* ./^# v/' -e 's/.$/ /')" >/dev/null; then make -f Makefile.pypi update-jianpuly-pypi; else true; fi
+	if (git diff;git diff --staged)|grep '^[+]# v[0-9]' || ! grep '^# v[0-9]' < jianpu-ly.py | sort -n | tail -1 | grep "$$(pip index versions jianpu-ly 2>/dev/null|grep ^jianpu-ly|sed -e 's/.* ./^# v/' -e 's/.$$/ /')" >/dev/null; then make -f Makefile.pypi update-jianpuly-pypi; else true; fi
 test:
 	@if grep '^# v[0-9][^.]*[.][0-9][0-9][0-9][0-9]' jianpu-ly.py; then echo "4+ decimal digits in version number will now need another -e 's/[.][0-9][0-9][0-9]$$/&0/' in Makefile.pypi's sed expression"; false; fi
 update-jianpuly-pypi:
