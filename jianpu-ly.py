@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.844 (c) 2012-2025 Silas S. Brown
+# v1.845 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -576,9 +576,9 @@ def jianpu_voice_start(isTemp=0):
            ))
     r += "\n"+r"""\set Voice.chordChanges = ##t %% 2.19 bug workaround""" # LilyPond 2.19.82: \applyOutput docs say "called for every layout object found in the context Context at the current time step" but 2.19.x breaks this by calling it for ALL contexts in the current time step, hence breaking our WithStaff by applying our jianpu numbers to the 5-line staff too.  Obvious workaround is to make our function check that the context it's called with matches our jianpu voice, but I'm not sure how to do this other than by setting a property that's not otherwise used, which we can test for in the function.  So I'm 'commandeering' the "chordChanges" property (there since at least 2.15 and used by Lilypond only when it's in chord mode, which we don't use, and if someone adds a chord-mode staff then it won't print noteheads anyway): we will substitute jianpu numbers for noteheads only if chordChanges = #t.
     return r+"\n", voiceName
-def jianpu_staff_start(inst=None,withStaff=False):
+def jianpu_staff_start(inst=None):
     # (we add "BEGIN JIANPU STAFF" and "END JIANPU STAFF" comments to make it easier to copy/paste into other Lilypond files)
-    if withStaff: inst = None # we'll put the label on the 5-line staff (TODO: use StaffGroup or something?)
+    if notehead_markup.withStaff: inst = None # we'll put the label on the 5-line staff (TODO: use StaffGroup or something?)
     if not_angka: r=r"""
 %% === BEGIN NOT ANGKA STAFF ===
     \new RhythmicStaff \with {"""
@@ -589,7 +589,7 @@ def jianpu_staff_start(inst=None,withStaff=False):
     r += r"""
     \consists \jianpuGraceCurveEngraver"""
     if inst: r += '\ninstrumentName = "'+inst+'"'
-    if withStaff: r+=r"""
+    if notehead_markup.withStaff: r+=r"""
    %% Limit space between Jianpu and corresponding-Western staff
    \override VerticalAxisGroup.staff-staff-spacing = #'((minimum-distance . 7) (basic-distance . 7) (stretchability . 0))
 """ # (whether this is needed or not depends on Lilypond version; 2.22 puts more space than 2.18,2.20.  Must set higher than 5, which sometimes gets collisions between beams in 2.20)
@@ -612,6 +612,7 @@ def jianpu_staff_start(inst=None,withStaff=False):
     \override Staff.TimeSignature #'style = #'numbered
     \override Staff.Stem #'transparent = ##t
     """
+    if notehead_markup.separateTimesig: r+=r"\override Staff.TimeSignature #'stencil = ##f"+"\n"
     return r, voiceName
 def jianpu_staff_end():
      # \bar "|." is added separately if there's not a DC etc
@@ -697,10 +698,11 @@ class NoteheadMarkup:
   def __init__(self,graceType=None):
       self.initOneScore()
       self.graceType = graceType
+      self.separateTimesig = False
   def initOneScore(self):
       self.barLength = 64 ; self.beatLength = 16 # in 64th notes
       self.barPos = self.startBarPos = F(0)
-      self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.noIndent = self.raggedLast = self.separateTimesig = self.withStaff = 0
+      self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.noIndent = self.raggedLast = self.withStaff = 0
       self.keepLength = 0
       self.last_octave = self.base_octave = ""
       self.octavesSeen = []
@@ -1655,7 +1657,6 @@ def getLY(score,headers=None,have_final_barline=True):
             elif word=="SeparateTimesig":
                 if notehead_markup.separateTimesig: sys.stderr.write("WARNING: Duplicate SeparateTimesig, did you miss out a NextScore?\n")
                 notehead_markup.separateTimesig=1
-                out.append(r"\override Staff.TimeSignature #'stencil = ##f")
             elif word in ["angka","Indonesian"]:
                 global not_angka
                 if not_angka: sys.stderr.write("WARNING: Duplicate angka, did you miss out a NextScore?\n")
@@ -1825,6 +1826,7 @@ def process_input(inDat):
    separate_score_per_part = midi and re.search(r"\sPartMidi\s"," "+score+" ") and len(parts)>1 # (results in 1st MIDI file containing all parts, then each MIDI file containing one part, if there's more than 1 part)
    for separate_scores in [False,True] if separate_score_per_part else [False]:
     headers = {} # will accumulate below
+    notehead_markup.separateTimesig=False
     for partNo,part in enumerate(parts):
      if partNo==0 or separate_scores:
          ret.append(score_start())
@@ -1848,7 +1850,7 @@ def process_input(inDat):
      if midi:
        ret.append(midi_staff_start()+" "+out+" "+midi_staff_end())
      else:
-       staffStart,voiceName = jianpu_staff_start(inst,notehead_markup.withStaff)
+       staffStart,voiceName = jianpu_staff_start(inst)
        ret.append(staffStart+" "+out+" "+jianpu_staff_end())
        if notehead_markup.withStaff:
            western=True
