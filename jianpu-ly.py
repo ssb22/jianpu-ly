@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.845 (c) 2012-2025 Silas S. Brown
+# v1.846 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1815,6 +1815,7 @@ def process_input(inDat):
  scoreNo = 0 # incr'd to 1 below
  western = False
  find_grace_height(inDat)
+ inDat = re.sub(r"(%.*Next)(?=(Part|Score)\s)",r"\1 ",inDat) # in case someone commented out NextScore or NextPart
  for score in re.split(r"\sNextScore\s"," "+inDat+" "):
   if not score.strip(): continue
   scoreNo += 1
