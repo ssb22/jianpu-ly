@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.846 (c) 2012-2025 Silas S. Brown
+# v1.847 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1655,7 +1655,7 @@ def getLY(score,headers=None,have_final_barline=True):
                 if notehead_markup.raggedLast: sys.stderr.write("WARNING: Duplicate Raggedlast, did you miss out a NextScore?\n")
                 notehead_markup.raggedLast=1
             elif word=="SeparateTimesig":
-                if notehead_markup.separateTimesig: sys.stderr.write("WARNING: Duplicate SeparateTimesig, did you miss out a NextScore?\n")
+                if notehead_markup.separateTimesig and not midi and not western: sys.stderr.write("WARNING: Duplicate SeparateTimesig, did you miss out a NextScore?\n")
                 notehead_markup.separateTimesig=1
             elif word in ["angka","Indonesian"]:
                 global not_angka
@@ -1832,7 +1832,6 @@ def process_input(inDat):
      if partNo==0 or separate_scores:
          ret.append(score_start())
      out,maxBeams,lyrics,headers = getLY(part,headers,partNo==0 or separate_scores) # assume 1st part doesn't have 'tacet al fine'
-     if notehead_markup.withStaff and notehead_markup.separateTimesig: errExit("Use of both WithStaff and SeparateTimesig in the same piece is not yet implemented")
      if len(parts)>1 and "instrument" in headers:
          inst = headers["instrument"]
          del headers["instrument"]
