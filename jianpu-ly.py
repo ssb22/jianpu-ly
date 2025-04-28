@@ -58,6 +58,8 @@ Sticky durations (4 semiquavers then crotchet): KeepLength s1 1 1 1 c1
 保持不变的时值 （4个十六分音符+1个四分音符）： KeepLength s1 1 1 1 c1
 Dotted versions of the above (50% longer): s1. q1. 1.
 前文提到的音符的附点版本： s1. q1. 1.
+Alternate dotted versions: 1\\. 1\.
+替代方案也可以附点： 1\\. 1\.
 Demisemiquaver, hemidemisemiquaver (32/64th notes): d1 h1
 三十二分音符、六十四分音符： d1 h1
 Minims (half notes) use dashes: 1 -

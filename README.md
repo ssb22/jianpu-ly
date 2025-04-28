@@ -36,6 +36,8 @@ Sticky durations (4 semiquavers then crotchet): `KeepLength s1 1 1 1 c1`
 
 Dotted versions of the above (50% longer): `s1. q1. 1.`
 
+Alternate dotted versions: `1\\. 1\.`
+
 Demisemiquaver, hemidemisemiquaver (32/64th notes): `d1 h1`
 
 Minims (half notes) use dashes: `1 -`
