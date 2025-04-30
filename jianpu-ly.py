@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.847 (c) 2012-2025 Silas S. Brown
+# v1.848 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -122,8 +122,8 @@ Grace notes after: 1 ['1]g
 后倚音： 1 ['1]g
 Grace notes with durations: g[d4d5s6] 1
 带时值的倚音： g[d4d5s6] 1
-Simple chords: ,13'5 1 1b3 1 (chord numbers are sorted automatically)
-简单和弦： ,13'5 1 1b3 1 （根据音高自动排序）
+Simple chords: ,135' 1 1b3 1
+简单和弦： ,135' 1 1b3 1
 Da capo: 1 1 Fine 1 1 1 1 1 1 DC
 从头反复： 1 1 Fine 1 1 1 1 1 1 DC
 Repeat (with alternate endings): R{ 1 1 1 } A{ 2 | 3 }
@@ -706,6 +706,7 @@ class NoteheadMarkup:
       self.barPos = self.startBarPos = F(0)
       self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.noIndent = self.raggedLast = self.withStaff = 0
       self.keepLength = 0
+      self.octavesPosition = None # or "before" (only setting in v1.847 and below) or "after", affects chords and grace notes when an octave mark is between two figures: is it before or after the note it affects.  Starting at None = no default, must specify if anything's ambiguous
       self.last_octave = self.base_octave = ""
       self.octavesSeen = []
       self.current_accidentals = {} # used to predict whether Lilypond will draw the accidental or not, for beam spacing purposes
@@ -751,7 +752,7 @@ class NoteheadMarkup:
 
     isChord = len(figures)>1
     if isChord:
-        chord_ret,octave,placeholder_chord = chordNotes_markup(re.sub('[qsdh.]','',word)) # word w/out durations
+        chord_ret,octave,placeholder_chord = chordNotes_markup(re.sub(r'[\\qsdh.]','',word),word,line) # word w/out durations
         if not midi and not western: placeholder_chord = "c"
     else: # not isChord
         placeholder_chord = placeholders[figures]
@@ -773,7 +774,7 @@ class NoteheadMarkup:
             if self.barPos==0: tremolo = self.last_tremolo
         if self.current_chord: # a chord is currently in progress, and we're extending it with a tie
             isChord = True
-            chord_ret,octave,placeholder_chord = chordNotes_markup(re.sub('[qsdh.]','',self.current_chord))
+            chord_ret,octave,placeholder_chord = chordNotes_markup(re.sub(r'[\\qsdh.]','',self.current_chord),word,line)
             if not midi and not western: placeholder_chord = placeholder_chord[:-1].split()[-1] # just have one note of it for dashes
         else: # not a chord, so we can assume len(self.last_figures)==1
             placeholder_chord = placeholders[self.last_figures]
@@ -1288,11 +1289,11 @@ def fix_fullwidth(t):
     if type(u"")==type(""): return utext
     else: return utext.encode('utf-8')
 
-def graceNotes_markup(notes,isAfter,harmonic=False):
+def graceNotes_markup(notes,word,line,isAfter,harmonic=False):
     if lilypond_minor_version()<22: errExit("grace notes requires Lilypond 2.22+, we found 2."+str(lilypond_minor_version()))
     thinspace = u'\u2009'
     if not type("")==type(u""): thinspace = thinspace.encode('utf-8')
-    notes = grace_octave_fix(notes) # ensures octaves come before notes
+    notes = grace_octave_fix(notes,word,line) # ensures octaves come before notes
     notemark = NoteheadMarkup(graceType="after" if isAfter else "before")
     # Calculate length of grace section and tell
     # NoteheadMarkup that's the "bar length", so it
@@ -1341,13 +1342,31 @@ def graceNotes_markup(notes,isAfter,harmonic=False):
     mr = ''.join(mr)
     offset = "-2.5 . 0" if isAfter else "-0.5 . -0.5"
     return mr
-def grace_octave_fix(notes): return re.sub(
-        "(.*)([1-7])([^1-7]+)$",
-        lambda m:grace_octave_fix(m.group(1))+m.group(3)+m.group(2),
-        notes.replace("8","1'").replace("9","2'")) # ensures 8ves, durations and accidentals come before main notes, not after
-def gracenotes_western(notes):
+def grace_octave_fix(notes,word,line):
+    """Ensures octaves, durations and accidentals come before the
+    main notes, not after.  For octaves we check ambiguous cases
+    and insist on OctavesBefore or OctavesAfter being set if so"""
+    def gof_inner(notes): return re.sub(
+            "^(.*)([1-9])([^1-9]+)$",
+            lambda m:gof_inner(m.group(1))+chr(0)+m.group(3)+m.group(2),notes) # the chr(0) is a temporary marker for below
+    n2 = gof_inner(notes)
+    def find_ambiguous_octaves(n): return re.sub("^[^',1-9]*[',]+[^',1-9]*[1-9](.*)$",lambda m:find_ambiguous_octaves(m.group(1)),n)
+    L=n2.split(chr(0))
+    ambiguous_part = find_ambiguous_octaves(L[0])
+    if re.search("[,']",ambiguous_part):
+        if notehead_markup.octavesPosition=="after":
+            ap2=re.sub(r"([1-9][^1-9,']*)([,']+)",r'\2\1',ambiguous_part) # after to before (no recursion needed)
+            L[0]=L[0][:len(L[0])-len(ambiguous_part)]+ap2
+            n2="".join(L)
+        elif not notehead_markup.octavesPosition:
+            msg="Ambiguous octave marks (please set OctavesBefore or OctavesAfter if writing them in the middle)"
+            if not ambiguous_part==notes: msg += " in the "+ambiguous_part+" part of"
+            else: msg += ":"
+            scoreError(msg,word,line)
+    return n2.replace(chr(0),"").replace("8","'1").replace("9","'2")
+def gracenotes_western(notes,word,line):
     # for western and MIDI staffs
-    notes = grace_octave_fix(notes)
+    notes = grace_octave_fix(notes,word,line)
     nextAcc = "" ; next8ve = "'" ; current_accidentals = [0]*7
     r = []
     duration = 16
@@ -1371,8 +1390,8 @@ def gracenotes_western(notes):
             r.append(placeholders[n]+nextAcc+next8ve+str(duration))
             nextAcc = "" ; next8ve = "'"
     return ' '.join(r)
-def chordNotes_markup(notes):
-    notes = grace_octave_fix(notes) # ensures octaves come before notes
+def chordNotes_markup(notes,word,line):
+    notes = grace_octave_fix(notes,word,line) # ensures octaves and accidentals come before notes
     accidental = ""
     figure = ""
     octave = ""
@@ -1647,6 +1666,10 @@ def getLY(score,headers=None,have_final_barline=True):
             elif word=="KeepOctave": pass # undocumented option removed in 1.7, no effect
             elif word=="KeepLength":
                 notehead_markup.keepLength=1
+            elif word=="OctavesBefore":
+                notehead_markup.octavesPosition="before"
+            elif word=="OctavesAfter":
+                notehead_markup.octavesPosition="after"
             elif word=="NoBarNums":
                 if notehead_markup.noBarNums: sys.stderr.write("WARNING: Duplicate NoBarNums, did you miss out a NextScore?\n")
                 notehead_markup.noBarNums=1
@@ -1720,11 +1743,11 @@ def getLY(score,headers=None,have_final_barline=True):
                 out.append("}")
                 notehead_markup.tuplet = (1,1)
             elif re.match(r"g\[[#b',1-9qsdh]+\]$",word):
-                if midi or western: out.append(r"\grace { " + gracenotes_western(word[2:-1]) + " }")
-                else: out.append(r"\grace { " + graceNotes_markup(word[2:-1],0,isInHarmonic) + " }")
+                if midi or western: out.append(r"\grace { " + gracenotes_western(word[2:-1],word,line) + " }")
+                else: out.append(r"\grace { " + graceNotes_markup(word[2:-1],word,line,0,isInHarmonic) + " }")
             elif re.match(r"\[[#b',1-9,q,s,d,h]+\]g$",word):
-                if midi or western: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + gracenotes_western(word[1:-2]) + " }"
-                else: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + graceNotes_markup(word[1:-2],1,isInHarmonic) + " }"
+                if midi or western: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + gracenotes_western(word[1:-2],word,line) + " }"
+                else: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + graceNotes_markup(word[1:-2],word,line,1,isInHarmonic) + " }"
             elif word=="Fine":
                 need_final_barline = False
                 out.append(r'''\once \override Score.RehearsalMark #'break-visibility = #begin-of-line-invisible \once \override Score.RehearsalMark #'self-alignment-X = #RIGHT \mark "Fine" \bar "|."''')

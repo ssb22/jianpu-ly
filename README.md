@@ -100,7 +100,7 @@ Grace notes after: `1 ['1]g`
 
 Grace notes with durations: `g[d4d5s6] 1`
 
-Simple chords: `,13'5 1 1b3 1` (chord numbers are sorted automatically)
+Simple chords: `,135' 1 1b3 1`
 
 Da capo: `1 1 Fine 1 1 1 1 1 1 DC`
 
