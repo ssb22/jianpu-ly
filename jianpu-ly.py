@@ -706,7 +706,7 @@ class NoteheadMarkup:
       self.barPos = self.startBarPos = F(0)
       self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.noIndent = self.raggedLast = self.withStaff = 0
       self.keepLength = 0
-      self.octavesPosition = None # or "before" (only setting in v1.847 and below) or "after", affects chords and grace notes when an octave mark is between two figures: is it before or after the note it affects.  Starting at None = no default, must specify if anything's ambiguous
+      self.octavesPosition = after # or "before" (which has been the default in v1.847 and below) or "None" = no default, which will break if anything's ambiguous. It affects chords and grace notes when an octave mark is between two figures: is it before or after the note it affects. "after" is the default jianpu behavior since day 1.
       self.last_octave = self.base_octave = ""
       self.octavesSeen = []
       self.current_accidentals = {} # used to predict whether Lilypond will draw the accidental or not, for beam spacing purposes
