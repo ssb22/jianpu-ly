@@ -130,6 +130,8 @@ Text: `^"above note" _"below note"`
 
 Harmonic symbols above main notes: `Harm: (music) :Harm` (main music)
 
+Instrumental breaks in vocal music: `1 [( 2 3 )] 4`
+
 Other Lilypond code: `LP: (block of code) :LP` (each delimeter at start of its line)
 
 Unicode approximation instead of Lilypond: `Unicode`

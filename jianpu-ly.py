@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.848 (c) 2012-2025 Silas S. Brown
+# v1.849 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -152,6 +152,8 @@ Text: ^"above note" _"below note"
 文字： ^"音符上方" _"音符下方"
 Harmonic symbols above main notes: Harm: (music) :Harm (main music)
 主音符上的泛音符号： Harm: (音乐) :Harm （主音乐）
+Instrumental breaks in vocal music: 1 [( 2 3 )] 4
+诗歌的器乐部分： 1 [( 2 3 )] 4
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
 其它 Lilypond 代码： LP: (代码块) :LP （每个分隔符必须位于各行行首）
 Unicode approximation instead of Lilypond: Unicode
@@ -1641,6 +1643,16 @@ def getLY(score,headers=None,have_final_barline=True):
                   }.get(finger, finger)
               if not type("")==type(u""): finger = finger.encode('utf-8') # Python 2
               out.append(r'\finger \markup { \fontsize #-4 "%s" } ' % finger)
+            elif word=="[(": out.append(r'\new Voice="%s" { \cadenzaOn \note-mod "(" c8 \cadenzaOff ' % uniqName())
+            elif word==")]":
+                if notehead_markup.barPos: out.append(r'\cadenzaOn \note-mod ")" c8 \cadenzaOff } ')
+                else: out.append(r"""
+\bar "" % TODO: ensure bar number is never visible here
+\partial 8 \once \override Score.BarLine.allow-span-bar = ##f
+\note-mod ")" 8
+\bar "|"
+\context Score \applyContext #(lambda (ctx) (ly:context-set-property! ctx 'currentBarNumber (+ (ly:context-property ctx 'currentBarNumber) -1)))
+ } """)
             elif re.match("letter[A-Z]$",word):
                 out.append(r'\mark \markup{ \box { "%s" } }' % word[-1])
             elif re.match(r"R\*[1-9][0-9]*$",word):

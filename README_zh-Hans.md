@@ -128,6 +128,8 @@ Lilypond 页头： `title=标题` （单独一行）
 
 主音符上的泛音符号： `Harm: (音乐) :Harm` （主音乐）
 
+诗歌的器乐部分： `1 [( 2 3 )] 4`
+
 其它 Lilypond 代码： `LP: (代码块) :LP` （每个分隔符必须位于各行行首）
 
 用 Unicode 近似值代替 Lilypond 代码： `Unicode`
