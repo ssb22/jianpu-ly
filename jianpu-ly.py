@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.85 (c) 2012-2025 Silas S. Brown
+# v1.851 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1644,7 +1644,8 @@ def getLY(score,headers=None,have_final_barline=True):
               if not type("")==type(u""): finger = finger.encode('utf-8') # Python 2
               out.append(r'\finger \markup { \fontsize #-4 "%s" } ' % finger)
             elif word=="[(":
-                out.append(r'\new Voice="%s" { ' % uniqName())
+                if western or midi: out.append(r'\new Voice="%s" { ' % uniqName())
+                else: out.append(jianpu_voice_start(1)[0])
                 if not midi: out.append(r'\cadenzaOn \note-mod "(" r8 \cadenzaOff ')
             elif word==")]":
               if not midi:
