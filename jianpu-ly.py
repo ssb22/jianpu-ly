@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.852 (c) 2012-2025 Silas S. Brown
+# v1.853 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -578,7 +578,6 @@ def jianpu_voice_start(isTemp=0):
           (stemLenFrac,
            r"\override Beam.after-line-breaking = #flip-beams" if inner_beams_below else ""
            ))
-    r += "\n"+r"""\set Voice.chordChanges = ##t %% 2.19 bug workaround""" # LilyPond 2.19.82: \applyOutput docs say "called for every layout object found in the context Context at the current time step" but 2.19.x breaks this by calling it for ALL contexts in the current time step, hence breaking our WithStaff by applying our jianpu numbers to the 5-line staff too.  Obvious workaround is to make our function check that the context it's called with matches our jianpu voice, but I'm not sure how to do this other than by setting a property that's not otherwise used, which we can test for in the function.  So I'm 'commandeering' the "chordChanges" property (there since at least 2.15 and used by Lilypond only when it's in chord mode, which we don't use, and if someone adds a chord-mode staff then it won't print noteheads anyway): we will substitute jianpu numbers for noteheads only if chordChanges = #t.
     return r+"\n", voiceName
 def jianpu_staff_start(inst=None):
     # (we add "BEGIN JIANPU STAFF" and "END JIANPU STAFF" comments to make it easier to copy/paste into other Lilypond files)
@@ -638,7 +637,6 @@ def western_staff_start(inst=None):
     \new Voice="%s" {
     #(set-accidental-style 'modern-cautionary)
     \override Staff.TimeSignature #'style = #'numbered
-    \set Voice.chordChanges = ##f %% for 2.19.82 bug workaround
 """ % (voiceName,)), voiceName
 def western_staff_end(): return "} }\n% === END 5-LINE STAFF ===\n"
 
@@ -1886,7 +1884,7 @@ def process_input(inDat):
              if not fretsInc in ret: ret.insert(1,fretsInc) # after all-scores-start
              del headers["frets"]
          else: frets = None
-         ret.append(r'\new ChordNames { \chordmode { '+headers["chords"]+' } }')
+         ret.append(r'\new ChordNames { \set chordChanges = ##t \chordmode { '+headers["chords"]+' } }')
          if frets: ret.append(r'\new FretBoards { '+('' if frets=='guitar' else r'\set Staff.stringTunings = #'+frets+'-tuning')+r' \chordmode { '+headers["chords"]+' } }')
          del headers["chords"]
      if midi:
