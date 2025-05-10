@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.853 (c) 2012-2025 Silas S. Brown
+# v1.854 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -870,7 +870,7 @@ class NoteheadMarkup:
                 if self.inBeamGroup and not self.inBeamGroup=="restHack": aftrlast0 = "] "
     if placeholder_chord.startswith("<"): ret += placeholder_chord  # chord in western or midi
     elif not isChord or figures.startswith("-"): # single note or rest
-        if accidental and not not_angka and not (figures.startswith("-") or midi or western): ret += r"\once \tweak Accidental.extra-offset #'(0 . 0.7)"
+        if need_space_for_accidental and not not_angka and not (figures.startswith("-") or midi or western): ret += r"\once \tweak Accidental.extra-offset #'(0 . 0.7)"
         ret += placeholder_chord
         if midi or western or not not_angka: ret += {"":"", "#":"is", "b":"es"}[accidental]
         if (midi or western) and not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''","'''":"''''",",":"",",,":",",",,,":",,"}[octave] # so no-mark starts near middle C
