@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.854 (c) 2012-2025 Silas S. Brown
+# v1.855 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -647,8 +647,12 @@ def lyrics_end(): return "} }"
 inner_beams_below = True # Use stencil reflection to invert Lilypond's normal beam positioning (like in David Zhang's jianpu10a.ly) - more accurately reflects jianpu typography but can result in octave dots being too far down because beam spacing is done per system not per beam
 dashes_as_ties = True # Implement dash (-) continuations as invisible ties rather than rests; sometimes works better in awkward beaming situations
 use_rest_hack = True # Implement some short rests as notes (and if there are lyrics, creates temporary voices so the lyrics miss them); sometimes works better for beaming (at least in 2.15 through 2.24)
-if __name__=="__main__" and '--noRestHack' in sys.argv: # TODO: document
+sort_chords = True # Normally should be left as True.  See comment on --nosort below
+if __name__=="__main__":
+  if '--noRestHack' in sys.argv: # TODO: document (this is a debug option you might want to try if things are going wrong, but unlikely to still be needed)
     use_rest_hack=False ; sys.argv.remove('--noRestHack')
+  if '--nosort' in sys.argv: # TODO: document (this is a hack for if someone's incorrectly coded 2-voice music as chords and they want to cross the parts)
+    sort_chords=False ; sys.argv.remove('--nosort')
 assert not (use_rest_hack and not dashes_as_ties), "This combination has not been tested"
 
 def errExit(msg):
@@ -1445,7 +1449,7 @@ def chordNotes_markup(notes,word,line):
             figure = ""
             octave = ""
             sortKey = 0
-    dNotes.sort(key=lambda element:element['sortKey'])
+    if sort_chords: dNotes.sort(key=lambda element:element['sortKey'])
     placeholder_chord= "< "
     for f in dNotes:
         placeholder_chord += placeholders[f['figure']]+{"":"", "#":"is", "b":"es"}[f['accidental']]
