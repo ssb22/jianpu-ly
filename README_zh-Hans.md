@@ -68,6 +68,8 @@ Lilypond 页头： `title=标题` （单独一行）
 
 和弦指板图： `frets=guitar` （单独一行）
 
+变换吉他和弦为罗马数字: `ChordsRoman`
+
 多声部： `NextPart`
 
 当前分谱使用的乐器： `instrument=Flute` （单独一行）

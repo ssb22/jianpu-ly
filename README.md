@@ -70,6 +70,8 @@ Guitar chords: `chords=c2. g:7 c` (on own line, or newline after the = and doubl
 
 Fret diagrams: `frets=guitar` (on own line)
 
+Change guitar chords into Roman numerals: `ChordsRoman`
+
 Multiple parts: `NextPart`
 
 Instrument of current part: `instrument=Flute` (on a line of its own)

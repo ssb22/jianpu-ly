@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.855 (c) 2012-2025 Silas S. Brown
+# v1.856 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -92,6 +92,8 @@ Guitar chords: chords=c2. g:7 c (on own line, or newline after the = and double 
 吉他和弦符号： chords=c2. g:7 c （单独一行，或在=之后换行输入，并以2个空行结束）
 Fret diagrams: frets=guitar (on own line)
 和弦指板图： frets=guitar （单独一行）
+Change guitar chords into Roman numerals: ChordsRoman
+变换吉他和弦为罗马数字: ChordsRoman
 Multiple parts: NextPart
 多声部： NextPart
 Instrument of current part: instrument=Flute (on a line of its own)
@@ -536,6 +538,7 @@ def score_end(**headers):
     if notehead_markup.noIndent: layoutExtra += ' indent = 0.0 '
     if notehead_markup.raggedLast: layoutExtra += ' ragged-last = ##t '
     if notehead_markup.noBarNums: layoutExtra += r' \context { \Score \remove "Bar_number_engraver" } '
+    if notehead_markup.chordsRoman: layoutExtra += r"\context { \ChordNames \consists #(lambda (cx) (let ((tonic #{ c #})) (make-engraver ((initialize engraver) (set! (ly:context-property cx 'chordRootNamer) (lambda (pitch capitalized) (let ((degree (1+ (ly:pitch-notename (ly:pitch-diff pitch tonic))))) (number-format 'roman-upper degree))))) (listeners ((key-change-event engraver event) (set! tonic (ly:event-property event 'tonic))))))) } " # based on a lists.gnu.org snippet
     if midi: ret += r"\midi { \context { \Score tempoWholesPerMinute = #(ly:make-moment 84 4)}}" # will be overridden by any \tempo command used later
     else: ret += r"\layout{"+layoutExtra+r"""
   \context {
@@ -708,7 +711,7 @@ class NoteheadMarkup:
   def initOneScore(self):
       self.barLength = 64 ; self.beatLength = 16 # in 64th notes
       self.barPos = self.startBarPos = F(0)
-      self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.noIndent = self.raggedLast = self.withStaff = 0
+      self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.chordsRoman = self.noIndent = self.raggedLast = self.withStaff = 0
       self.keepLength = 0
       self.octavesPosition = None # or "before" (only setting in v1.847 and below) or "after", affects chords and grace notes when an octave mark is between two figures: is it before or after the note it affects.  Starting at None = no default, must specify if anything's ambiguous
       self.last_octave = self.base_octave = ""
@@ -1689,6 +1692,9 @@ def getLY(score,headers=None,have_final_barline=True):
                 notehead_markup.octavesPosition="before"
             elif word=="OctavesAfter":
                 notehead_markup.octavesPosition="after"
+            elif word=="ChordsRoman":
+                if notehead_markup.chordsRoman: sys.stderr.write("WARNING: Duplicate ChordsRoman, did you miss out a NextScore?\n")
+                notehead_markup.chordsRoman=1
             elif word=="NoBarNums":
                 if notehead_markup.noBarNums: sys.stderr.write("WARNING: Duplicate NoBarNums, did you miss out a NextScore?\n")
                 notehead_markup.noBarNums=1
