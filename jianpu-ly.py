@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.856 (c) 2012-2025 Silas S. Brown
+# v1.857 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -128,6 +128,8 @@ Simple chords: ,135' 1 1b3 1
 简单和弦： ,135' 1 1b3 1
 Da capo: 1 1 Fine 1 1 1 1 1 1 DC
 从头反复： 1 1 Fine 1 1 1 1 1 1 DC
+Dal segno: 1 1 Segno 1 1 ToCoda 1 1 DS 1 1
+从𝄋反复： 1 1 Segno 1 1 ToCoda 1 1 DS 1 1
 Repeat (with alternate endings): R{ 1 1 1 } A{ 2 | 3 }
 反复跳跃记号： R{ 1 1 1 } A{ 2 | 3 }
 Short repeats (percent): R4{ 1 2 }
@@ -1518,7 +1520,7 @@ def getLY(score,headers=None,have_final_barline=True):
    rStartP = None
    escaping = inTranspose = 0
    aftrnext = defined_jianpuGrace = defined_JGR = None
-   aftrnext2 = None
+   aftrnext2 = None ; DS = "}"
    isInHarmonic = False
    # Please be careful adding extra re.sub's here: they will apply
    # to the WHOLE SCORE, including Lilypond blocks, headers, etc.
@@ -1775,10 +1777,22 @@ def getLY(score,headers=None,have_final_barline=True):
                 else: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + graceNotes_markup(word[1:-2],word,line,1,isInHarmonic) + " }"
             elif word=="Fine":
                 need_final_barline = False
-                out.append(r'''\once \override Score.RehearsalMark #'break-visibility = #begin-of-line-invisible \once \override Score.RehearsalMark #'self-alignment-X = #RIGHT \mark "Fine" \bar "|."''')
+                if lilypond_minor_version()>=24: out.append(r'\volta 2 \fine \volta 1')
+                else: out.append(r'''\once \override Score.RehearsalMark #'break-visibility = #begin-of-line-invisible \once \override Score.RehearsalMark #'self-alignment-X = #RIGHT \mark "Fine" \bar "|."''')
             elif word=="DC":
                 need_final_barline = False
-                out.append(r'''\once \override Score.RehearsalMark #'break-visibility = #begin-of-line-invisible \once \override Score.RehearsalMark #'self-alignment-X = #RIGHT \mark "D.C. al Fine" \bar "||"''')
+                if lilypond_minor_version()>=24:
+                    out.insert(0,r'\repeat segno 2 {') ; lastPtr += 1
+                    out.append(DS)
+                else: out.append(r'''\once \override Score.RehearsalMark #'break-visibility = #begin-of-line-invisible \once \override Score.RehearsalMark #'self-alignment-X = #RIGHT \mark "D.C. al Fine" \bar "||"''')
+            elif word=="Segno":
+                if lilypond_minor_version() < 24: errExit("Need at least Lilypond 24 for Segno")
+                out.append(r'\repeat segno 2 {')
+            elif word=="DS": out.append(DS)
+            elif word=="ToCoda":
+                if lilypond_minor_version() < 24: errExit("Need at least Lilypond 24 for coda")
+                out.append(r'\alternative { \volta 1 {')
+                DS=r'''} } \volta 2 \volta #'() { \section \sectionLabel "Coda" } }'''
             else: # note (or unrecognised)
                 word0 = word
                 baseOctaveChange = "".join(c for c in word if c in "<>")

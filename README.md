@@ -106,6 +106,8 @@ Simple chords: `,135' 1 1b3 1`
 
 Da capo: `1 1 Fine 1 1 1 1 1 1 DC`
 
+Dal segno: `1 1 Segno 1 1 ToCoda 1 1 DS 1 1`
+
 Repeat (with alternate endings): `R{ 1 1 1 } A{ 2 | 3 }`
 
 Short repeats (percent): `R4{ 1 2 }`
