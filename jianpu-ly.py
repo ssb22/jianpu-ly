@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.857 (c) 2012-2025 Silas S. Brown
+# v1.858 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1349,9 +1349,7 @@ def graceNotes_markup(notes,word,line,isAfter,harmonic=False):
             beams = 2 # reset after each note
             figure = ""
             octave = ""
-    mr = ''.join(mr)
-    offset = "-2.5 . 0" if isAfter else "-0.5 . -0.5"
-    return mr
+    return ''.join(mr)
 def grace_octave_fix(notes,word,line):
     """Ensures octaves, durations and accidentals come before the
     main notes, not after.  For octaves we check ambiguous cases
@@ -1377,7 +1375,7 @@ def grace_octave_fix(notes,word,line):
 def gracenotes_western(notes,word,line):
     # for western and MIDI staffs
     notes = grace_octave_fix(notes,word,line)
-    nextAcc = "" ; next8ve = "'" ; current_accidentals = [0]*7
+    nextAcc = "" ; next8ve = "'"
     r = []
     duration = 16
     for i in xrange(len(notes)):
@@ -1519,7 +1517,7 @@ def getLY(score,headers=None,have_final_barline=True):
    lastNonDashPtr = 0
    rStartP = None
    escaping = inTranspose = 0
-   aftrnext = defined_jianpuGrace = defined_JGR = None
+   aftrnext = None
    aftrnext2 = None ; DS = "}"
    isInHarmonic = False
    # Please be careful adding extra re.sub's here: they will apply
@@ -1632,8 +1630,9 @@ def getLY(score,headers=None,have_final_barline=True):
                     if word[0]=="6": transposeFrom = "a"
                     else: transposeFrom = "c"
                     transposeTo = word[word.index('=')+1:].replace("#","is").replace("b","es").lower()
-                    if midi and transposeTo[0] in "gab": transposeTo += ','
-                    out.append(r"\transpose c "+transposeTo+r" { \key c \major ") # so that MIDI or Western pitches are correct
+                    if transposeFrom=="c" and transposeTo[0] in "gab": transposeTo += ','
+                    if transposeFrom=="a" and transposeTo[0] in "cd": transposeTo += "'"
+                    out.append(r"\transpose "+transposeFrom+" "+transposeTo+r" { \key c \major ") # so that MIDI or Western pitches are correct
                     inTranspose = 1
                 else: out.append(r'\mark \markup{%s}' % word.replace("b",r"\flat").replace("#",r"\sharp"))
             elif word.startswith("Fr="):
