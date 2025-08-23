@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.860 (c) 2012-2025 Silas S. Brown
+# v1.861 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -948,7 +948,7 @@ class NoteheadMarkup:
             ret = r" \jianpuGraceCurveEnd " + ret 
     # sys.stderr.write(accidental+figure+octave+dots+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
     if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figures,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
-    if self.barPos%self.beatLength == 0 and self.inBeamGroup: # (self.inBeamGroup is set only if not midi/western)
+    if (self.barPos%self.beatLength == 0 or self.barPos==self.barLength) and self.inBeamGroup: # (or added for irregular time signatures; self.inBeamGroup is set only if not midi/western)
         # jianpu printouts tend to restart beams every beat
         # (but if there are no beams running anyway, it occasionally helps typesetting to keep the logical group running, e.g. to work around bugs involving beaming a dash-and-rest beat in 6/8) (TODO: what if there's a dash-and-rest BAR?  [..]-notated beams don't usually work across barlines
         ret += ']'
@@ -1244,14 +1244,28 @@ def xml2jianpu(x):
             if tState=="start":
                 ourRet.append(tuplet+"[")
                 if ourI==0: paddingRestList.append(tuplet+"[")
-            if not nType:
+            if not nType: # full-bar note
                 wantQ = int(time[0])*8/int(time[1])
                 nn = [k for k,v in quavers.items() if v==wantQ]
                 if nn: nType = nn[0]
                 else:
                     nn = [k for k,v in quavers.items() if v*1.5==wantQ]
                     if nn: nType,dot = nn[0],1
-                    else: assert 0, "Full-measure note or rest at unrecognised bar length" # will probably need to split
+                    else: # need to split notes, this could get tricky
+                        nList = []
+                        if not tSig[0]==None and ourI==0: tSig[1] += wantQ # shouldn't be needed
+                        while wantQ:
+                            nn=[k for k,v in quavers.items() if v <= wantQ][-1]
+                            wantQ -= quavers[nn]
+                            nList.append(r+acc+types[nn]+' ')
+                            if ourI==0: paddingRestList.append("0"+types[nn])
+                        prevChord[0],prevChord[1]=len(ourRet),ourRet # oh crumbs please don't combine chords with these things (TODO we'll have to go back and add the next chord note to all the notes)
+                        ourRet.append(('' if step=="r" else '~ ').join(nList)+' '+tie)
+                        mxlPosition[0] += mxlPosition[1]
+                        positionsInProgress[ourI] = mxlPosition[0]
+                        mxlPosition[1] = 0
+                        if ourI==0: paddingRestDict[mxlPosition[0]] = len(paddingRestList)
+                        return
             if not tSig[0]==None and ourI==0: # we're counting the length of the first bar, for anacrusis
                 tSig[1] += quavers[nType]
                 if dot: tSig[1] += quavers[nType]/2.0
