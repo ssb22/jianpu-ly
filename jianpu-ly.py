@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.861 (c) 2012-2025 Silas S. Brown
+# v1.862 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1534,6 +1534,7 @@ def getLY(score,headers=None,have_final_barline=True):
    aftrnext = None
    aftrnext2 = None ; DS = "}"
    isInHarmonic = False
+   out_of_line_LP = ""
    # Please be careful adding extra re.sub's here: they will apply
    # to the WHOLE SCORE, including Lilypond blocks, headers, etc.
    # See comment below for a place where you can add re.sub's that
@@ -1546,9 +1547,12 @@ def getLY(score,headers=None,have_final_barline=True):
     if line.startswith("LP:"):
         # Escaped LilyPond block.  Thanks to James Harkins for this suggestion.
         # (Our internal barcheck does not understand code in LP blocks, so keep it to complete bars.)
-        escaping = 1
+        escaping = 1+len(out)
         if len(line)>len("LP:"): out.append(line[3:]+"\n") # remainder of current line
     elif line.startswith(":LP"):
+        if r"\paper {" in "".join(out[escaping-1:]): # if someone's trying to override \paper settings, we don't want this inline in the score
+            out_of_line_LP += "".join(out[escaping-1:])
+            del out[escaping-1:]
         escaping = 0
         if line.replace(":LP","").strip(): sys.stderr.write("Warning: current implementation ignores anything after :LP on same line\n") # TODO
     elif escaping:
@@ -1881,7 +1885,7 @@ def getLY(score,headers=None,have_final_barline=True):
        out = re.sub(r'(%\{ bar [0-9]*: %\} | \\major ) *r(?=[^ ]*(?: [_^]"[^"]*")?[| ]* (?:\\noPageBreak )?(?:%\{ bar|\\bar|\}$))',r"\g<1>R",out)
        out = out.replace(r"\new RhythmicStaff \with {",r"\new RhythmicStaff \with { \override VerticalAxisGroup.default-staff-staff-spacing = #'((basic-distance . 6) (minimum-distance . 6) (stretchability . 0)) ") # don't let it hang too far up in the air
    if not_angka: out=out.replace("make-bold-markup","make-simple-markup")
-   return out,maxBeams,lyrics,headers
+   return out,maxBeams,lyrics,headers,out_of_line_LP
 
 def process_input(inDat):
  global unicode_mode
@@ -1909,7 +1913,8 @@ def process_input(inDat):
     for partNo,part in enumerate(parts):
      if partNo==0 or separate_scores:
          ret.append(score_start())
-     out,maxBeams,lyrics,headers = getLY(part,headers,partNo==0 or separate_scores) # assume 1st part doesn't have 'tacet al fine'
+     out,maxBeams,lyrics,headers,out_of_line_LP = getLY(part,headers,partNo==0 or separate_scores) # assume 1st part doesn't have 'tacet al fine'
+     ret[0] += out_of_line_LP
      if len(parts)>1 and "instrument" in headers:
          inst = headers["instrument"]
          del headers["instrument"]
