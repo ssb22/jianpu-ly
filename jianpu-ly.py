@@ -540,7 +540,7 @@ def score_end(**headers):
     if notehead_markup.noIndent: layoutExtra += ' indent = 0.0 '
     if notehead_markup.raggedLast: layoutExtra += ' ragged-last = ##t '
     if notehead_markup.noBarNums: layoutExtra += r' \context { \Score \remove "Bar_number_engraver" } '
-    if notehead_markup.chordsRoman: layoutExtra += r"\context { \ChordNames \consists #(lambda (cx) (let ((tonic #{ c #})) (make-engraver ((initialize engraver) (set! (ly:context-property cx 'chordRootNamer) (lambda (pitch capitalized) (let ((degree (1+ (ly:pitch-notename (ly:pitch-diff pitch tonic))))) (number-format 'roman-upper degree))))) (listeners ((key-change-event engraver event) (set! tonic (ly:event-property event 'tonic))))))) } " # based on a lists.gnu.org snippet
+    if notehead_markup.chordsRoman: layoutExtra += r"\context { \ChordNames \consists #(lambda (cx) (let ((tonic #{ c #})) (make-engraver ((initialize engraver) (set! (ly:context-property cx 'chordRootNamer) (lambda (pitch capitalized) (let ((degree (1+ (ly:pitch-notename (ly:pitch-diff pitch tonic)))) (style (if capitalized 'roman-lower 'roman-upper))) (number-format style degree))))) (listeners ((key-change-event engraver event) (set! tonic (ly:event-property event 'tonic))))))) } " # based on a lists.gnu.org snippet
     if midi: ret += r"\midi { \context { \Score tempoWholesPerMinute = #(ly:make-moment 84 4)}}" # will be overridden by any \tempo command used later
     else: ret += r"\layout{"+layoutExtra+r"""
   \context {
@@ -1927,7 +1927,9 @@ def process_input(inDat):
              if not fretsInc in ret: ret.insert(1,fretsInc) # after all-scores-start
              del headers["frets"]
          else: frets = None
-         ret.append(r'\new ChordNames { \set chordChanges = ##t \chordmode { '+headers["chords"]+' } }')
+         ret.append(r'\new ChordNames { \set chordChanges = ##t ')
+         if notehead_markup.chordsRoman: ret.append(r'\set chordNameLowercaseMinor = ##t')
+         ret.append(r'\chordmode { '+headers["chords"]+' } }')
          if frets: ret.append(r'\new FretBoards { '+('' if frets=='guitar' else r'\set Staff.stringTunings = #'+frets+'-tuning')+r' \chordmode { '+headers["chords"]+' } }')
          del headers["chords"]
      if midi:
