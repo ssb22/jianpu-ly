@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.863 (c) 2012-2025 Silas S. Brown
+# v1.864 (c) 2012-2025 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1090,7 +1090,7 @@ def xml2jianpu(x):
     xmlparser = ParserCreate()
     mxlPosition,positionsInProgress,partsInProgress = [0,0],[0],[[]]
     paddingRestList, paddingRestDict = [], {0:0}
-    ret = [] ; dat = ["",{}]
+    ret = ["OctavesAfter"] ; dat = ["",{}]
     partList=[""];time=["4","4"];tempo=["",""]
     note=[[""]*11];keySig=[['']*7];barSig=[['']*7,None];note1=["C"]
     tSig=[None,0];prevChord=[None,None]
@@ -1229,7 +1229,7 @@ def xml2jianpu(x):
                 dTone=ord(step[0])-ord(note1[0])+7*(octave-4)
                 if step[0] < 'C': dTone += 7
                 r=str((dTone%7)+1)
-                while dTone<0:
+                while dTone<0: # we use OctavesAfter
                     r+="," ; dTone+=7
                 while dTone>6:
                     r+="'" ; dTone-=7
