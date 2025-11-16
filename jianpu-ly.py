@@ -19,11 +19,11 @@ r"""
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Homepage: http://ssb22.user.srcf.net/mwrhome/jianpu-ly.py
+# Home: https://ssb22.user.srcf.net/mwrhome/jianpu-ly.html
 # Git repository: https://github.com/ssb22/jianpu-ly
 # and on GitLab: https://gitlab.com/ssb22/jianpu-ly
 # and on Bitbucket: https://bitbucket.org/ssb22/jianpu-ly
-# and at https://gitlab.developers.cam.ac.uk/ssb22/jianpu-ly
+# + at https://gitlab.developers.cam.ac.uk/ssb22/jianpu-ly
 # and in China: https://gitee.com/ssb22/jianpu-ly
 
 # The following docstring format is fixed, and is used by the options
