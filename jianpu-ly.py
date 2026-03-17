@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.865 (c) 2012-2025 Silas S. Brown
+# v1.866 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1675,7 +1675,7 @@ def getLY(score,headers=None,have_final_barline=True):
             elif word==")]":
               if not midi:
                 if notehead_markup.barPos: out.append(r'\cadenzaOn \note-mod ")" r8 \cadenzaOff ')
-                else: out.append(r'\once \omit Score.BarNumber \bar "" \cadenzaOn \note-mod ")" r8 \cadenzaOff \bar "|" ')
+                else: out.append(r'\once \omit Score.BarNumber \noBreak \bar "" \cadenzaOn \note-mod ")" r8 \cadenzaOff \bar "|" ') # and if re.search(r"\sNextPart\s"," "+score+" ") then at least some versions of Lilypond may need \cadenzaOn s8 \cadenzaOff at the same place in the other parts (TODO: automate? but check user hasn't already added it in an LP block?)
               out.append("}")
             elif re.match("letter[A-Z]$",word):
                 out.append(r'\mark \markup{ \box { "%s" } }' % word[-1])
