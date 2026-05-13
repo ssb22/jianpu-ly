@@ -138,6 +138,8 @@ Instrumental breaks in vocal music: `1 [( 2 3 )] 4`
 
 Other Lilypond code: `LP: (block of code) :LP` (each delimeter at start of its line)
 
+Lilypond header additions: `LPH: (definitions) :LPH` (each at start of line)
+
 Unicode approximation instead of Lilypond: `Unicode`
 
 Split MIDI files per part: `PartMidi`

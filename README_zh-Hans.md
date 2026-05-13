@@ -136,6 +136,8 @@ Lilypond 页头： `title=标题` （单独一行）
 
 其它 Lilypond 代码： `LP: (代码块) :LP` （每个分隔符必须位于各行行首）
 
+Lilypond头代码： `LPH: (定义) :LPH` （每个分隔符必须位于各行行首）
+
 用 Unicode 近似值代替 Lilypond 代码： `Unicode`
 
 按声部导出MIDI文件： `PartMidi`
