@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.867 (c) 2012-2026 Silas S. Brown
+# v1.868 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1536,7 +1536,7 @@ def getLY(score,headers=None,have_final_barline=True):
    aftrnext = None
    aftrnext2 = None ; DS = "}"
    isInHarmonic = False
-   LP_before_score, LP_in_score = "",""
+   LP_between_head_and_first_score = ""
    # Please be careful adding extra re.sub's here: they will apply
    # to the WHOLE SCORE, including Lilypond blocks, headers, etc.
    # See comment below for a place where you can add re.sub's that
@@ -1553,11 +1553,8 @@ def getLY(score,headers=None,have_final_barline=True):
         esc,rest = line.split(':',1)
         if rest.strip(): out.append(rest.strip()+"\n") # remainder of current line
     elif line.startswith(":LP") or line.startswith(":LPH"):
-        if r"\paper {" in "".join(out[escaping-1:]):
-            LP_in_score += "".join(out[escaping-1:])
-            del out[escaping-1:]
-        elif line.startswith(":LPH"):
-            LP_before_score += "".join(out[escaping-1:])
+        if line.startswith(":LPH") or r"\paper {" in "".join(out[escaping-1:]):
+            LP_between_head_and_first_score += "".join(out[escaping-1:])
             del out[escaping-1:]
         escaping = 0
         if re.sub('^:LPH?','',line).strip(): sys.stderr.write("Warning: current implementation ignores anything after :LP or :LPH on same line\n") # TODO
@@ -1886,7 +1883,7 @@ def getLY(score,headers=None,have_final_barline=True):
        out = re.sub(r'(%\{ bar [0-9]*: %\} | \\major ) *r(?=[^ ]*(?: [_^]"[^"]*")?[| ]* (?:\\noPageBreak )?(?:%\{ bar|\\bar|\}$))',r"\g<1>R",out)
        out = out.replace(r"\new RhythmicStaff \with {",r"\new RhythmicStaff \with { \override VerticalAxisGroup.default-staff-staff-spacing = #'((basic-distance . 6) (minimum-distance . 6) (stretchability . 0)) ") # don't let it hang too far up in the air
    if not_angka: out=out.replace("make-bold-markup","make-simple-markup")
-   return out,maxBeams,lyrics,headers,LP_before_score,LP_in_score
+   return out,maxBeams,lyrics,headers,LP_between_head_and_first_score
 
 def process_input(inDat):
  global unicode_mode
@@ -1914,9 +1911,8 @@ def process_input(inDat):
     for partNo,part in enumerate(parts):
      if partNo==0 or separate_scores:
          ret.append(score_start())
-     out,maxBeams,lyrics,headers,LP_before_score,LP_in_score = getLY(part,headers,partNo==0 or separate_scores) # assume 1st part doesn't have 'tacet al fine'
-     if partNo==0 and not midi: # do this only once
-         ret[0] = LP_before_score + ret[0] + LP_in_score
+     out,maxBeams,lyrics,headers,LP_between_head_and_first_score = getLY(part,headers,partNo==0 or separate_scores) # assume 1st part doesn't have 'tacet al fine'
+     if not midi: ret[0] += LP_between_head_and_first_score # (if midi it will already have been done, but we do catch LPH from any part)
      if len(parts)>1 and "instrument" in headers:
          inst = headers["instrument"]
          del headers["instrument"]
