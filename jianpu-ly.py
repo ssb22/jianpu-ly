@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.873 (c) 2012-2026 Silas S. Brown
+# v1.874 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1134,7 +1134,7 @@ def xml2jianpu(x):
                 if partList: ret.append('instrument='+partList[0])
                 if positionsInProgress[n] < max(positionsInProgress) and positionsInProgress[n] in paddingRestDict: p.append(' '.join(paddingRestList[paddingRestDict[positionsInProgress[n]]:]))
                 else: os.environ["j2ly_sloppy_bars"] = "1"
-                ret.append("\n".join(p))
+                ret.append(" ".join(p)) # don't use \n here because grace-note merging must be within same line post v1.83
                 ret.append("WithStaff NextPart")
             del partsInProgress[:] ; del positionsInProgress[:]
             positionsInProgress.append(0);partsInProgress.append([])
@@ -1253,6 +1253,9 @@ def xml2jianpu(x):
                 if keySig[0][dTone%7]=="#": acc="" if acc=="#" else "b"
                 if keySig[0][dTone%7]=="b": acc="" if acc=="b" else "#"
             if chord:
+                if grace:
+                    sys.stderr.write("WARNING: Ignoring chord in grace notes (not yet implemented by jianpu-ly)\n")
+                    return
                 rr = prevChord[1][prevChord[0]]
                 prevChord[1][prevChord[0]] = rr.split()[0]+r+''.join([' '+x for x in rr.split()[1:]])
                 return
@@ -1279,17 +1282,16 @@ def xml2jianpu(x):
                     mxlPosition[1] = 0
                     if ourI==0: paddingRestDict[mxlPosition[0]] = len(paddingRestList)
                     return
-            if not tSig[0]==None and ourI==0: # we're counting the length of the first bar, for anacrusis
+            if not grace and not tSig[0]==None and ourI==0: # we're counting the length of the first bar, for anacrusis
                 tSig[1] += quavers[nType]
                 if dot: tSig[1] += quavers[nType]/2.0
             if dot: d=typesDot
             else: d = types
-            r += acc+d[nType]+' '
+            r += acc+d[nType]
             if ourI==0: paddingRestList.append("0"+d[nType]) # we hope the subsequent voices are not cross-rhythm with the first voice, at least not at points where <backup> and <forward> occur
             prevChord[0],prevChord[1]=len(ourRet),ourRet
-            w1,w2 = r[:r.index(' ')],r[r.index(' '):]
-            if grace: w1="g["+w1+"]"
-            ourRet.append(w1+extras+' '+w2+' '+tie)
+            if grace: r="g["+r+"]"
+            ourRet.append(r+extras+' '+tie)
             if tState=="stop":
                 ourRet.append("]")
                 if ourI==0: paddingRestList.append("]")
@@ -1792,6 +1794,8 @@ def getLY(score,headers=None,have_final_barline=True):
                 elif out and "afterGrace" in out[lastPtr]:
                     # apply to inside afterGrace in midi/western
                     out[lastPtr] = out[lastPtr][:-1] + word + " }"
+                elif out and out[-1].startswith(r'\grace'):
+                    out[-1] = out[-1][:-1] + word + " }"
                 else:
                     out.append(word)
                     if word=="~" and not midi and not western and lastNonDashPtr < lastPtr: sys.stderr.write("Warning: jianpu long-note tie won't be done right because your Lilypond version is older than 2.20\n")
