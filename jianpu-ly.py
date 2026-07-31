@@ -1290,11 +1290,12 @@ def xml2jianpu(x):
                 if dot: tSig[1] += quavers[nType]/2.0
             if dot: d=typesDot
             else: d = types
-            r += acc+d[nType]
+            r += acc+d[nType]+' '
             if ourI==0: paddingRestList.append("0"+d[nType]) # we hope the subsequent voices are not cross-rhythm with the first voice, at least not at points where <backup> and <forward> occur
             prevChord[0],prevChord[1]=len(ourRet),ourRet
-            if grace: r="g["+r+"]"
-            ourRet.append(r+extras+' '+tie)
+            w1,w2 = r[:r.index(' ')],r[r.index(' '):]
+            if grace: w1="g["+w1+"]"
+            ourRet.append(w1+extras+' '+w2+' '+tie)
             if tState=="stop":
                 ourRet.append("]")
                 if ourI==0: paddingRestList.append("]")
