@@ -104,6 +104,8 @@ Grace notes with durations: `g[d4d5s6] 1`
 
 Simple chords: `,135' 1 1b3 1`
 
+Grace note chords: `g[1&3&5] 1`
+
 Da capo: `1 1 Fine 1 1 1 1 1 1 DC`
 
 Dal segno: `1 1 Segno 1 1 ToCoda 1 1 DS 1 1`

@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.874 (c) 2012-2026 Silas S. Brown
+# v1.875 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -126,6 +126,8 @@ Grace notes with durations: g[d4d5s6] 1
 带时值的倚音： g[d4d5s6] 1
 Simple chords: ,135' 1 1b3 1
 简单和弦： ,135' 1 1b3 1
+Grace note chords: g[1&3&5] 1
+倚音和弦： g[1&3&5] 1
 Da capo: 1 1 Fine 1 1 1 1 1 1 DC
 从头反复： 1 1 Fine 1 1 1 1 1 1 DC
 Dal segno: 1 1 Segno 1 1 ToCoda 1 1 DS 1 1
@@ -235,7 +237,7 @@ def find_grace_height(music):
     grace_height = 2.5
     for word in music.split():
         if word.startswith("g[") or word.endswith("]g"):
-            if "d" in word or ",," in word:
+            if "d" in word or "h" in word or ",," in word:
                 grace_height = 3.5 ; break
                 # TODO: more options, e.g. 3.0 if "d" but not ",," ?  (will need to update grace_height dictionary in all_scores_start also)
 
@@ -771,7 +773,7 @@ class NoteheadMarkup:
 
     isChord = len(figures)>1
     if isChord:
-        chord_ret,octave,placeholder_chord = chordNotes_markup(re.sub(r'[\\qsdh.]','',word),word,line) # word w/out durations
+        chord_ret,octave,placeholder_chord = chordNotes_markup(re.sub(r'[\\qsdh.]','',word),word,line,self.graceType) # word w/out durations
         if not midi and not western: placeholder_chord = "c"
     else: # not isChord
         placeholder_chord = placeholders[figures]
@@ -1254,10 +1256,11 @@ def xml2jianpu(x):
                 if keySig[0][dTone%7]=="b": acc="" if acc=="b" else "#"
             if chord:
                 if grace:
-                    sys.stderr.write("WARNING: Ignoring chord in grace notes (not yet implemented by jianpu-ly)\n")
-                    return
-                rr = prevChord[1][prevChord[0]]
-                prevChord[1][prevChord[0]] = rr.split()[0]+r+''.join([' '+x for x in rr.split()[1:]])
+                    i=ourRet[-1].rindex("]")
+                    ourRet[-1]=ourRet[-1][:i]+"&"+r+ourRet[-1][i:]
+                else:
+                    rr = prevChord[1][prevChord[0]]
+                    prevChord[1][prevChord[0]] = rr.split()[0]+r+''.join([' '+x for x in rr.split()[1:]])
                 return
             if tState=="start":
                 ourRet.append(tuplet+"[")
@@ -1337,34 +1340,44 @@ def graceNotes_markup(notes,word,line,isAfter,harmonic=False):
     # Calculate length of grace section and tell
     # NoteheadMarkup that's the "bar length", so it
     # ends the beams at the end of it for us
-    notemark.barLength = 0
+    notemark.barPos = notemark.barLength = 0 ; ignoreNext = False
     curLen = 4 # default semiquaver, in 64th notes
     for n in notes:
         curLen = {'q':8,'s':4,'d':2,'h':1}.get(n,curLen)
         if '0'<=n<='9': 
-            notemark.barLength += curLen
+            if not ignoreNext: notemark.barLength += curLen
             curLen = 4 # reset after each note
+            ignoreNext = False
+        elif n=='&': ignoreNext = True
     notemark.beatLength = notemark.barLength
     accidental = ""
     beams = 2 # default semiquaver
     figure = ""
     octave = ""
-    mr = []
+    mr = [] ; i = 0
+    if '&' in notes: mr.append(r"\once \override Beam.positions = #'(-1.5 . -1.5) \once \override Beam.length-fraction = #0.3 ")
     if isAfter: mr.append(r"\once \override Score.JianpuGraceCurve.direction = #LEFT ")
     mr.append(r"\jianpuGraceCurveStart ")
-    for i in xrange(len(notes)):
+    while i < len(notes):
+        chord = re.match("([^1-7&]*[1-7]&)+[^1-7&]*[1-7](?!&)",notes[i:])
+        if chord:
+            chord=chord.group(0) ; i+=len(chord)
+            for n in chord:
+                if n in 'qsdh': beams='*qsdh'.index(n)
+            mr.append(notemark("11",beams,"","","","",chord,"")[5])
+            if harmonic: mr[-1]+=r" \flageolet "
+            continue
         n = notes[i]
         if n=='#':
             accidental = "#"
         elif n=='b': 
             accidental = "b"
+        elif n in "'," and i and n==notes[i-1]: pass # handled it already when we saw the first one
         elif n=="'":
-            if i and notes[i-1]==notes[i]: continue
             if notes[i:i+3]=="'''": octave = "'''"
             elif notes[i:i+2]=="''": octave = "''"
             else: octave = "'"
         elif n==',':
-            if i and notes[i-1]==notes[i]: continue
             if notes[i:i+3]==",,,": octave = ",,,"
             elif notes[i:i+2]==",,": octave = ",,"
             else: octave = ","
@@ -1378,11 +1391,13 @@ def graceNotes_markup(notes,word,line,isAfter,harmonic=False):
             beams = 2 # reset after each note
             figure = ""
             octave = ""
+        i += 1
     return ''.join(mr)
 def grace_octave_fix(notes,word,line):
     """Ensures octaves, durations and accidentals come before the
     main notes, not after.  For octaves we check ambiguous cases
     and insist on OctavesBefore or OctavesAfter being set if so"""
+    if '&' in notes: return '&'.join(grace_octave_fix(n,word,line) for n in notes.split('&'))
     def gof_inner(notes): return re.sub(
             "^(.*)([1-9])([^1-9]+)$",
             lambda m:gof_inner(m.group(1))+chr(0)+m.group(3)+m.group(2),notes) # the chr(0) is a temporary marker for below
@@ -1405,29 +1420,38 @@ def gracenotes_western(notes,word,line):
     # for western and MIDI staffs
     notes = grace_octave_fix(notes,word,line)
     nextAcc = "" ; next8ve = "'"
-    r = []
+    r = [] ; i = 0
     duration = 16
-    for i in xrange(len(notes)):
+    while i < len(notes):
+        chord = re.match("([^1-7&]*[1-7]&)+[^1-7&]*[1-7](?!&)",notes[i:])
+        if chord:
+            chord=chord.group(0) ; i+=len(chord)
+            for n in chord: # update durations:
+                if n in 'qsdh':
+                    duration = {'q':8, 's':16, 'd':32, 'h':64}[n]
+            _,_,chord = chordNotes_markup(chord,word,line)
+            r.append(chord+str(duration)) ; continue
         n = notes[i]
         if n=='#': nextAcc = "is"
         elif n=='b': nextAcc = "es"
+        elif n in "'," and i and n==notes[i-1]: pass
         elif n=="'":
-            if i and notes[i-1]==notes[i]: continue
             if notes[i:i+3]=="'''": next8ve = "''''"
             elif notes[i:i+2]=="''": next8ve = "'''"
             else: next8ve = "''"
         elif n==',':
-            if i and notes[i-1]==notes[i]: continue
             if notes[i:i+3]==",,,": next8ve = ",,"
             elif notes[i:i+2]==",,": next8ve = ","
             else: next8ve = ""
         elif n in 'qsdh': duration = {'q':8, 's':16, 'd':32, 'h':64}[n]
         else:
-            if not n in placeholders: continue # TODO: errExit ?
+            if not n in placeholders:
+                i += 1 ; continue # TODO: errExit ?
             r.append(placeholders[n]+nextAcc+next8ve+str(duration))
             nextAcc = "" ; next8ve = "'"
+        i += 1
     return ' '.join(r)
-def chordNotes_markup(notes,word,line):
+def chordNotes_markup(notes,word,line,graceType=None):
     notes = grace_octave_fix(notes,word,line) # ensures octaves and accidentals come before notes
     accidental = ""
     figure = ""
@@ -1510,6 +1534,7 @@ def chordNotes_markup(notes,word,line):
         ",":r"-\tweak #'X-offset #0.6 _. ",
         ",,":r"-\tweak #'X-offset #0.6 _\two-dots ",
         ",,,":r"-\tweak #'X-offset #0.6 _\three-dots "}
+
     ret = "< "
     baseline = 0
     for f in dNotes:
@@ -1523,7 +1548,7 @@ def chordNotes_markup(notes,word,line):
         if "," in f['octave']: ret += r"\tweak #'Y-offset #%.1f " % (baseline -0.1 - 1.2 * offsets[f['octave']])
         elif "'" in f['octave']: ret += r"\tweak #'Y-offset #%.1f " % (baseline + 1.6 + 0.02 * offsets[f['octave']])
         ret += oDict[f['octave']]+" "
-        baseline += 2
+        baseline += 4 if graceType else 2
         if "'" in f['octave']: baseline += offsets[f['octave']]
     ret += ">"
     return ret,bottom_octave,placeholder_chord
@@ -1811,10 +1836,10 @@ def getLY(score,headers=None,have_final_barline=True):
             elif word==']': # tuplet end
                 out.append("}")
                 notehead_markup.tuplet = (1,1)
-            elif re.match(r"g\[[#b',1-9qsdh]+\]$",word):
+            elif re.match(r"g\[[#b',1-9qsdh&]+\]$",word):
                 if midi or western: out.append(r"\grace { " + gracenotes_western(word[2:-1],word,line) + " }")
                 else: out.append(r"\grace { " + graceNotes_markup(word[2:-1],word,line,0,isInHarmonic) + " }")
-            elif re.match(r"\[[#b',1-9,q,s,d,h]+\]g$",word):
+            elif re.match(r"\[[#b',1-9qsdh&]+\]g$",word):
                 if midi or western: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + gracenotes_western(word[1:-2],word,line) + " }"
                 else: out[lastPtr] = r" \afterGrace { " + out[lastPtr] + " } { " + graceNotes_markup(word[1:-2],word,line,1,isInHarmonic) + " }"
             elif word=="Fine":
