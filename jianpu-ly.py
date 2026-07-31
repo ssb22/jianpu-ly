@@ -1110,6 +1110,11 @@ def xml2jianpu(x):
     partList=[""];time=["4","4"];tempo=["",""]
     note=[[""]*11];keySig=[['']*7];barSig=[['']*7,None];note1=["C"]
     tSig=[None,0];prevChord=[None,None]
+    class MultiRest:
+        def __init__(self):
+            self.count = self.total = 0
+            self.skip, self.buffer = False,""
+    multiple_rest = MultiRest()
     types={"64th":"h","32nd":"d","16th":"s","eighth":"q","quarter":"","half":" -","whole":" - - -"}
     typesDot={"64th":"h.","32nd":"d.","16th":"s.","eighth":"q.","quarter":".","half":" - -","whole":" - - - - -"}
     typesMM={"64th":"64","32nd":"32","16th":"16","eighth":"8","quarter":"4","half":"2","whole":"1"}
@@ -1182,12 +1187,22 @@ def xml2jianpu(x):
             mxlPosition[0] += mxlPosition[1]
             mxlPosition[1] = 0
         elif name=="measure" and not tSig[0]==None:
-            if not tSig[1]==int(time[0])*8/int(time[1]):
+            if not tSig[1]==int(time[0])*8/int(time[1]) and tSig[1]>0:
                 a = ","+{0.5:"16",0.75:"16.",1:"8",1.5:"8.",2:"4",3:"4.",4:"2",6:"2.",8:"1",12:"1."}[tSig[1]] # anacrusis
                 paddingRestList[tSig[0][0]] += a
                 for n,p in enumerate(tSig[0][1:]):
                     if not p is None: partsInProgress[n][p]+=a
             tSig[0]=None
+        # Handle multibar rest from <multiple-rest> element (always on measure close) (contributed by Eagle Wu)
+        if name=="measure" and multiple_rest.count > 0:
+            multiple_rest.count -= 1
+            if multiple_rest.count == 0:
+                partsInProgress[0].append('R*' + str(multiple_rest.total))
+                if multiple_rest.buffer:
+                    partsInProgress[0].append(multiple_rest.buffer.strip())
+                    multiple_rest.buffer = ""
+                multiple_rest.skip = False
+                multiple_rest.count = multiple_rest.total = 0
         elif name=="beat-unit": tempo[0]=typesMM.get(name,"4")
         elif name=="beat-minute" or name=="per-minute": tempo[1]=d0
         elif name=="metronome":
@@ -1197,6 +1212,14 @@ def xml2jianpu(x):
                         p.append("=".join(tempo)) ; break
             tempo[0]=tempo[1]="" # for now we ignore <metronome> elements that don't specify all parameters
         elif name=="step": note[0][0]=d0
+        elif name=="multiple-rest":
+            text = dat[0].strip() if dat[0] else ""
+            if text:
+                try:
+                    multiple_rest.count = multiple_rest.total = int(text)
+                    multiple_rest.skip = True
+                except ValueError:
+                    pass
         elif name=="rest": note[0][0]="r"
         elif name=="octave": note[0][1]=int(d0)
         elif name=="accidental": note[0][2]=d0
@@ -1218,8 +1241,9 @@ def xml2jianpu(x):
         elif name in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open".split(): note[0][5] += " \\"+name # element names that exactly equal their corresponding no-parameter Lilypond commands
         elif name=="words":
             toAdd = r' ^"'+dat[0].strip().replace('"',"'")+'"'
-            if not toAdd in note[0][5]: note[0][5] += toAdd
-        elif name=="note":
+            if multiple_rest.skip: multiple_rest.buffer += toAdd
+            elif not toAdd in note[0][5]: note[0][5] += toAdd
+        elif name=="note" and not multiple_rest.skip:
             # Try to find which voice it goes onto, if we're MuseScore
             # or similar and have parts as voices within a part.
             # TODO: sometimes the XML will give us a voice or staff number; for now we just find the first one to fit
