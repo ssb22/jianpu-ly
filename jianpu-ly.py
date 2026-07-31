@@ -996,7 +996,7 @@ def parseNote(word,origWord,line):
     word = word.replace("8","1'").replace("9","2'")
     if type(u"")==type(""): word = word.replace(u"\u2019","'")
     else: word=word.replace(u"\u2019".encode('utf-8'),"'")
-    if "///" in word: tremolo,word=":32",word.replace("///","",1)
+    if "///" in word: tremolo,word=":32",re.sub(r'///\d*', '', word)
     else: tremolo = ""
     if not re.match(note_regex+"$",word): # unrecognised stuff in it: flag as error, rather than ignoring and possibly getting a puzzling barsync fail
         scoreError("Unrecognised command",origWord,line)
@@ -1239,6 +1239,16 @@ def xml2jianpu(x):
         elif name=="harmonic": note[0][5]+=r" \flageolet"
         elif name=="snap-pizzicato": note[0][5]+=r" \snappizzicato"
         elif name in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open".split(): note[0][5] += " \\"+name # element names that exactly equal their corresponding no-parameter Lilypond commands
+        elif name=="tremolo":
+            # MusicXML <tremolo> inside <ornaments> indicates explicit single-note tremolo
+            # dat[1].get("type") gives "start", "stop", or "single"
+            # dat[0] contains text content: beat value for tremolo strokes
+            #   "2" = eighth-note tremolo strokes (8 per beat)
+            #   "3" = sixteenth-note tremolo strokes (16 per beat)
+            # Mark the current note with ///beatValue for jianpu-ly tremolo marker
+            tremoloBeatValue = d0.strip() if d0.strip() else "2"
+            # Store in note[0][2] (accidental slot) temporarily: we'll append to r later
+            note[0][2] = "_trem_" + tremoloBeatValue
         elif name=="words":
             toAdd = r' ^"'+dat[0].strip().replace('"',"'")+'"'
             if multiple_rest.skip: multiple_rest.buffer += toAdd
@@ -1265,6 +1275,7 @@ def xml2jianpu(x):
             # Now OK to add the note to the part (voice)
             step,octave,acc,nType,dot,extras,tie,tuplet,tState,chord,grace = note[0]
             note[0]=[""]*11
+            _tremoloBeatValue = ""  # will be set below if note has explicit tremolo
             if step=="r": r="0"
             else:
                 dTone=ord(step[0])-ord(note1[0])+7*(octave-4)
@@ -1274,6 +1285,11 @@ def xml2jianpu(x):
                     r+="," ; dTone+=7
                 while dTone>6:
                     r+="'" ; dTone-=7
+                # Extract tremolo beat value before key sig logic overwrites acc
+                _tremoloBeatValue = ""
+                if acc.startswith("_trem_"):
+                    _tremoloBeatValue = acc[6:]
+                    acc = ""
                 acc=barSig[0][dTone%7]={"flat":"b","sharp":"#","natural":""}.get(acc,barSig[0][dTone%7])
                 barSig[1]=(dTone%7) if tie else None
                 if keySig[0][dTone%7]=="#": acc="" if acc=="#" else "b"
@@ -1284,7 +1300,27 @@ def xml2jianpu(x):
                     ourRet[-1]=ourRet[-1][:i]+"&"+r+ourRet[-1][i:]
                 else:
                     rr = prevChord[1][prevChord[0]]
-                    prevChord[1][prevChord[0]] = rr.split()[0]+r+''.join([' '+x for x in rr.split()[1:]])
+                    tokens = rr.split()
+                    first_token = tokens[0]
+
+                    # Extract pitch from first token, preserving duration
+                    # jianpu uses letters for durations: q=eighth, s=16th, d=32nd, h=64th
+                    # Also handles ties (dashes) which come after the base figure
+                    m = re.match('([0-7][\'.]*)(.*)', first_token)
+                    if m:
+                        pitch = m.group(1)  # e.g., "7'"
+                        duration = m.group(2)  # everything after pitch (duration + dashes)
+                    else:
+                        pitch = first_token
+                        duration = ""
+
+                    # Strip tremolo marker (chord tremolos not yet supported)
+                    duration = re.sub(r'///[0-9]', '', duration)
+
+                    # Merge chord notes without tremolo
+                    # Format: [pitch1][pitch2..][duration]
+                    merged = pitch + r + duration
+                    prevChord[1][prevChord[0]] = merged + ''.join([' '+x for x in tokens[1:]])
                 return
             if tState=="start":
                 ourRet.append(tuplet+"[")
@@ -1314,11 +1350,34 @@ def xml2jianpu(x):
                 if dot: tSig[1] += quavers[nType]/2.0
             if dot: d=typesDot
             else: d = types
-            r += acc+d[nType]+' ' # typesDot or types, may add " -"s
-            if ourI==0: paddingRestList.append("0"+d[nType]) # we hope the subsequent voices are not cross-rhythm with the first voice, at least not at points where <backup> and <forward> occur
+
+            # Strip _trem suffix from nType for duration lookup
+            nTypeClean = nType.replace("_trem", "")
+
+            # Get type string and split into base figure + ties
+            typeStr = d.get(nTypeClean, "")
+            if typeStr and ' ' in typeStr:
+                baseFig, ties = typeStr.split(' ', 1)
+            else:
+                baseFig, ties = typeStr, ""
+
+            r += acc + baseFig
+
+            # Attach tremolo marker to base figure (before ties)
+            if _tremoloBeatValue:
+                r += "///" + _tremoloBeatValue
+
+            # Add ties after tremolo marker
+            if ties:
+                r += ' ' + ties
+
+            if ourI==0: paddingRestList.append("0"+d.get(nTypeClean, "")) # we hope the subsequent voices are not cross-rhythm with the first voice, at least not at points where <backup> and <forward> occur
             prevChord[0],prevChord[1]=len(ourRet),ourRet
-            w1,w2 = r.split(' ',1)
-            if grace: w1="g["+w1+"]"
+            if grace: r="g["+r+"]"
+
+            # Place extras (annotations) after base figure but before ties so they appear on the correct beat
+            # Do NOT simplify this to w1,w2 = r.split(' ',1) — it breaks tremolo placement
+            w1,w2 = r.split(' ',1) if ' ' in r else (r,'')
             ourRet.append(w1+extras+' '+w2+' '+tie)
             if tState=="stop":
                 ourRet.append("]")
