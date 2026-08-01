@@ -1252,6 +1252,14 @@ def xml2jianpu(x):
             toAdd = r' ^"'+state.readData.strip().replace('"',"'")+'"'
             if state.multirestSkip: state.multirestBuffer += toAdd
             elif not toAdd in state.extras: state.extras += toAdd
+        elif name=="rehearsal":
+            if d0:
+                paddingRestList.append("letter" + d0)
+                for k,v in list(paddingRestDict.items()):
+                    if v==len(paddingRestList)-1: paddingRestDict[k] += 1
+                for n,p in enumerate(partsInProgress):
+                    if positionsInProgress[n]==max(positionsInProgress):
+                        p.append("letter" + d0)
         elif name=="note" and not state.multirestSkip:
             # Try to find which voice it goes onto, if we're MuseScore
             # or similar and have parts as voices within a part.
