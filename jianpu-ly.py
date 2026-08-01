@@ -1252,6 +1252,14 @@ def xml2jianpu(x):
             toAdd = r' ^"'+state.readData.strip().replace('"',"'")+'"'
             if state.multirestSkip: state.multirestBuffer += toAdd
             elif not toAdd in state.extras: state.extras += toAdd
+        elif name=="rehearsal":
+            if d0:
+                paddingRestList.append("letter" + d0)
+                for k,v in list(paddingRestDict.items()):
+                    if v==len(paddingRestList)-1: paddingRestDict[k] += 1
+                for n,p in enumerate(partsInProgress):
+                    if positionsInProgress[n]==max(positionsInProgress):
+                        p.append("letter" + d0)
         elif name=="note" and not state.multirestSkip:
             # Try to find which voice it goes onto, if we're MuseScore
             # or similar and have parts as voices within a part.
@@ -1935,10 +1943,7 @@ def getLY(score,headers=None,have_final_barline=True):
          j=i+1
          while j<len(out):
           if out[j].startswith(r'\mark \markup{') and out[j].endswith('}'):
-           nbsp = u'\u00a0'
-           if not type(u"")==type(""): # Python 2
-               nbsp = nbsp.encode('utf-8')
-           out[i]=out[i][:-1]+nbsp+' '+out[j][len(r'\mark \markup{'):]
+           out[i]=out[i][:-1]+' '+out[j][len(r'\mark \markup{'):]
            del out[j]
           elif out[j].startswith(r"\time"): j += 1
           else: break
