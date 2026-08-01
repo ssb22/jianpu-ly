@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.877 (c) 2012-2026 Silas S. Brown
+# v1.878 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -150,8 +150,8 @@ Erhu symbol (applies to previous note): souyin harmonic up down bend tilde
 二胡其它符号（适用于前一个音符）： souyin harmonic up down bend tilde
 Tremolo: 1/// - 1///5 -
 震音： 1/// - 1///5 -
-Rehearsal letters: letterA letterB
-排练记号： letterA letterB
+Rehearsal marks: letterA letterB letter3 letterAA
+排练记号： letterA letterB letter3 letterAA
 Multibar rest: R*8
 多小节休止： R*8
 Dynamics (applies to previous note): \p \mp \f
@@ -1753,8 +1753,8 @@ def getLY(score,headers=None,have_final_barline=True):
                 if notehead_markup.barPos: out.append(r'\cadenzaOn \note-mod ")" r8 \cadenzaOff ')
                 else: out.append(r'\once \omit Score.BarNumber \noBreak \bar "" \cadenzaOn \note-mod ")" r8 \cadenzaOff \bar "|" ') # and if re.search(r"\sNextPart\s"," "+score+" ") then at least some versions of Lilypond may need \cadenzaOn s8 \cadenzaOff at the same place in the other parts (TODO: automate? but check user hasn't already added it in an LP block?)
               out.append("}")
-            elif re.match("letter[A-Z]$",word):
-                out.append(r'\mark \markup{ \box { "%s" } }' % word[-1])
+            elif re.match("letter[A-Z0-9]+$",word):
+                out.append(r'\mark \markup{ \box { "%s" } }' % word[6:])
             elif re.match(r"R\*[1-9][0-9]*$",word):
                 if not western: out.append(r"\set Score.skipBars = ##t \override MultiMeasureRest #'expand-limit = #1 ") # \compressFullBarRests on Lilypond 2.20, \compressEmptyMeasures on 2.22, both map to \set Score.skipBars
                 out.append(r"R"+notehead_markup.wholeBarRestLen()+word[1:])

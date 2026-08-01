@@ -160,7 +160,7 @@ LP: \bar "||"
 
 多小节休止： `R*8`
 
-排练记号： `letterA letterB`
+排练记号： `letterA letter1 letterAA`
 
 打击乐节拍： `x`
 

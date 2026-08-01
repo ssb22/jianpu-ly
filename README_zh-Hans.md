@@ -126,7 +126,7 @@ Lilypond 页头： `title=标题` （单独一行）
 
 震音： `1/// - 1///5 -`
 
-排练记号： `letterA letterB`
+排练记号： `letterA letter1 letterAA`
 
 多小节休止： `R*8`
 
