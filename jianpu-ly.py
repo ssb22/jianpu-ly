@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.877 (c) 2012-2026 Silas S. Brown
+# v1.878 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -150,8 +150,8 @@ Erhu symbol (applies to previous note): souyin harmonic up down bend tilde
 二胡其它符号（适用于前一个音符）： souyin harmonic up down bend tilde
 Tremolo: 1/// - 1///5 -
 震音： 1/// - 1///5 -
-Rehearsal marks: letterA letter1 letterAA
-排练记号： letterA letter1 letterAA
+Rehearsal marks: letterA letterB letter3 letterAA
+排练记号： letterA letterB letter3 letterAA
 Multibar rest: R*8
 多小节休止： R*8
 Dynamics (applies to previous note): \p \mp \f
