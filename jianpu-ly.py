@@ -1943,10 +1943,7 @@ def getLY(score,headers=None,have_final_barline=True):
          j=i+1
          while j<len(out):
           if out[j].startswith(r'\mark \markup{') and out[j].endswith('}'):
-           nbsp = u'\u00a0'
-           if not type(u"")==type(""): # Python 2
-               nbsp = nbsp.encode('utf-8')
-           out[i]=out[i][:-1]+nbsp+' '+out[j][len(r'\mark \markup{'):]
+           out[i]=out[i][:-1]+' '+out[j][len(r'\mark \markup{'):]
            del out[j]
           elif out[j].startswith(r"\time"): j += 1
           else: break
