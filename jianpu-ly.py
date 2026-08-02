@@ -70,8 +70,8 @@ Semibreve (whole note): 1 - - -
 全音符： 1 - - -
 Time signature: 4/4
 拍号： 4/4
-Time signature with quaver anacrusis (8th-note pickup): 4/4,8
-以八分音符的时值弱起的拍号： 4/4,8
+Time signature with anacrusis (pickup): 4/4,8 or 6/8,4 (number after comma is pickup's value)
+带弱起的拍号： 4/4,8 或 6/8,4 （逗号后的数字表示弱起音符的时值分母）
 Key signature (major): 1=Bb
 调号（大调）： 1=Bb
 Key signature (minor): 6=F#
@@ -86,8 +86,12 @@ Lyrics (verse 2): L: 2. Here is verse two
 歌词（第二节）： L: 2. Here is verse two
 Hanzi lyrics (auto space): H: hanzi (with or without spaces)
 汉字歌词： H: 汉字 （有无空格都可）
-Lilypond headers: title=the title (on a line of its own)
-Lilypond 页头： title=标题 （单独一行）
+Hanzi lyrics (verse 1): H: 1. 这是第一节
+汉字歌词（第1节）： H: 1. 这是第一节
+Lilypond title: title=the title (on a line of its own)
+Lilypond 标题： title=标题 （单独一行）
+Other Lilypond headers: subtitle= composer= poet= arranger= copyright= opus= etc.
+其它Lilypond页头： subtitle= composer= poet= arranger= copyright= opus= 等
 Guitar chords: chords=c2. g:7 c (on own line, or newline after the = and double newline to end)
 吉他和弦符号： chords=c2. g:7 c （单独一行，或在=之后换行输入，并以2个空行结束）
 Fret diagrams: frets=guitar (on own line)
@@ -166,6 +170,8 @@ Instrumental breaks in vocal music: 1 [( 2 3 )] 4
 诗歌的器乐部分： 1 [( 2 3 )] 4
 Repeat same-bar accidentals in awkward passages: RepeatAccidentals #5 #2 #4 #5 NormalAccidentals
 复杂乐句中重复同小节变音记号: RepeatAccidentals #5 #2 #4 #5 NormalAccidentals
+Barlines: \bar "||" or \bar "|." etc (no LP: needed)
+小节线： \bar "||" 或 \bar "|." 等（无需 LP:）
 Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its line)
 其它 Lilypond 代码： LP: (代码块) :LP （每个分隔符必须位于各行行首）
 Lilypond header additions: LPH: (definitions) :LPH (each at start of line)
@@ -1252,14 +1258,13 @@ def xml2jianpu(x):
             toAdd = r' ^"'+state.readData.strip().replace('"',"'")+'"'
             if state.multirestSkip: state.multirestBuffer += toAdd
             elif not toAdd in state.extras: state.extras += toAdd
-        elif name=="rehearsal":
-            if d0:
-                paddingRestList.append("letter" + d0)
-                for k,v in list(paddingRestDict.items()):
-                    if v==len(paddingRestList)-1: paddingRestDict[k] += 1
-                for n,p in enumerate(partsInProgress):
-                    if positionsInProgress[n]==max(positionsInProgress):
-                        p.append("letter" + d0)
+        elif name=="rehearsal" and d0:
+            paddingRestList.append("letter" + d0)
+            for k,v in list(paddingRestDict.items()):
+                if v==len(paddingRestList)-1: paddingRestDict[k] += 1
+            for n,p in enumerate(partsInProgress):
+                if positionsInProgress[n]==max(positionsInProgress):
+                    p.append("letter" + d0)
         elif name=="note" and not state.multirestSkip:
             # Try to find which voice it goes onto, if we're MuseScore
             # or similar and have parts as voices within a part.
@@ -1692,7 +1697,7 @@ def getLY(score,headers=None,have_final_barline=True):
         # replace space with chr(0) inside quoted strings so they
         # end up being one word per item (we'll put it back to space
         # before giving it to Lilypond)
-        line=re.sub('(?<= )[_^]"[^" ]* [^"]*"(?= |$)',lambda m:m.group().replace(' ',chr(0))," "+line)[1:]
+        line=re.sub('(?<= )[_^]?"[^" ]* [^"]*"(?= |$)',lambda m:m.group().replace(' ',chr(0))," "+line)[1:]
         # and YesGH's suggestion: allow slurs and ties to be attached
         # to the right-hand side of the notes to which they apply
         # (i.e. auto insert the space if there's not one already).
@@ -1766,6 +1771,7 @@ def getLY(score,headers=None,have_final_barline=True):
             elif re.match(r"R\*[1-9][0-9]*$",word):
                 if not western: out.append(r"\set Score.skipBars = ##t \override MultiMeasureRest #'expand-limit = #1 ") # \compressFullBarRests on Lilypond 2.20, \compressEmptyMeasures on 2.22, both map to \set Score.skipBars
                 out.append(r"R"+notehead_markup.wholeBarRestLen()+word[1:])
+                notehead_markup.barNo += int(word[2:])
             elif re.match("[1-9][0-9]*/[1-468]+(,[1-9][0-9]*[.]?)?$",word): # time signature
                 if ',' in word: # anacrusis
                     word,anac = word.split(",",1)
@@ -1850,7 +1856,7 @@ def getLY(score,headers=None,have_final_barline=True):
                 notehead_markup.barPos = oldBarPos
                 repeatStack.append((numBraces,oldBarPos,extraRepeats+1,rStartP))
                 out[rStartP] = out[rStartP].replace(('volta %d ' % (extraRepeats+1)),('volta %d ' % (extraRepeats+2))) # ensure there's enough repeats for the alternatives
-            elif word.startswith("\\") or word.startswith('^\\') or word.startswith('_\\') or word in ["(",")","~","->","|"] or word.startswith('^"') or word.startswith('_"'):
+            elif word.startswith("\\") or word.startswith('^\\') or word.startswith('_\\') or word in ["(",")","~","->","|"] or word.startswith('^"') or word.startswith('_"') or word.startswith('"'):
                 # Lilypond command, \p, ^"text", barline check (undocumented, see above), etc
                 if re.match(r"\\[.,'cqsdh\\#b]*[0-9x-][0-9x.,'cqsdh\\#b-]*$",word): sys.stderr.write("Warning: '"+word+"' is being interpreted as a Lilypond command.\nIf you meant it as a note, move the \\ away from the start.\n")
                 if word=="~" and not midi and not western and lastNonDashPtr < lastPtr: # tie from the number, not the last dash

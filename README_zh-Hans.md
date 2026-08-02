@@ -46,7 +46,7 @@ jianpu-ly 是一个 Python 程序（兼容 Python 2 和 Python 3），用于协�
 
 拍号： `4/4`
 
-以八分音符的时值弱起的拍号： `4/4,8`
+带弱起的拍号： `4/4,8 或 6/8,4` （逗号后的数字表示弱起音符的时值分母）
 
 调号（大调）： `1=Bb`
 
@@ -62,7 +62,11 @@ jianpu-ly 是一个 Python 程序（兼容 Python 2 和 Python 3），用于协�
 
 汉字歌词： `H: 汉字` （有无空格都可）
 
-Lilypond 页头： `title=标题` （单独一行）
+汉字歌词（第1节）： `H: 1. 这是第一节`
+
+Lilypond 标题： `title=标题` （单独一行）
+
+其它Lilypond页头： `subtitle= composer= poet= arranger= copyright= opus= 等`
 
 吉他和弦符号： `chords=c2. g:7 c` （单独一行，或在=之后换行输入，并以2个空行结束）
 
@@ -126,7 +130,7 @@ Lilypond 页头： `title=标题` （单独一行）
 
 震音： `1/// - 1///5 -`
 
-排练记号： `letterA letter1 letterAA`
+排练记号： `letterA letterB letter3 letterAA`
 
 多小节休止： `R*8`
 
@@ -141,6 +145,8 @@ Lilypond 页头： `title=标题` （单独一行）
 诗歌的器乐部分： `1 [( 2 3 )] 4`
 
 复杂乐句中重复同小节变音记号: `RepeatAccidentals #5 #2 #4 #5 NormalAccidentals`
+
+小节线： `\bar "||" 或 \bar "|." 等` （无需 LP:）
 
 其它 Lilypond 代码： `LP: (代码块) :LP` （每个分隔符必须位于各行行首）
 

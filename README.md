@@ -48,7 +48,7 @@ Semibreve (whole note): `1 - - -`
 
 Time signature: `4/4`
 
-Time signature with quaver anacrusis (8th-note pickup): `4/4,8`
+Time signature with anacrusis (pickup): `4/4,8 or 6/8,4` (number after comma is pickup's value)
 
 Key signature (major): `1=Bb`
 
@@ -64,7 +64,11 @@ Lyrics (verse 2): `L: 2. Here is verse two`
 
 Hanzi lyrics (auto space): `H: hanzi` (with or without spaces)
 
-Lilypond headers: `title=the title` (on a line of its own)
+Hanzi lyrics (verse 1): `H: 1. 这是第一节`
+
+Lilypond title: `title=the title` (on a line of its own)
+
+Other Lilypond headers: `subtitle= composer= poet= arranger= copyright= opus= etc.`
 
 Guitar chords: `chords=c2. g:7 c` (on own line, or newline after the = and double newline to end)
 
@@ -128,7 +132,7 @@ Erhu symbol (applies to previous note): `souyin harmonic up down bend tilde`
 
 Tremolo: `1/// - 1///5 -`
 
-Rehearsal marks: `letterA letter1 letterAA`
+Rehearsal marks: `letterA letterB letter3 letterAA`
 
 Multibar rest: `R*8`
 
@@ -143,6 +147,8 @@ Harmonic symbols above main notes: `Harm: (music) :Harm` (main music)
 Instrumental breaks in vocal music: `1 [( 2 3 )] 4`
 
 Repeat same-bar accidentals in awkward passages: `RepeatAccidentals #5 #2 #4 #5 NormalAccidentals`
+
+Barlines: `\bar "||" or \bar "|." etc` (no LP: needed)
 
 Other Lilypond code: `LP: (block of code) :LP` (each delimeter at start of its line)
 
