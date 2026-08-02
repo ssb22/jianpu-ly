@@ -1129,6 +1129,11 @@ def xml2jianpu(x):
             self.prevChordOffset, self.prevChordNList = None,None
             self.multirestCount = self.multirestTotal = 0
             self.multirestSkip, self.multirestBuffer = False,""
+            self.activeWedges = {}
+            self.pendingWedgeCmd = ""
+            self.lastOurRet = None
+            self.unrenderedHairpins = []
+            self.barNo = 1
         def getAndResetNote(self,first=False):
             r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tState,self.chord,self.grace,self.tremolo)
             self.step=self.octave=self.accidental=self.nType=self.dot=self.extras=self.tie=self.tuplet=self.tState=self.chord=self.grace=self.tremolo=""
@@ -1244,12 +1249,17 @@ def xml2jianpu(x):
                     state.multirestBuffer = ""
                 state.multirestSkip = False
                 state.multirestCount = state.multirestTotal = 0
-        elif name=="measure" and state.multirestCount == 0:
-            # Check for movement boundary at end of regular measures
-            signal_count = sum(current_signals[0].values())
-            if signal_count >= 2:
-                partsInProgress[0].insert(measure_start_index[0], 'NextScore OctavesAfter')
-            current_signals[0] = {"movement_title": False, "measure_reset": False, "page_break": False, "section_word": False}
+        if name=="measure":
+            if state.pendingWedgeCmd:
+                state.unrenderedHairpins.append(state.barNo)
+                state.pendingWedgeCmd = ""
+            state.barNo += 1
+            if state.multirestCount == 0:
+                # Check for movement boundary at end of regular measures
+                signal_count = sum(current_signals[0].values())
+                if signal_count >= 2:
+                    partsInProgress[0].insert(measure_start_index[0], 'NextScore OctavesAfter')
+                current_signals[0] = {"movement_title": False, "measure_reset": False, "page_break": False, "section_word": False}
         elif name=="beat-unit": tempo[0]=typesMM.get(name,"4")
         elif name=="beat-minute" or name=="per-minute": tempo[1]=d0
         elif name=="metronome":
@@ -1285,10 +1295,40 @@ def xml2jianpu(x):
         elif name=="inverted-mordent": state.extras+=r" \prall"
         elif name=="harmonic": state.extras+=r" \flageolet"
         elif name=="snap-pizzicato": state.extras+=r" \snappizzicato"
-        elif name in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open".split(): state.extras += " \\"+name # element names that exactly equal their corresponding no-parameter Lilypond commands
+        elif name in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open".split():
+            if name in ("ppppp","pppp","ppp","pp","p","mp","mf","f","ff","fff","ffff","fffff","fp","sf","sfz","n","rfz"):
+                if state.activeWedges:
+                    state.pendingWedgeCmd = r"\!" + state.pendingWedgeCmd
+                    state.activeWedges.clear()
+            state.extras += " \\"+name
         elif name=="print":
             if state.readAttrs.get("new-page") == "yes" or state.readAttrs.get("new-system") == "yes":
                 current_signals[0]["page_break"] = True
+        elif name=="wedge":
+            wtype = state.readAttrs.get("type","")
+            wnum = state.readAttrs.get("number","1")
+            if wtype == "crescendo":
+                cmd = r"\<"
+                if state.activeWedges and cmd not in state.activeWedges.values():
+                    state.pendingWedgeCmd = r"\!" + state.pendingWedgeCmd
+                    state.activeWedges.clear()
+                state.activeWedges[wnum] = cmd
+                state.pendingWedgeCmd = cmd
+            elif wtype == "diminuendo":
+                cmd = r"\>"
+                if state.activeWedges and cmd not in state.activeWedges.values():
+                    state.pendingWedgeCmd = r"\!" + state.pendingWedgeCmd
+                    state.activeWedges.clear()
+                state.activeWedges[wnum] = cmd
+                state.pendingWedgeCmd = cmd
+            elif wtype == "stop":
+                if wnum in state.activeWedges:
+                    del state.activeWedges[wnum]
+                if state.lastOurRet is not None:
+                    for i in range(len(state.lastOurRet)-1, -1, -1):
+                        if state.lastOurRet[i] and not state.lastOurRet[i].startswith("0") and not state.lastOurRet[i].startswith("/"):
+                            state.lastOurRet[i] += r" \!"
+                            break
         elif name=="words":
             # Track <words valign="top"> as section/movement marker (MuseScore convention)
             if state.readAttrs.get("valign") == "top":
@@ -1322,6 +1362,7 @@ def xml2jianpu(x):
                 partsInProgress.append(paddingRestList[:paddingRestDict[state.position]]) # TODO: collapse to whole-bar rests when needed (as above)
                 positionsInProgress.append(state.position)
                 ourRet,ourI = partsInProgress[-1],len(partsInProgress)-1
+            state.lastOurRet = ourRet
             # Now OK to add the note to the part (voice)
             step,octave,acc,nType,dot,extras,tie,tuplet,tState,chord,grace,tremolo = state.getAndResetNote()
             if step=="r": r="0"
@@ -1378,6 +1419,9 @@ def xml2jianpu(x):
             state.prevChordOffset,state.prevChordNList=len(ourRet),ourRet
             w1,w2 = r.split(' ',1)
             if grace: w1="g["+w1+"]"
+            if state.pendingWedgeCmd:
+                extras = extras+' '+state.pendingWedgeCmd
+                state.pendingWedgeCmd = ""
             ourRet.append(w1+extras+' '+w2+' '+tie)
             if tState=="stop":
                 ourRet.append("]")
@@ -1391,6 +1435,8 @@ def xml2jianpu(x):
     xmlparser.CharacterDataHandler = c
     xmlparser.EndElementHandler = e
     xmlparser.Parse(x,True)
+    if state.unrenderedHairpins:
+        sys.stderr.write("Warning: Hairpin(s) not rendered on bar(s): %s\n" % ", ".join(str(b) for b in state.unrenderedHairpins))
     ret = '\n'.join(ret)
     if not type("")==type(ret): ret=ret.encode('utf-8') # Python 2
     return ret
