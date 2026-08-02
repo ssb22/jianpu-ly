@@ -158,6 +158,8 @@ Unicode approximation instead of Lilypond: `Unicode`
 
 Split MIDI files per part: `PartMidi`
 
+Export jianpu conversion string from MusicXML to txt file: `--export-txt`
+
 Ignored: `% a comment`
 
 

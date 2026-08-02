@@ -156,6 +156,8 @@ Lilypond头代码： `LPH: (定义) :LPH` （每个分隔符必须位于各行�
 
 按声部导出MIDI文件： `PartMidi`
 
+导出MusicXML转换的简谱字符串到txt文件： `--export-txt`
+
 忽略： `% 注释`
 
 

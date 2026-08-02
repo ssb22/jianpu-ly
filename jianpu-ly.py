@@ -180,6 +180,8 @@ Unicode approximation instead of Lilypond: Unicode
 用 Unicode 近似值代替 Lilypond 代码： Unicode
 Split MIDI files per part: PartMidi
 按声部导出MIDI文件： PartMidi
+Export jianpu conversion string from MusicXML to txt file: --export-txt
+导出MusicXML转换的简谱字符串到txt文件： --export-txt
 Ignored: % a comment
 忽略： % 注释
 """
@@ -1105,7 +1107,7 @@ def get_input():
     if inDat[i].startswith(r'\version'): errExit("jianpu-ly does not READ Lilypond code.\nPlease see the instructions.")
     elif inDat[i].startswith("<?xml"):
         inDat[i] = xml2jianpu(inDat[i])
-  return " NextScore ".join(inDat)
+  return " NextScore ".join(inDat), inDat[0] if len(inDat)==1 else None
 
 def xml2jianpu(x):
     from xml.parsers.expat import ParserCreate
@@ -1250,6 +1252,8 @@ def xml2jianpu(x):
             if signal_count >= 2:
                 partsInProgress[0].insert(measure_start_index[0], 'NextScore OctavesAfter')
             current_signals[0] = {"movement_title": False, "measure_reset": False, "page_break": False, "section_word": False}
+            # Insert bar separator for txt export readability
+            partsInProgress[0].append("\n")
         elif name=="beat-unit": tempo[0]=typesMM.get(name,"4")
         elif name=="beat-minute" or name=="per-minute": tempo[1]=d0
         elif name=="metronome":
@@ -2149,7 +2153,24 @@ def main():
         return write_docs()
     if '--help' in sys.argv or '-h' in sys.argv or '/?' in sys.argv: return write_help()
     if '--version' in sys.argv or '-v' in sys.argv or '/v' in sys.argv: return write_version()
-    inDat = get_input()
+    export_txt = '--export-txt' in sys.argv
+    if export_txt: sys.argv.remove('--export-txt')
+    inDat, single_input = get_input()
+    if export_txt and single_input:
+        if sys.stdout.isatty():
+            # Match lilypond's default temp directory behavior
+            if len(sys.argv)>1: fn=os.path.split(sys.argv[1])[1]
+            else: fn = 'jianpu'
+            if os.extsep in fn: fn=fn[:fn.rindex(os.extsep)]
+            import tempfile
+            txt_dir = tempfile.gettempdir()
+        else:
+            txt_dir = ''  # current working directory
+        txt_file = os.path.join(txt_dir, fn) + '.txt'
+        if type(u"")==type(""):  # Python 3
+            f = open(txt_file,'w',encoding='utf-8'); f.write(single_input); f.close()
+        else:  # Python 2
+            f = open(txt_file,'w'); f.write(single_input); f.close()
     out = process_input(inDat) # <-- you can also call this if importing as a module
     write_output(out)
 
