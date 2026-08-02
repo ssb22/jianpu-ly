@@ -736,7 +736,8 @@ class NoteheadMarkup:
   def initOneScore(self):
       self.barLength = 64 ; self.beatLength = 16 # in 64th notes
       self.barPos = self.startBarPos = F(0)
-      self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.chordsRoman = self.noIndent = self.raggedLast = self.withStaff = 0
+      self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.chordsRoman = self.noIndent = self.raggedLast = 0
+      self.withStaff = force_staff
       self.keepLength = self.repeatAccidentals = self.pendingSlide = 0
       self.octavesPosition = None # or "before" (only setting in v1.847 and below) or "after", affects chords and grace notes when an octave mark is between two figures: is it before or after the note it affects.  Starting at None = no default, must specify if anything's ambiguous
       self.last_octave = self.base_octave = ""
@@ -1162,7 +1163,7 @@ def xml2jianpu(x):
                 if positionsInProgress[n] < max(positionsInProgress) and positionsInProgress[n] in paddingRestDict: p.append(' '.join(paddingRestList[paddingRestDict[positionsInProgress[n]]:]))
                 else: os.environ["j2ly_sloppy_bars"] = "1"
                 ret.append(" ".join(p)) # don't use \n here because grace-note merging must be within same line post v1.83
-                ret.append(("WithStaff " if force_staff != False else "") + "NextPart")
+                ret.append(("WithStaff NextPart")
             del partsInProgress[:] ; del positionsInProgress[:]
             positionsInProgress.append(0);partsInProgress.append([])
             state.position=state.lastDuration=0 ; del paddingRestList[:]
@@ -1829,9 +1830,9 @@ def getLY(score,headers=None,have_final_barline=True):
                 global not_angka
                 if not_angka: sys.stderr.write("WARNING: Duplicate angka, did you miss out a NextScore?\n")
                 not_angka = True
-            elif word=="WithStaff" and force_staff != False:
-                if notehead_markup.withStaff or force_staff: sys.stderr.write("WARNING: Duplicate WithStaff, did you miss out a NextScore?\n")
-                notehead_markup.withStaff=1
+            elif word=="WithStaff":
+                if notehead_markup.withStaff: sys.stderr.write("WARNING: Duplicate WithStaff, did you miss out a NextScore?\n")
+                notehead_markup.withStaff=not force_staff==False
             elif word=="PartMidi": pass # handled in process_input
             elif word=="R{":
                 repeatStack.append((1,notehead_markup.barPos,0,len(out)))
@@ -2035,7 +2036,7 @@ def process_input(inDat):
      else:
        staffStart,voiceName = jianpu_staff_start(inst)
        ret.append(staffStart+" "+out+" "+jianpu_staff_end())
-       if notehead_markup.withStaff or force_staff:
+       if notehead_markup.withStaff:
            western=True
            staffStart,voiceName = western_staff_start(inst)
            average_octave = sum(notehead_markup.octavesSeen)*1.0/len(notehead_markup.octavesSeen)
