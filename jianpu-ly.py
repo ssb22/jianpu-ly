@@ -1114,6 +1114,10 @@ def xml2jianpu(x):
     paddingRestList, paddingRestDict = [], {0:0}
     ret = ["OctavesAfter"]
     partList=[""];time=["4","4"];tempo=["",""]
+    last_measure_number = [None]
+    current_signals = [{"movement_title": False, "measure_reset": False, "page_break": False, "section_word": False}]
+    measure_start_index = [0]
+    signal_locked_index = [None]
     class State:
         def __init__(self):
             self.getAndResetNote(first=True)
@@ -1137,13 +1141,24 @@ def xml2jianpu(x):
     def s(name,attrs):
         state.readData,state.readAttrs="",attrs
         if name=="measure":
+            measure_start_index[0] = len(partsInProgress[0])
             oldBarsig = state.barSig
             state.barSig = state.keySig[:]
             if state.barTied is not None: state.barSig[state.barTied]=oldBarsig[state.barTied] # for tie
+            # Track measure numbers for movement detection
+            if attrs.get("number"):
+                try:
+                    current_measure_num = int(attrs["number"])
+                    if last_measure_number[0] is not None and current_measure_num < last_measure_number[0]:
+                        current_signals[0]["measure_reset"] = True
+                    last_measure_number[0] = current_measure_num
+                except ValueError: pass
     def c(data): state.readData += data
     def e(name):
         d0 = state.readData.strip()
         if name in ['work-title','movement-title'] or name=='credit-words' and state.readAttrs.get("justify","")=="center":
+            if name == 'movement-title':
+                current_signals[0]["movement_title"] = True
             if not(any(r.startswith("title=") for r in ret)):
                 ret.append('title='+d0.replace("\n"," "))
         elif name=='creator' and state.readAttrs.get("type","")=="composer" or name=='credit-words' and state.readAttrs.get("justify","")=="right":
@@ -1211,13 +1226,30 @@ def xml2jianpu(x):
         # Handle multibar rest from <multiple-rest> element (always on measure close) (contributed by Eagle Wu)
         if name=="measure" and state.multirestCount > 0:
             state.multirestCount -= 1
+            # If signals are active during multirest, lock the insertion point to first measure
+            signal_count = sum(current_signals[0].values())
+            if signal_count >= 2 and signal_locked_index[0] is None:
+                signal_locked_index[0] = measure_start_index[0]
             if state.multirestCount == 0:
+                # Check for movement boundary before outputting multirest
+                if signal_count >= 2:
+                    insert_idx = signal_locked_index[0] if signal_locked_index[0] is not None else measure_start_index[0]
+                    partsInProgress[0].insert(insert_idx, 'NextScore OctavesAfter')
+                    current_signals[0] = {"movement_title": False, "measure_reset": False, "page_break": False, "section_word": False}
+                    signal_locked_index[0] = None
+                
                 partsInProgress[0].append('R*' + str(state.multirestTotal))
                 if state.multirestBuffer:
                     partsInProgress[0].append(state.multirestBuffer.strip())
                     state.multirestBuffer = ""
                 state.multirestSkip = False
                 state.multirestCount = state.multirestTotal = 0
+        elif name=="measure" and state.multirestCount == 0:
+            # Check for movement boundary at end of regular measures
+            signal_count = sum(current_signals[0].values())
+            if signal_count >= 2:
+                partsInProgress[0].insert(measure_start_index[0], 'NextScore OctavesAfter')
+            current_signals[0] = {"movement_title": False, "measure_reset": False, "page_break": False, "section_word": False}
         elif name=="beat-unit": tempo[0]=typesMM.get(name,"4")
         elif name=="beat-minute" or name=="per-minute": tempo[1]=d0
         elif name=="metronome":
@@ -1254,7 +1286,13 @@ def xml2jianpu(x):
         elif name=="harmonic": state.extras+=r" \flageolet"
         elif name=="snap-pizzicato": state.extras+=r" \snappizzicato"
         elif name in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open".split(): state.extras += " \\"+name # element names that exactly equal their corresponding no-parameter Lilypond commands
+        elif name=="print":
+            if state.readAttrs.get("new-page") == "yes" or state.readAttrs.get("new-system") == "yes":
+                current_signals[0]["page_break"] = True
         elif name=="words":
+            # Track <words valign="top"> as section/movement marker (MuseScore convention)
+            if state.readAttrs.get("valign") == "top":
+                current_signals[0]["section_word"] = True
             toAdd = r' ^"'+state.readData.strip().replace('"',"'")+'"'
             if state.multirestSkip: state.multirestBuffer += toAdd
             elif not toAdd in state.extras: state.extras += toAdd
