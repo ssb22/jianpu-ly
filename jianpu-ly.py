@@ -671,11 +671,14 @@ inner_beams_below = True # Use stencil reflection to invert Lilypond's normal be
 dashes_as_ties = True # Implement dash (-) continuations as invisible ties rather than rests; sometimes works better in awkward beaming situations
 use_rest_hack = True # Implement some short rests as notes (and if there are lyrics, creates temporary voices so the lyrics miss them); sometimes works better for beaming (at least in 2.15 through 2.24)
 sort_chords = True # Normally should be left as True.  See comment on --nosort below
+musicxml_with_staff = True # When importing MusicXML, include 5-line Western staff alongside jianpu; use --noMusicXMLStaff to disable
 if __name__=="__main__":
   if '--noRestHack' in sys.argv: # TODO: document (this is a debug option you might want to try if things are going wrong, but unlikely to still be needed)
     use_rest_hack=False ; sys.argv.remove('--noRestHack')
   if '--nosort' in sys.argv: # TODO: document (this is a hack for if someone's incorrectly coded 2-voice music as chords and they want to cross the parts)
     sort_chords=False ; sys.argv.remove('--nosort')
+  if '--noMusicXMLStaff' in sys.argv:
+    musicxml_with_staff=False ; sys.argv.remove('--noMusicXMLStaff')
 assert not (use_rest_hack and not dashes_as_ties), "This combination has not been tested"
 
 def errExit(msg):
@@ -1157,7 +1160,7 @@ def xml2jianpu(x):
                 if positionsInProgress[n] < max(positionsInProgress) and positionsInProgress[n] in paddingRestDict: p.append(' '.join(paddingRestList[paddingRestDict[positionsInProgress[n]]:]))
                 else: os.environ["j2ly_sloppy_bars"] = "1"
                 ret.append(" ".join(p)) # don't use \n here because grace-note merging must be within same line post v1.83
-                ret.append("WithStaff NextPart")
+                ret.append(("WithStaff " if musicxml_with_staff else "") + "NextPart")
             del partsInProgress[:] ; del positionsInProgress[:]
             positionsInProgress.append(0);partsInProgress.append([])
             state.position=state.lastDuration=0 ; del paddingRestList[:]
