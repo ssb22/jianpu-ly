@@ -671,14 +671,16 @@ inner_beams_below = True # Use stencil reflection to invert Lilypond's normal be
 dashes_as_ties = True # Implement dash (-) continuations as invisible ties rather than rests; sometimes works better in awkward beaming situations
 use_rest_hack = True # Implement some short rests as notes (and if there are lyrics, creates temporary voices so the lyrics miss them); sometimes works better for beaming (at least in 2.15 through 2.24)
 sort_chords = True # Normally should be left as True.  See comment on --nosort below
-musicxml_with_staff = True # When importing MusicXML, include 5-line Western staff alongside jianpu; use --noMusicXMLStaff to disable
+force_staff = None # None=default (respect input), True=--withStaff forces 5-line staff, False=--noStaff disables it
 if __name__=="__main__":
   if '--noRestHack' in sys.argv: # TODO: document (this is a debug option you might want to try if things are going wrong, but unlikely to still be needed)
     use_rest_hack=False ; sys.argv.remove('--noRestHack')
   if '--nosort' in sys.argv: # TODO: document (this is a hack for if someone's incorrectly coded 2-voice music as chords and they want to cross the parts)
     sort_chords=False ; sys.argv.remove('--nosort')
-  if '--noMusicXMLStaff' in sys.argv:
-    musicxml_with_staff=False ; sys.argv.remove('--noMusicXMLStaff')
+  if '--withStaff' in sys.argv:
+    force_staff=True ; sys.argv.remove('--withStaff')
+  if '--noStaff' in sys.argv:
+    force_staff=False ; sys.argv.remove('--noStaff')
 assert not (use_rest_hack and not dashes_as_ties), "This combination has not been tested"
 
 def errExit(msg):
@@ -1160,7 +1162,7 @@ def xml2jianpu(x):
                 if positionsInProgress[n] < max(positionsInProgress) and positionsInProgress[n] in paddingRestDict: p.append(' '.join(paddingRestList[paddingRestDict[positionsInProgress[n]]:]))
                 else: os.environ["j2ly_sloppy_bars"] = "1"
                 ret.append(" ".join(p)) # don't use \n here because grace-note merging must be within same line post v1.83
-                ret.append(("WithStaff " if musicxml_with_staff else "") + "NextPart")
+                ret.append(("WithStaff " if force_staff != False else "") + "NextPart")
             del partsInProgress[:] ; del positionsInProgress[:]
             positionsInProgress.append(0);partsInProgress.append([])
             state.position=state.lastDuration=0 ; del paddingRestList[:]
@@ -1827,8 +1829,8 @@ def getLY(score,headers=None,have_final_barline=True):
                 global not_angka
                 if not_angka: sys.stderr.write("WARNING: Duplicate angka, did you miss out a NextScore?\n")
                 not_angka = True
-            elif word=="WithStaff":
-                if notehead_markup.withStaff: sys.stderr.write("WARNING: Duplicate WithStaff, did you miss out a NextScore?\n")
+            elif word=="WithStaff" and force_staff != False:
+                if notehead_markup.withStaff or force_staff: sys.stderr.write("WARNING: Duplicate WithStaff, did you miss out a NextScore?\n")
                 notehead_markup.withStaff=1
             elif word=="PartMidi": pass # handled in process_input
             elif word=="R{":
@@ -2033,7 +2035,7 @@ def process_input(inDat):
      else:
        staffStart,voiceName = jianpu_staff_start(inst)
        ret.append(staffStart+" "+out+" "+jianpu_staff_end())
-       if notehead_markup.withStaff:
+       if notehead_markup.withStaff or force_staff:
            western=True
            staffStart,voiceName = western_staff_start(inst)
            average_octave = sum(notehead_markup.octavesSeen)*1.0/len(notehead_markup.octavesSeen)
