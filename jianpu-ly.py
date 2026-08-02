@@ -1163,7 +1163,7 @@ def xml2jianpu(x):
                 if positionsInProgress[n] < max(positionsInProgress) and positionsInProgress[n] in paddingRestDict: p.append(' '.join(paddingRestList[paddingRestDict[positionsInProgress[n]]:]))
                 else: os.environ["j2ly_sloppy_bars"] = "1"
                 ret.append(" ".join(p)) # don't use \n here because grace-note merging must be within same line post v1.83
-                ret.append(("WithStaff NextPart")
+                ret.append("WithStaff NextPart")
             del partsInProgress[:] ; del positionsInProgress[:]
             positionsInProgress.append(0);partsInProgress.append([])
             state.position=state.lastDuration=0 ; del paddingRestList[:]
