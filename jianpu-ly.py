@@ -1250,6 +1250,8 @@ def xml2jianpu(x):
             if signal_count >= 2:
                 partsInProgress[0].insert(measure_start_index[0], 'NextScore OctavesAfter')
             current_signals[0] = {"movement_title": False, "measure_reset": False, "page_break": False, "section_word": False}
+            # Insert bar separator for txt export readability
+            partsInProgress[0].append("\n")
         elif name=="beat-unit": tempo[0]=typesMM.get(name,"4")
         elif name=="beat-minute" or name=="per-minute": tempo[1]=d0
         elif name=="metronome":
@@ -2149,7 +2151,23 @@ def main():
         return write_docs()
     if '--help' in sys.argv or '-h' in sys.argv or '/?' in sys.argv: return write_help()
     if '--version' in sys.argv or '-v' in sys.argv or '/v' in sys.argv: return write_version()
+    export_txt = '--export-txt' in sys.argv
+    if export_txt: sys.argv.remove('--export-txt')
     inDat = get_input()
+    if export_txt:
+        if not sys.stdout.isatty():
+            # Write exported content to stdout instead of Lilypond code
+            fix_utf8(sys.stdout,'w').write(inDat)
+            return
+        # Interactive: create file in current directory
+        if len(sys.argv)>1: fn=os.path.split(sys.argv[1])[1]
+        else: fn = 'jianpu'
+        if os.extsep in fn: fn=fn[:fn.rindex(os.extsep)]
+        txt_file = fn + '.txt'
+        if type(u"")==type(""):  # Python 3
+            f = open(txt_file,'w',encoding='utf-8'); f.write(inDat); f.close()
+        else:  # Python 2
+            f = open(txt_file,'w'); f.write(inDat); f.close()
     out = process_input(inDat) # <-- you can also call this if importing as a module
     write_output(out)
 
