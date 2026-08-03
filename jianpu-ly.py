@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.878 (c) 2012-2026 Silas S. Brown
+# v1.879 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -187,14 +187,16 @@ Ignored: % a comment
 import sys,os,re,shutil
 from fractions import Fraction as F # requires Python 2.6+
 if type(u"")==type(""): # Python 3
-    unichr,xrange = chr,range
+    unichr = chr
     from string import ascii_letters as letters
-else: from string import letters # Python 2
+    from subprocess import getoutput
+else: # Python 2 in case anyone has to run on an old machine
+    range = xrange
+    from string import letters
+    from commands import getoutput
 def asUnicode(l):
     if type(l)==type(u""): return l
     return l.decode('utf-8')
-try: from commands import getoutput
-except: from subprocess import getoutput
 
 def lilypond_minor_version():
     global _lilypond_minor_version
@@ -940,21 +942,12 @@ class NoteheadMarkup:
                    ",,,":r"-\tweak #'Y-offset #%.1f " % (grace_height-2-nBeams*0.3),
                 }
           ret += oDict.get(octave,"")
-      # Ugly fix for grace dot positions
-      x_offset=0.6
-      if self.graceType: x_offset=0.4
-      oDict = {"":"",
-            "'":"^.",
-            "''":r"-\tweak #'X-offset #%.1f ^\two-dots " % x_offset,
-            "'''":r"-\tweak #'X-offset #%.1f ^\three-dots " % x_offset,
-            ",":r"-\tweak #'X-offset #%.1f _. " % x_offset,
-            ",,":r"-\tweak #'X-offset #%.1f _\two-dots " % x_offset,
-            ",,,":r"-\tweak #'X-offset #%.1f _\three-dots " % x_offset}
+      oDict = dotsDictWithXTweaks(self.graceType)
       if not_angka: oDict.update({
               "'":r"-\tweak #'extra-offset #'(0.4 . 2.7) -\markup{\bold .}",
               "''":r"-\tweak #'extra-offset #'(0.4 . 3.5) -\markup{\bold :}",
               "'''":r"-\tweak #'extra-offset #'(0.4 . 4.3) -\markup{\bold "+three_dots+"}",
-              })
+      }) # TODO: do we need this in the chords version also
       ret += oDict[octave]
     if nBeams and (not self.inBeamGroup or (self.inBeamGroup=="restHack" and not replaceLast) or inRestHack) and not midi and not western:
         # We need the above stemLeftBeamCount, stemRightBeamCount override logic to work even if we're an isolated quaver, so do this:
@@ -1066,6 +1059,16 @@ def write_docs():
             print (htmlify(line))
     if inTable and "--html" in sys.argv: print ("</table>")
 
+def dotsDictWithXTweaks(graceType):
+    x_offset=0.4 if graceType else 0.6
+    return {"":"",
+            "'":"^.",
+            "''":r"-\tweak #'X-offset #%.1f ^\two-dots " % x_offset,
+            "'''":r"-\tweak #'X-offset #%.1f ^\three-dots " % x_offset,
+            ",":r"-\tweak #'X-offset #%.1f _. " % x_offset,
+            ",,":r"-\tweak #'X-offset #%.1f _\two-dots " % x_offset,
+            ",,,":r"-\tweak #'X-offset #%.1f -\tweak #'extra-offset #'(0 . 0.3) _\three-dots " % x_offset}
+
 def getInput0():
   inDat = []
   for f in sys.argv[1:]:
@@ -1105,7 +1108,7 @@ def write_version():
 
 def get_input():
   inDat = getInput0()
-  for i in xrange(len(inDat)):
+  for i in range(len(inDat)):
     if inDat[i].startswith('\xef\xbb\xbf'):
       inDat[i] = inDat[i][3:]
     if inDat[i].startswith(r'\version'): errExit("jianpu-ly does not READ Lilypond code.\nPlease see the instructions.")
@@ -1120,11 +1123,7 @@ def xml2jianpu(x):
     paddingRestList, paddingRestDict = [], {0:0}
     ret = ["OctavesAfter"]
     partList=[""];time=["4","4"];tempo=["",""]
-    last_measure_number = [None]
-    current_signals = [{"movement_title": False, "measure_reset": False, "page_break": False, "section_word": False}]
-    measure_start_index = [0]
-    signal_locked_index = [None]
-    class State:
+    class State: # We are moving toward putting state into here.  Some things haven't been moved yet, but please try to put all new items into State instead of adding more mutable lists above, thanks :)
         def __init__(self):
             self.getAndResetNote(first=True)
             self.readData,self.readAttrs = "",{}
@@ -1135,6 +1134,8 @@ def xml2jianpu(x):
             self.prevChordOffset, self.prevChordNList = None,None
             self.multirestCount = self.multirestTotal = 0
             self.multirestSkip, self.multirestBuffer = False,""
+            self.mvtLastBarNo, self.mvtStartBarIndex, self.mvtBarLockedIndex, self.mvtBreakIndicators = None,0,None,set()
+        def looksLikeNewMovement(self): return len(self.mvtBreakIndicators) >= 2 # MusicXML standard = only 1 movement per file, but some programs like MuseScore include multiple movements.  To prevent false positives on this, we watch for at least 2 indicators that a new movement has begun before acting on it.
         def getAndResetNote(self,first=False):
             r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tState,self.chord,self.grace,self.tremolo)
             self.step=self.octave=self.accidental=self.nType=self.dot=self.extras=self.tie=self.tuplet=self.tState=self.chord=self.grace=self.tremolo=""
@@ -1147,24 +1148,24 @@ def xml2jianpu(x):
     def s(name,attrs):
         state.readData,state.readAttrs="",attrs
         if name=="measure":
-            measure_start_index[0] = len(partsInProgress[0])
+            state.mvtStartBarIndex = len(partsInProgress[0])
             oldBarsig = state.barSig
             state.barSig = state.keySig[:]
             if state.barTied is not None: state.barSig[state.barTied]=oldBarsig[state.barTied] # for tie
             # Track measure numbers for movement detection
             if attrs.get("number"):
                 try:
-                    current_measure_num = int(attrs["number"])
-                    if last_measure_number[0] is not None and current_measure_num < last_measure_number[0]:
-                        current_signals[0]["measure_reset"] = True
-                    last_measure_number[0] = current_measure_num
+                    thisBarNo = int(attrs["number"])
+                    if state.mvtLastBarNo is not None and thisBarNo < state.mvtLastBarNo:
+                        state.mvtBreakIndicators.add("measure reset")
+                    state.mvtLastBarNo = thisBarNo
                 except ValueError: pass
     def c(data): state.readData += data
     def e(name):
         d0 = state.readData.strip()
         if name in ['work-title','movement-title'] or name=='credit-words' and state.readAttrs.get("justify","")=="center":
             if name == 'movement-title':
-                current_signals[0]["movement_title"] = True
+                state.mvtBreakIndicators.add("movement title")
             if not(any(r.startswith("title=") for r in ret)):
                 ret.append('title='+d0.replace("\n"," "))
         elif name=='creator' and state.readAttrs.get("type","")=="composer" or name=='credit-words' and state.readAttrs.get("justify","")=="right":
@@ -1233,16 +1234,15 @@ def xml2jianpu(x):
         if name=="measure" and state.multirestCount > 0:
             state.multirestCount -= 1
             # If signals are active during multirest, lock the insertion point to first measure
-            signal_count = sum(current_signals[0].values())
-            if signal_count >= 2 and signal_locked_index[0] is None:
-                signal_locked_index[0] = measure_start_index[0]
+            if state.looksLikeNewMovement() and state.mvtBarLockedIndex is None:
+                state.mvtBarLockedIndex = state.mvtStartBarIndex
             if state.multirestCount == 0:
                 # Check for movement boundary before outputting multirest
-                if signal_count >= 2:
-                    insert_idx = signal_locked_index[0] if signal_locked_index[0] is not None else measure_start_index[0]
+                if state.looksLikeNewMovement():
+                    insert_idx = state.mvtBarLockedIndex if state.mvtBarLockedIndex is not None else state.mvtStartBarIndex
                     partsInProgress[0].insert(insert_idx, 'NextScore OctavesAfter')
-                    current_signals[0] = {"movement_title": False, "measure_reset": False, "page_break": False, "section_word": False}
-                    signal_locked_index[0] = None
+                    state.mvtBreakIndicators = set()
+                    state.mvtBarLockedIndex = None
                 
                 partsInProgress[0].append('R*' + str(state.multirestTotal))
                 if state.multirestBuffer:
@@ -1252,10 +1252,9 @@ def xml2jianpu(x):
                 state.multirestCount = state.multirestTotal = 0
         elif name=="measure" and state.multirestCount == 0:
             # Check for movement boundary at end of regular measures
-            signal_count = sum(current_signals[0].values())
-            if signal_count >= 2:
-                partsInProgress[0].insert(measure_start_index[0], 'NextScore OctavesAfter')
-            current_signals[0] = {"movement_title": False, "measure_reset": False, "page_break": False, "section_word": False}
+            if len(state.mvtBreakIndicators) >= 2:
+                partsInProgress[0].insert(state.mvtStartBarIndex, 'NextScore OctavesAfter')
+            state.mvtBreakIndicators = set()
         elif name=="beat-unit": tempo[0]=typesMM.get(name,"4")
         elif name=="beat-minute" or name=="per-minute": tempo[1]=d0
         elif name=="metronome":
@@ -1294,11 +1293,10 @@ def xml2jianpu(x):
         elif name in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open".split(): state.extras += " \\"+name # element names that exactly equal their corresponding no-parameter Lilypond commands
         elif name=="print":
             if state.readAttrs.get("new-page") == "yes" or state.readAttrs.get("new-system") == "yes":
-                current_signals[0]["page_break"] = True
+                state.mvtBreakIndicators.add("page break")
         elif name=="words":
-            # Track <words valign="top"> as section/movement marker (MuseScore convention)
             if state.readAttrs.get("valign") == "top":
-                current_signals[0]["section_word"] = True
+                state.mvtBreakIndicators.add("valign-top words")
             toAdd = r' ^"'+state.readData.strip().replace('"',"'")+'"'
             if state.multirestSkip: state.multirestBuffer += toAdd
             elif not toAdd in state.extras: state.extras += toAdd
@@ -1441,11 +1439,10 @@ def graceNotes_markup(notes,word,line,isAfter,harmonic=False):
         elif n=='&': ignoreNext = True
     notemark.beatLength = notemark.barLength
     accidental = ""
-    beams = 2 # default semiquaver
+    beams = maxBeams = 2 # default semiquaver
     figure = ""
     octave = ""
     mr = [] ; i = 0
-    if '&' in notes: mr.append(r"\once \override Beam.positions = #'(-1.5 . -1.5) \once \override Beam.length-fraction = #0.3 ")
     if isAfter: mr.append(r"\once \override Score.JianpuGraceCurve.direction = #LEFT ")
     mr.append(r"\jianpuGraceCurveStart ")
     while i < len(notes):
@@ -1454,6 +1451,7 @@ def graceNotes_markup(notes,word,line,isAfter,harmonic=False):
             chord=chord.group(0) ; i+=len(chord)
             for n in chord:
                 if n in 'qsdh': beams='*qsdh'.index(n)
+            maxBeams=max(maxBeams,beams)
             mr.append(notemark("11",beams,"","","","",chord,"")[5])
             if harmonic: mr[-1]+=r" \flageolet "
             continue
@@ -1471,7 +1469,9 @@ def graceNotes_markup(notes,word,line,isAfter,harmonic=False):
             if notes[i:i+3]==",,,": octave = ",,,"
             elif notes[i:i+2]==",,": octave = ",,"
             else: octave = ","
-        elif n in 'qsdh': beams = '*qsdh'.index(n)
+        elif n in 'qsdh':
+            beams = '*qsdh'.index(n)
+            maxBeams=max(maxBeams,beams)
         else:
             # number should be the last char of a note
             figure = n
@@ -1482,6 +1482,8 @@ def graceNotes_markup(notes,word,line,isAfter,harmonic=False):
             figure = ""
             octave = ""
         i += 1
+    beamPos = -0.4-0.3*maxBeams # needed especially when no below-octave dots
+    mr.insert(0,r"\once \override Beam.positions = #'(%.1f . %.1f) \once \override Beam.length-fraction = #0.3 " % (beamPos,beamPos))
     return ''.join(mr)
 def grace_octave_fix(notes,word,line):
     """Ensures octaves, durations and accidentals come before the
@@ -1550,7 +1552,7 @@ def chordNotes_markup(notes,word,line,graceType=None):
     dNotes = []
     mr = []
     
-    for i in xrange(len(notes)):
+    for i in range(len(notes)):
         n = notes[i]
         if n=='#':
             accidental = "#"
@@ -1617,29 +1619,21 @@ def chordNotes_markup(notes,word,line,graceType=None):
         ",":1,
         ",,":1.6,
         ",,,":2.2}
-    oDict = {"":"",
-        "'":"^.",
-        "''":r"-\tweak #'X-offset #0.6 ^\two-dots ",
-        "'''":r"-\tweak #'X-offset #0.6 ^\three-dots ",
-        ",":r"-\tweak #'X-offset #0.6 _. ",
-        ",,":r"-\tweak #'X-offset #0.6 _\two-dots ",
-        ",,,":r"-\tweak #'X-offset #0.6 _\three-dots "}
-
+    oDict = dotsDictWithXTweaks(graceType)
     ret = "< "
     baseline = 0
     for f in dNotes:
-        # octaves below rises the baseline
-        if ',' in f['octave']: baseline += offsets[f['octave']]
-        if baseline > 0:
-            ret += r"\tweak #'Y-offset #%.1f " % baseline
-        ret += (r'\note-mod-angka "' if not_angka else r'\note-mod "')+f['figure']+'" '+placeholders[f['figure']]+{"":"", "#":"is", "b":"es"}[f['accidental']]
-        if "," in f['octave']: ret += f['octave'][:-1]+" "
-        else: ret += f['octave']+"' "
-        if "," in f['octave']: ret += r"\tweak #'Y-offset #%.1f " % (baseline -0.1 - 1.2 * offsets[f['octave']])
-        elif "'" in f['octave']: ret += r"\tweak #'Y-offset #%.1f " % (baseline + 1.6 + 0.02 * offsets[f['octave']] + (1.8 if graceType and baseline<2 else 0))
+        if ',' in f['octave'] and (baseline or not graceType): baseline += offsets[f['octave']]/(2 if graceType else 1) # octaves below raises the baseline, except if the lowest one goes below the beam (non-gracenote chords can also have lowest octave below beam but height gets normalised)
+        ret += ((r"\tweak #'Y-offset #%.1f " % baseline) if baseline else "")+(r'\note-mod-angka "' if not_angka else r'\note-mod "')+f['figure']+'" '+placeholders[f['figure']]+{"":"", "#":"is", "b":"es"}[f['accidental']]+(f['octave'][:-1]+" " if "," in f['octave'] else f['octave']+"' ")
+        if "," in f['octave']: ret += r"-\tweak #'Y-offset #%.1f " % (baseline -0.1 - (1.2 * offsets[f['octave']])/(1.4 if graceType else 1))
+        elif "'" in f['octave']: ret += r"-\tweak #'Y-offset #%.1f " % (baseline + (4.4 if graceType and baseline<5 else 1 if graceType else 1.6) + 0.02 * offsets[f['octave']])
+        # baseline/(2.5 if graceType else 1)
+        # b/2.5 + 4.4 is OK for 1st and 2nd but too low for 3rd
+        # so b0 is 4.4, 1st b is (5+2.2/2=6.1)/2.5 + 4.4 =6.84
+        # cn we reduce the divisor and increase the constant
         ret += oDict[f['octave']]+" "
-        baseline += (4+(0.5 if "'" in f['octave'] else 0)) if graceType and baseline<2 else 2
-        if "'" in f['octave']: baseline += offsets[f['octave']]
+        baseline += 1.5 if graceType and baseline>=5 else 5 if graceType else 2
+        if "'" in f['octave']: baseline += offsets[f['octave']]/(2 if graceType else 1)
     ret += ">"
     return ret,bottom_octave,placeholder_chord
 
@@ -2000,7 +1994,7 @@ def getLY(score,headers=None,have_final_barline=True):
        elif out[i].startswith("| "): needLeftAlign = False
        i += 1
    # format and combine:
-   for i in xrange(len(out)-1):
+   for i in range(len(out)-1):
        if not out[i].endswith('\n'):
            if '\n' in out[i] or len(out[i])>60:
                out[i] += '\n'
