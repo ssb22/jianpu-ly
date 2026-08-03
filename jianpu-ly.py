@@ -1252,6 +1252,9 @@ def xml2jianpu(x):
                 state.multirestCount = state.multirestTotal = 0
         elif name=="measure" and state.multirestCount == 0:
             # Check for movement boundary at end of regular measures
+            if len(state.mvtBreakIndicators) >= 2:
+                partsInProgress[0].insert(state.mvtStartBarIndex, 'NextScore OctavesAfter')
+                state.mvtBreakIndicators = set()
             # Insert bar separator for txt export readability
             partsInProgress[0].append("\n")
         elif name=="beat-unit": tempo[0]=typesMM.get(name,"4")
