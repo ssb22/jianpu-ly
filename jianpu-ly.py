@@ -1135,6 +1135,10 @@ def xml2jianpu(x):
             self.multirestCount = self.multirestTotal = 0
             self.multirestSkip, self.multirestBuffer = False,""
             self.mvtLastBarNo, self.mvtStartBarIndex, self.mvtBarLockedIndex, self.mvtBreakIndicators = None,0,None,set()
+            self.activeWedges = {}
+            self.pendingWedgeCmd = ""
+            self.lastOurRet = None
+            self.unrenderedHairpins = []
         def looksLikeNewMovement(self): return len(self.mvtBreakIndicators) >= 2 # MusicXML standard = only 1 movement per file, but some programs like MuseScore include multiple movements.  To prevent false positives on this, we watch for at least 2 indicators that a new movement has begun before acting on it.
         def getAndResetNote(self,first=False):
             r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tState,self.chord,self.grace,self.tremolo)
@@ -1292,6 +1296,50 @@ def xml2jianpu(x):
         elif name=="inverted-mordent": state.extras+=r" \prall"
         elif name=="harmonic": state.extras+=r" \flageolet"
         elif name=="snap-pizzicato": state.extras+=r" \snappizzicato"
+        elif name=="wedge":
+            wtype = state.readAttrs.get("type","")
+            wnum = state.readAttrs.get("number","1")
+            if wtype in ("crescendo","decrescendo","diminuendo"):
+                wcmd = r"\<" if wtype=="crescendo" else r"\>"
+                if wnum in state.activeWedges:
+                    oldCmd = state.activeWedges[wnum]
+                    if oldCmd != wcmd:
+                        state.pendingWedgeCmd = r"\!" + state.pendingWedgeCmd
+                        del state.activeWedges[wnum]
+                state.activeWedges[wnum] = wcmd
+                state.pendingWedgeCmd = wcmd + state.pendingWedgeCmd
+            elif wtype == "stop":
+                # Check if stop immediately follows start without intervening notes
+                if wnum in state.activeWedges:
+                    # Check if hairpin was just started (pending) or already applied to single note
+                    if state.pendingWedgeCmd:
+                        # Hairpin starts and stops on same note - cannot render
+                        if state.mvtLastBarNo is not None:
+                            state.unrenderedHairpins.append(state.mvtLastBarNo)
+                        state.pendingWedgeCmd = ""
+                    else:
+                        # Hairpin was applied but may have been on a single sustained note
+                        # Check if lastOurRet has both start and stop markers
+                        if state.lastOurRet:
+                            hasStart = False
+                            for item in state.lastOurRet:
+                                if item and (r"\<" in item or r"\>" in item):
+                                    hasStart = True
+                                    break
+                            if not hasStart:
+                                # Hairpin cannot be rendered properly
+                                if state.mvtLastBarNo is not None:
+                                    state.unrenderedHairpins.append(state.mvtLastBarNo)
+                    del state.activeWedges[wnum]
+                else:
+                    # Stop wedge without corresponding active wedge - orphaned stop
+                    if state.mvtLastBarNo is not None:
+                        state.unrenderedHairpins.append(state.mvtLastBarNo)
+                if state.lastOurRet is not None:
+                    for i in range(len(state.lastOurRet)-1, -1, -1):
+                        if state.lastOurRet[i] and not state.lastOurRet[i].startswith("0") and not state.lastOurRet[i].startswith("/"):
+                            state.lastOurRet[i] += r" \!"
+                            break
         elif name in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open".split():
             if name in ("ppppp","pppp","ppp","pp","p","mp","mf","f","ff","fff","ffff","fffff","fp","sf","sfz","n","rfz"):
                 if state.activeWedges:
