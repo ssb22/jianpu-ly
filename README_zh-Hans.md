@@ -10,7 +10,7 @@ jianpu-ly 是一个 Python 程序（兼容 Python 2 和 Python 3），用于协�
 
 如果你有问题，可以尝试不同的 Lilypond 版本。jianpu-ly 适用于 Lilypond 2.20、2.22 和 2.24。
 
-运行 jianpu-ly < 文件名.txt > 文件名.ly（或 jianpu-ly 文件名.txt > 文件名.ly）。通过jianpu-ly piece.xml （或 jianpu-ly piece.mxl > 文件名.ly）可以导入MusicXML，但这是实验性质的，并不适合所有乐曲。
+运行 jianpu-ly < 文件名.txt > 文件名.ly（或 jianpu-ly 文件名.txt > 文件名.ly）。通过jianpu-ly piece.xml （或 jianpu-ly piece.mxl > 文件名.ly）可以导入MusicXML，但这是实验性质的，不适合所有乐曲。
 
 普通文本文件以空格分隔的，可以包含类似下面这样的字词。通常，音符中字符的顺序并不重要，因此 #1 与 1# 相同，'1 与 1' 相同，s1 与 1s 相同。
 
@@ -157,6 +157,28 @@ Lilypond头代码： `LPH: (定义) :LPH` （每个分隔符必须位于各行�
 按声部导出MIDI文件： `PartMidi`
 
 忽略： `% 注释`
+
+**命令行选项：**
+
+`--chinese`: 以中文输出`--html`、`--markdown`或`--help`的内容
+
+`--export-jly`: 导出简谱输入到 .jly 文件而不进行转换（例如在导入 MusicXML 之后）
+
+`--help`: 显示命令行帮助（别名：-h、/?）
+
+`--html`: 输出HTML格式的文档（用于网站）
+
+`--markdown`: 输出Markdown格式的文档（用于Git README）
+
+`--noRestHack`: 禁用休止符替代（调试选项，输出有误时可尝试）
+
+`--noStaff`: 强制不输出西方五线谱（即使输入指定了 WithStaff）
+
+`--nosort`: 不按音高排序和弦音符（适用于两个声部被写成和弦、又需要声部交叉的情况）
+
+`--version`: 只显示版本号（别名：-v、/v）
+
+`--withStaff`: 在每个声部增加一个西方五线谱，相当于到处指定WithStaff
 
 
 版权和商标

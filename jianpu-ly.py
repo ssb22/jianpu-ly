@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.879 (c) 2012-2026 Silas S. Brown
+# v1.88 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -26,16 +26,12 @@ r"""
 # + at https://gitlab.developers.cam.ac.uk/ssb22/jianpu-ly
 # and in China: https://gitee.com/ssb22/jianpu-ly
 
-# The following docstring format is fixed, and is used by the options
-# --html           (generates the HTML table for the website)
-# --html --chinese (generates a Chinese version of this table)
-# --markdown       (generates the Markdown table for the Readme)
-# --markdown --chinese (generates the Markdown table for the Chinese Readme)
+# All lines with : below are used for the input examples table.
 # Currently, any non-ASCII character in a line (before the : if any) indicates it's the Chinese version.
 
 Run jianpu-ly < text-file > ly-file (or jianpu-ly text-files > ly-file).  There is experimental support for importing MusicXML via jianpu-ly piece.xml (or jianpu-ly piece.mxl > ly-file) but this does not work for all pieces.
-# (Currently, MusicXML import must use .mxl extension and not redirect)
-运行 jianpu-ly < 文件名.txt > 文件名.ly（或 jianpu-ly 文件名.txt > 文件名.ly）。通过jianpu-ly piece.xml （或 jianpu-ly piece.mxl > 文件名.ly）可以导入MusicXML，但这是实验性质的，并不适合所有乐曲。
+# (compressed MusicXML must be .mxl)
+运行 jianpu-ly < 文件名.txt > 文件名.ly（或 jianpu-ly 文件名.txt > 文件名.ly）。通过jianpu-ly piece.xml （或 jianpu-ly piece.mxl > 文件名.ly）可以导入MusicXML，但这是实验性质的，不适合所有乐曲。
 Normal text files are whitespace-separated and can contain words like the following.  Usually the order of characters within a note does not matter, hence #1 is the same as 1# and '1 is the same as 1' and s1 is the same as 1s.
 普通文本文件以空格分隔的，可以包含类似下面这样的字词。通常，音符中字符的顺序并不重要，因此 #1 与 1# 相同，'1 与 1' 相同，s1 与 1s 相同。
 Scale going up: 1 2 3 4 5 6 7 1'
@@ -184,7 +180,7 @@ Ignored: % a comment
 忽略： % 注释
 """
 
-import sys,os,re,shutil
+import sys,os,re,shutil,tempfile
 from fractions import Fraction as F # requires Python 2.6+
 if type(u"")==type(""): # Python 3
     unichr = chr
@@ -480,12 +476,12 @@ jianpuGraceCurveEngraver =
                  (ly:pointer-group-interface::add-grob finished 'elements grob))))
         (script-interface .
           ,(lambda (engraver grob source-engraver)
-             (if (ly:spanner? span)
-                 (begin
-                  (ly:pointer-group-interface::add-grob span 'elements grob)))
-             (if (ly:spanner? finished)
-                 (ly:pointer-group-interface::add-grob finished 'elements grob)))))
-       
+             (let ((is-dyn (or (grob::has-interface grob 'dynamic-interface)
+                       (eq? (ly:grob-property grob 'meta) 'DynamicText))))
+               (if (and (ly:spanner? span) (not is-dyn))
+                (ly:pointer-group-interface::add-grob span 'elements grob))
+               (if (and (ly:spanner? finished) (not is-dyn))
+                (ly:pointer-group-interface::add-grob finished 'elements grob))))))
        (process-music .
          ,(lambda (trans)
             (if (ly:stream-event? event-stop)
@@ -674,22 +670,13 @@ dashes_as_ties = True # Implement dash (-) continuations as invisible ties rathe
 use_rest_hack = True # Implement some short rests as notes (and if there are lyrics, creates temporary voices so the lyrics miss them); sometimes works better for beaming (at least in 2.15 through 2.24)
 sort_chords = True # Normally should be left as True.  See comment on --nosort below
 force_staff = None # None=default (respect input), True=--withStaff forces 5-line staff, False=--noStaff disables it
-if __name__=="__main__":
-  if '--noRestHack' in sys.argv: # TODO: document (this is a debug option you might want to try if things are going wrong, but unlikely to still be needed)
-    use_rest_hack=False ; sys.argv.remove('--noRestHack')
-  if '--nosort' in sys.argv: # TODO: document (this is a hack for if someone's incorrectly coded 2-voice music as chords and they want to cross the parts)
-    sort_chords=False ; sys.argv.remove('--nosort')
-  if '--withStaff' in sys.argv:
-    force_staff=True ; sys.argv.remove('--withStaff')
-  if '--noStaff' in sys.argv:
-    force_staff=False ; sys.argv.remove('--noStaff')
-assert not (use_rest_hack and not dashes_as_ties), "This combination has not been tested"
 
+class JlyException(Exception): pass # wrapped so you can catch it if you're calling this code as a module
 def errExit(msg):
     if __name__=="__main__":
         sys.stderr.write("Error: "+msg+"\n")
         sys.exit(1)
-    else: raise Exception(msg)
+    else: raise JlyException(msg)
 def scoreError(msg,word,line):
     if len(word)>60: word=word[:50]+"..."
     msg += " %s in score %d" % (word,scoreNo)
@@ -793,6 +780,7 @@ class NoteheadMarkup:
         placeholder_chord = placeholders[figures]
     
     invisTieLast = dashes_as_ties and self.last_figures and figures=="-" and not self.last_was_rest
+    assert not (use_rest_hack and not dashes_as_ties), "This combination has not been tested"
     self.last_was_rest = (figures=='0' or (figures=='-' and self.last_was_rest))
     aftrLastNonDash = tieEnd = ""
     add_cautionary_accidental = accidental_visible = False
@@ -1024,23 +1012,21 @@ def parseNote(word,origWord,line):
     return figures,nBeams,dots,octave,accidental,tremolo
 
 def write_docs():
-    # Write an HTML or Markdown version of the doc string
     def htmlify(l):
-        if "--html" in sys.argv:
-            return re.sub('([hdDsS]emi)',r'\1&shy;',l.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")).replace("approximation","approx&shy;imation").replace("instrument=Flute","instrument=<wbr>Flute").replace("automatically","automat&shy;ically").replace("SeparateTimesig","Separate&shy;Timesig") # not sure about that last one because we don't want to hide that it's 1 word, but we do want Chrome on small devices in not-so-small print to fit it on a line rather than zoom out the whole page
-        else: return l
+        if not html: return l # (htmlify is a no-op if html is not set)
+        return re.sub('([hdDsS]emi)',r'\1&shy;',l.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")).replace("approximation","approx&shy;imation").replace("instrument=Flute","instrument=<wbr>Flute").replace("automatically","automat&shy;ically").replace("SeparateTimesig","Separate&shy;Timesig") # not sure about that last one because we don't want to hide that it's 1 word, but we do want Chrome on small devices in not-so-small print to fit it on a line rather than zoom out the whole page
     inTable = 0 ; justStarted=1
     for line in __doc__.split("\n"):
         if line.startswith("#") or not line.strip(): continue
         hasNonAscii = any(ord(c)>127 for c in line.split(':')[0])
-        if hasNonAscii ^ ("--chinese" in sys.argv): continue
+        if hasNonAscii ^ chinese: continue
         splitOn = "：" if "：" in line else ":"
         if splitOn in line and line.split(splitOn,1)[1].strip():
             toGet,shouldType = line.split(splitOn,1)
             if not inTable:
-                if "--html" in sys.argv:
-                    print ("<table border>") # "<tr><th>To get:</th><th>Type:</th></tr>"
-                else: print ("")
+                if html:
+                    print ("<table border>"+("<tr><th>效果</th><th>输入</th></tr>" if chinese else "<tr><th>To get:</th><th>Type:</th></tr>"))
+                else: print ("") # header not really applicable in Markdown or CLI help as it's not a table
                 inTable = 1
             if re.match(r".*[A-Za-z]\)$",shouldType):
                 shouldType,note = shouldType.rsplit("(",1)
@@ -1049,15 +1035,28 @@ def write_docs():
                 shouldType,note = shouldType.rsplit("（",1)
                 note = " （"+note
             else: note = ""
-            if "--html" in sys.argv: print ("<tr><td>"+htmlify(toGet.strip())+"</td><td><kbd>"+htmlify(shouldType.strip())+"</kbd>"+htmlify(note)+"</td>")
-            else: print (toGet.strip()+splitOn+" `"+shouldType.strip()+"`"+note+"\n")
+            if html: print ("<tr><td>"+htmlify(toGet.strip())+"</td><td><kbd>"+htmlify(shouldType.strip())+"</kbd>"+htmlify(note)+"</td>")
+            elif markdown: print (toGet.strip()+splitOn+" `"+shouldType.strip()+"`"+note+"\n")
+            else: print (toGet+splitOn+" "+shouldType+note)
         else:
-            if "--markdown" in sys.argv: print ("")
+            if not html and not justStarted: print ("")
             elif inTable: print ("</table>")
             elif not justStarted: print ("<br>")
             inTable=justStarted=0
             print (htmlify(line))
-    if inTable and "--html" in sys.argv: print ("</table>")
+    if inTable:
+        if html: print ("</table>")
+        elif markdown: pass # there will already be a blank line
+        else: print ("")
+    print(("**" if markdown else "<p><strong>" if html else "")+("命令行选项：" if chinese else "Command-line options:")+("**\n" if markdown else "</strong></p><dl>" if html else ""))
+    for k,v in sorted(list(args.items())): # (explicit list needed on Python 3.0 through 3.5, not needed on 2.x or 3.6+)
+        enDoc,zhDoc,actionList = v
+        if enDoc:
+            h = htmlify(zhDoc if chinese and zhDoc else enDoc)
+            if html: print("<dt><kbd>"+htmlify(k)+"</kbd></dt><dd>"+re.sub('(--[A-Za-z][A-Za-z-]*)',r'<kbd>\1</kbd>',h)+"</dd>")
+            elif markdown: print("`"+k+"`: "+re.sub('(--[A-Za-z][A-Za-z-]*)',r'`\1`',h)+"\n")
+            else: print(k+": "+h)
+    if html: print("</dl>")
 
 def dotsDictWithXTweaks(graceType):
     x_offset=0.4 if graceType else 0.6
@@ -1069,9 +1068,9 @@ def dotsDictWithXTweaks(graceType):
             ",,":r"-\tweak #'X-offset #%.1f _\two-dots " % x_offset,
             ",,,":r"-\tweak #'X-offset #%.1f -\tweak #'extra-offset #'(0 . 0.3) _\three-dots " % x_offset}
 
-def getInput0():
+def getInput0(files):
   inDat = []
-  for f in sys.argv[1:]:
+  for f in files:
     if f.endswith(".mxl"):
         import zipfile ; z=zipfile.ZipFile(f)
         for F in z.infolist():
@@ -1095,19 +1094,18 @@ def getInput0():
     if f:
       try: return [open(f,encoding="utf-8").read()]
       except: return [open(f).read()]
+  sys.stdout = sys.stderr
   write_help() ; raise SystemExit
 
-def write_help():
-  write_version()
-  sys.stderr.write("\n".join(l for l in __doc__.split("\n") if l.strip() and not l.startswith("#"))+"\n")
+def write_help(): write_version(),write_docs()
 def write_version():
   versions = [] # output the biggest (might not be 1st listed)
   for l in __doc__.split("\n"):
-      if l.startswith("# v"): versions.append((float(l[len("# v"):l.index(' ',len("# v"))]),l.replace("#","jianpu-ly",1)+"\n\n"))
-  sys.stderr.write(max(versions)[1])
+      if l.startswith("# v"): versions.append((float(l[len("# v"):l.index(' ',len("# v"))]),l.replace("#","jianpu-ly",1)+"\n"))
+  print(max(versions)[1])
 
-def get_input():
-  inDat = getInput0()
+def get_input(files):
+  inDat = getInput0(files)
   for i in range(len(inDat)):
     if inDat[i].startswith('\xef\xbb\xbf'):
       inDat[i] = inDat[i][3:]
@@ -1138,7 +1136,6 @@ def xml2jianpu(x):
             self.activeWedges = {}
             self.pendingWedgeCmd = ""
             self.lastOurRet = None
-            self.unrenderedHairpins = []
         def looksLikeNewMovement(self): return len(self.mvtBreakIndicators) >= 2 # MusicXML standard = only 1 movement per file, but some programs like MuseScore include multiple movements.  To prevent false positives on this, we watch for at least 2 indicators that a new movement has begun before acting on it.
         def getAndResetNote(self,first=False):
             r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tState,self.chord,self.grace,self.tremolo)
@@ -1248,7 +1245,7 @@ def xml2jianpu(x):
                     state.mvtBreakIndicators = set()
                     state.mvtBarLockedIndex = None
                 
-                partsInProgress[0].append('R*' + str(state.multirestTotal))
+                for p in partsInProgress: p.append('R*' + str(state.multirestTotal))
                 if state.multirestBuffer:
                     partsInProgress[0].append(state.multirestBuffer.strip())
                     state.multirestBuffer = ""
@@ -1301,50 +1298,22 @@ def xml2jianpu(x):
             wnum = state.readAttrs.get("number","1")
             if wtype in ("crescendo","decrescendo","diminuendo"):
                 wcmd = r"\<" if wtype=="crescendo" else r"\>"
-                if wnum in state.activeWedges:
-                    oldCmd = state.activeWedges[wnum]
-                    if oldCmd != wcmd:
-                        state.pendingWedgeCmd = r"\!" + state.pendingWedgeCmd
-                        del state.activeWedges[wnum]
-                state.activeWedges[wnum] = wcmd
+                state.activeWedges[wnum] = wcmd # Don't need to \! the oldCmd: Lilypond does that automatically
                 state.pendingWedgeCmd = wcmd + state.pendingWedgeCmd
             elif wtype == "stop":
-                # Check if stop immediately follows start without intervening notes
                 if wnum in state.activeWedges:
-                    # Check if hairpin was just started (pending) or already applied to single note
-                    if state.pendingWedgeCmd:
-                        # Hairpin starts and stops on same note - cannot render
-                        if state.mvtLastBarNo is not None:
-                            state.unrenderedHairpins.append(state.mvtLastBarNo)
+                    if state.pendingWedgeCmd or not state.lastOurRet or not any(item and (r"\<" in item or r"\>" in item) for item in state.lastOurRet): # too short
+                        sys.stderr.write("Ignoring MusicXML hairpin that's too short at bar "+str(state.mvtLastBarNo)+"\n")
                         state.pendingWedgeCmd = ""
-                    else:
-                        # Hairpin was applied but may have been on a single sustained note
-                        # Check if lastOurRet has both start and stop markers
-                        if state.lastOurRet:
-                            hasStart = False
-                            for item in state.lastOurRet:
-                                if item and (r"\<" in item or r"\>" in item):
-                                    hasStart = True
-                                    break
-                            if not hasStart:
-                                # Hairpin cannot be rendered properly
-                                if state.mvtLastBarNo is not None:
-                                    state.unrenderedHairpins.append(state.mvtLastBarNo)
                     del state.activeWedges[wnum]
-                else:
-                    # Stop wedge without corresponding active wedge - orphaned stop
-                    if state.mvtLastBarNo is not None:
-                        state.unrenderedHairpins.append(state.mvtLastBarNo)
+                else: sys.stderr.write("Ignoring MusicXML isolated stop-hairpin at bar "+str(state.mvtLastBarNo)+"\n")
                 if state.lastOurRet is not None:
                     for i in range(len(state.lastOurRet)-1, -1, -1):
                         if state.lastOurRet[i] and not state.lastOurRet[i].startswith("0") and not state.lastOurRet[i].startswith("/"):
                             state.lastOurRet[i] += r" \!"
                             break
-        elif name in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open".split():
-            if name in ("ppppp","pppp","ppp","pp","p","mp","mf","f","ff","fff","ffff","fffff","fp","sf","sfz","n","rfz"):
-                if state.activeWedges:
-                    state.pendingWedgeCmd = r"\!" + state.pendingWedgeCmd
-                    state.activeWedges.clear()
+        elif name in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open".split(): # element names that exactly equal their corresponding no-parameter Lilypond commands, including dynamics + some others
+            if name in ("ppppp","pppp","ppp","pp","p","mp","mf","f","ff","fff","ffff","fffff","fp","sf","sfz","n","rfz"): state.activeWedges.clear() # dynamics: don't need \! as Lilypond does it automatically
             state.extras += " \\"+name
         elif name=="print":
             if state.readAttrs.get("new-page") == "yes" or state.readAttrs.get("new-system") == "yes":
@@ -1362,7 +1331,7 @@ def xml2jianpu(x):
             for n,p in enumerate(partsInProgress):
                 if positionsInProgress[n]==max(positionsInProgress):
                     p.append("letter" + d0)
-        elif name=="note" and not state.multirestSkip:
+        elif name=="note":
             # Try to find which voice it goes onto, if we're MuseScore
             # or similar and have parts as voices within a part.
             # TODO: sometimes the XML will give us a voice or staff number; for now we just find the first one to fit
@@ -1374,7 +1343,7 @@ def xml2jianpu(x):
                 for i,p in enumerate(positionsInProgress):
                     if p < state.position and p in paddingRestDict: # match but need padding
                         ourRet,ourI = partsInProgress[i],i
-                        ourRet.append(' '.join(paddingRestList[paddingRestDict[p]:paddingRestDict[state.position]])) # TODO: collapse to whole-bar rests when needed (low priority because this should not happen often)
+                        if not state.multirestSkip: ourRet.append(' '.join(paddingRestList[paddingRestDict[p]:paddingRestDict[state.position]])) # TODO: collapse to whole-bar rests when needed (low priority because this should not happen often)
                         positionsInProgress[i] = state.position
                         break
             if ourRet is None: # need new part
@@ -1384,7 +1353,13 @@ def xml2jianpu(x):
             state.lastOurRet = ourRet
             # Now OK to add the note to the part (voice)
             step,octave,acc,nType,dot,extras,tie,tuplet,tState,chord,grace,tremolo = state.getAndResetNote()
-            if step=="r": r="0"
+            if state.multirestSkip: # just clean up
+                state.position+=state.lastDuration
+                positionsInProgress[ourI]=state.position
+                state.lastDuration=0
+                if ourI==0: paddingRestDict[state.position]=len(paddingRestList)
+                return
+            elif step=="r": r="0"
             else:
                 dTone=ord(step[0])-ord(state.note1)+7*(octave-4)
                 if step[0] < 'C': dTone += 7
@@ -1454,8 +1429,6 @@ def xml2jianpu(x):
     xmlparser.CharacterDataHandler = c
     xmlparser.EndElementHandler = e
     xmlparser.Parse(x,True)
-    if state.unrenderedHairpins:
-        sys.stderr.write("Warning: Hairpin(s) not rendered on bar(s): %s\n" % ", ".join(str(b) for b in state.unrenderedHairpins))
     ret = '\n'.join(ret)
     if not type("")==type(ret): ret=ret.encode('utf-8') # Python 2
     return ret
@@ -1543,7 +1516,7 @@ def graceNotes_markup(notes,word,line,isAfter,harmonic=False):
             figure = ""
             octave = ""
         i += 1
-    beamPos = -0.4-0.3*maxBeams # needed especially when no below-octave dots
+    beamPos = grace_height/2-2.15-0.3*maxBeams # needed especially when no below-octave dots
     mr.insert(0,r"\once \override Beam.positions = #'(%.1f . %.1f) \once \override Beam.length-fraction = #0.3 " % (beamPos,beamPos))
     return ''.join(mr)
 def grace_octave_fix(notes,word,line):
@@ -1687,13 +1660,9 @@ def chordNotes_markup(notes,word,line,graceType=None):
         if ',' in f['octave'] and (baseline or not graceType): baseline += offsets[f['octave']]/(2 if graceType else 1) # octaves below raises the baseline, except if the lowest one goes below the beam (non-gracenote chords can also have lowest octave below beam but height gets normalised)
         ret += ((r"\tweak #'Y-offset #%.1f " % baseline) if baseline else "")+(r'\note-mod-angka "' if not_angka else r'\note-mod "')+f['figure']+'" '+placeholders[f['figure']]+{"":"", "#":"is", "b":"es"}[f['accidental']]+(f['octave'][:-1]+" " if "," in f['octave'] else f['octave']+"' ")
         if "," in f['octave']: ret += r"-\tweak #'Y-offset #%.1f " % (baseline -0.1 - (1.2 * offsets[f['octave']])/(1.4 if graceType else 1))
-        elif "'" in f['octave']: ret += r"-\tweak #'Y-offset #%.1f " % (baseline + (4.4 if graceType and baseline<5 else 1 if graceType else 1.6) + 0.02 * offsets[f['octave']])
-        # baseline/(2.5 if graceType else 1)
-        # b/2.5 + 4.4 is OK for 1st and 2nd but too low for 3rd
-        # so b0 is 4.4, 1st b is (5+2.2/2=6.1)/2.5 + 4.4 =6.84
-        # cn we reduce the divisor and increase the constant
+        elif "'" in f['octave']: ret += r"-\tweak #'Y-offset #%.1f " % (baseline + (0.9+grace_height if graceType and baseline<1.5+grace_height else 1 if graceType else 1.6) + 0.02 * offsets[f['octave']])
         ret += oDict[f['octave']]+" "
-        baseline += 1.5 if graceType and baseline>=5 else 5 if graceType else 2
+        baseline += 1.5 if graceType and baseline>=1.5+grace_height else 1.5+grace_height if graceType else 2
         if "'" in f['octave']: baseline += offsets[f['octave']]/(2 if graceType else 1)
     ret += ">"
     return ret,bottom_octave,placeholder_chord
@@ -2161,7 +2130,23 @@ try: from shlex import quote
 except:
     def quote(f): return "'"+f.replace("'","'\"'\"'")+"'"
 
-def write_output(outDat):
+def outName(files,ext):
+    if files: fn=os.path.split(files[0])[1].rsplit(os.extsep,1)[0]
+    else: fn = 'jianpu'
+    return fn+os.extsep+ext
+
+def write_exported(inDat,fn):
+    if not sys.stdout.isatty():
+        return fix_utf8(sys.stdout,'w').write(inDat)
+    if os.path.exists(fn):
+        if not sys.stdin.isatty(): errExit(fn+" already exists and we cannot ask for overwrite confirmation as stdin is not a tty")
+        print(fn+" already exists, press Enter to overwrite it or Ctrl+C:")
+        (input if type("")==type(u"") else raw_input)()
+    o=open(fn,'w')
+    fix_utf8(o,'w').write(inDat)
+    o.close() ; print("Saved to "+fn)
+    
+def write_output(outDat,fn):
     if sys.stdout.isatty():
       if unicode_mode:
         if sys.platform=='win32' and sys.version_info() < (3,6):
@@ -2172,62 +2157,65 @@ For Unicode approximation on this system, please do one of these things:
 (2) upgrade to Python 3.6 or above, or
 (3) switch from Microsoft Windows to GNU/Linux""")
           return
-      else: # normal Lilypond
-        # They didn't redirect our output.
-        # Try to be a little more 'user friendly'
-        # and see if we can put it in a temporary
-        # Lilypond file and run Lilypond for them.
-        # New in jianpu-ly v1.61.
-        if len(sys.argv)>1: fn=os.path.split(sys.argv[1])[1]
-        else: fn = 'jianpu'
-        if os.extsep in fn: fn=fn[:fn.rindex(os.extsep)]
-        fn += ".ly"
-        import tempfile
+      else: # normal Lilypond with no output redirect.  Previous versions used temp directory, so be careful with overwrites:
         cwd = os.getcwd()
-        os.chdir(tempfile.gettempdir())
-        print("Outputting to "+os.getcwd()+"/"+fn)
+        if os.path.exists(fn) and not "\n%{ The jianpu-ly input was:\n" in open(fn).read():
+            print(cwd+os.sep+fn+" already exists\nand doesn't look like jianpu-ly output, so not overwriting it")
+            os.chdir(tempfile.gettempdir())
+        print("Outputting to "+os.getcwd()+os.sep+fn)
         o = open(fn,'w')
         fix_utf8(o,'w').write(outDat)
         o.close()
-        pdf = fn[:-3]+'.pdf'
+        pdf = fn.rsplit(os.extsep,1)[0]+os.extsep+'pdf'
         try: os.remove(pdf) # so won't show old one if lilypond fails
         except: pass
         cmd = lilypond_command()
         if cmd:
             cmd += ' -dstrokeadjust' # if will be viewed on-screen rather than printed, and it's not a Retina display
-            os.system(cmd+" "+quote(fn))
-            if sys.platform=='darwin':
+            if os.system(cmd+" "+quote(fn)): errExit("Lilypond failure")
+            elif sys.platform=='darwin':
                 os.system("open "+quote(pdf))
             elif sys.platform.startswith('win'):
                 import subprocess
                 subprocess.Popen([quote(pdf)],shell=True)
             elif (shutil.which('evince') if hasattr(shutil,'which') else os.path.exists('/usr/bin/evince')): os.system("evince "+quote(pdf))
         os.chdir(cwd) ; return
+    # If get here, stdout redirected or Unicode-approx set
     fix_utf8(sys.stdout,'w').write(outDat)
 
+export = html = markdown = chinese = False
+args = {
+    '--noRestHack': ("Disable the rest hack (debug option to try if output goes wrong)", "禁用休止符替代（调试选项，输出有误时可尝试）", [('use_rest_hack',False)]),
+    '--nosort': ("Don't sort chord notes by pitch (crossing parts when 2-voice music was mistakenly coded as chords)", "不按音高排序和弦音符（适用于两个声部被写成和弦、又需要声部交叉的情况）", [('sort_chords',False)]),
+    '--withStaff': ("Add a Western staff doubling the tune in all parts, as if WithStaff is specified everywhere","在每个声部增加一个西方五线谱，相当于到处指定WithStaff",[('force_staff',True)]),
+    '--noStaff': ("Force no Western staff, even if the input asks for one","强制不输出西方五线谱（即使输入指定了 WithStaff）",[('force_staff',False)]),
+    '--html': ("Write the HTML help for the website","输出HTML格式的文档（用于网站）",[('html',True),write_docs]),
+    '--markdown': ("Write the Markdown documentation for the Git README","输出Markdown格式的文档（用于Git README）",[('markdown',True),write_docs]),
+    '--help':("Write command-line help (aliases: -h, /?)","显示命令行帮助（别名：-h、/?）",[write_help]),'-h':("","",[write_help]),'/?':("","",[write_help]),
+    '--chinese': ("Use Chinese for --html, --markdown or --help options","以中文输出--html、--markdown或--help的内容",[('chinese',True)]),
+    '--version': ("Just write version number (aliases: -v, /v)","只显示版本号（别名：-v、/v）",[write_version]),'-v':("","",[write_version]),'/v':("","",[write_version]),
+    '--export-jly': ("Export the jianpu input to a .jly file instead of converting it (useful e.g. after a MusicXML import)","导出简谱输入到 .jly 文件而不进行转换（例如在导入 MusicXML 之后）",[('export', True)]),
+    '--export-txt': ("","",[('export',True)]), # hidden alias for --export-jly for backward compatibility
+}
+def read_args():
+    files,actions = [],[]
+    for a in sys.argv[1:]:
+        if a in args:
+            enDoc,zhDoc,actionList = args[a]
+            for action in actionList:
+                if type(action)==tuple:
+                    globals()[action[0]] = action[1]
+                elif action not in actions: actions.append(action)
+        else: files.append(a)
+    if actions:
+        for a in actions: a()
+        raise SystemExit
+    else: return files
 def main():
-    if "--html" in sys.argv or "--markdown" in sys.argv:
-        return write_docs()
-    if '--help' in sys.argv or '-h' in sys.argv or '/?' in sys.argv: return write_help()
-    if '--version' in sys.argv or '-v' in sys.argv or '/v' in sys.argv: return write_version()
-    export_txt = '--export-txt' in sys.argv
-    if export_txt: sys.argv.remove('--export-txt')
-    inDat = get_input()
-    if export_txt:
-        if not sys.stdout.isatty():
-            # Write exported content to stdout instead of Lilypond code
-            fix_utf8(sys.stdout,'w').write(inDat)
-            return
-        # Interactive: create file in current directory
-        if len(sys.argv)>1: fn=os.path.split(sys.argv[1])[1]
-        else: fn = 'jianpu'
-        if os.extsep in fn: fn=fn[:fn.rindex(os.extsep)]
-        txt_file = fn + '.txt'
-        if type(u"")==type(""):  # Python 3
-            f = open(txt_file,'w',encoding='utf-8'); f.write(inDat); f.close()
-        else:  # Python 2
-            f = open(txt_file,'w'); f.write(inDat); f.close()
-    out = process_input(inDat) # <-- you can also call this if importing as a module
-    write_output(out)
+    files = read_args()
+    inDat = get_input(files)
+    if export: return write_exported(inDat,outName(files,"jly")) # not txt please because we don't want to imply arbitrary wrap is OK on header or lyric lines
+    out = process_input(inDat) # you can also call this if importing as a module
+    write_output(out,outName(files,"ly"))
 
 if __name__=="__main__": main()

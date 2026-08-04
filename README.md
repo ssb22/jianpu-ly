@@ -160,6 +160,28 @@ Split MIDI files per part: `PartMidi`
 
 Ignored: `% a comment`
 
+**Command-line options:**
+
+`--chinese`: Use Chinese for `--html`, `--markdown` or `--help` options
+
+`--export-jly`: Export the jianpu input to a .jly file instead of converting it (useful e.g. after a MusicXML import)
+
+`--help`: Write command-line help (aliases: -h, /?)
+
+`--html`: Write the HTML help for the website
+
+`--markdown`: Write the Markdown documentation for the Git README
+
+`--noRestHack`: Disable the rest hack (debug option to try if output goes wrong)
+
+`--noStaff`: Force no Western staff, even if the input asks for one
+
+`--nosort`: Don't sort chord notes by pitch (crossing parts when 2-voice music was mistakenly coded as chords)
+
+`--version`: Just write version number (aliases: -v, /v)
+
+`--withStaff`: Add a Western staff doubling the tune in all parts, as if WithStaff is specified everywhere
+
 
 Copyright and Trademarks
 ------------------------
