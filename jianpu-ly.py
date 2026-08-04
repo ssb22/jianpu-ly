@@ -1135,6 +1135,10 @@ def xml2jianpu(x):
             self.multirestCount = self.multirestTotal = 0
             self.multirestSkip, self.multirestBuffer = False,""
             self.mvtLastBarNo, self.mvtStartBarIndex, self.mvtBarLockedIndex, self.mvtBreakIndicators = None,0,None,set()
+            self.activeWedges = {}
+            self.pendingWedgeCmd = ""
+            self.lastOurRet = None
+            self.unrenderedHairpins = []
         def looksLikeNewMovement(self): return len(self.mvtBreakIndicators) >= 2 # MusicXML standard = only 1 movement per file, but some programs like MuseScore include multiple movements.  To prevent false positives on this, we watch for at least 2 indicators that a new movement has begun before acting on it.
         def getAndResetNote(self,first=False):
             r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tState,self.chord,self.grace,self.tremolo)
@@ -1292,7 +1296,56 @@ def xml2jianpu(x):
         elif name=="inverted-mordent": state.extras+=r" \prall"
         elif name=="harmonic": state.extras+=r" \flageolet"
         elif name=="snap-pizzicato": state.extras+=r" \snappizzicato"
-        elif name in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open".split(): state.extras += " \\"+name # element names that exactly equal their corresponding no-parameter Lilypond commands
+        elif name=="wedge":
+            wtype = state.readAttrs.get("type","")
+            wnum = state.readAttrs.get("number","1")
+            if wtype in ("crescendo","decrescendo","diminuendo"):
+                wcmd = r"\<" if wtype=="crescendo" else r"\>"
+                if wnum in state.activeWedges:
+                    oldCmd = state.activeWedges[wnum]
+                    if oldCmd != wcmd:
+                        state.pendingWedgeCmd = r"\!" + state.pendingWedgeCmd
+                        del state.activeWedges[wnum]
+                state.activeWedges[wnum] = wcmd
+                state.pendingWedgeCmd = wcmd + state.pendingWedgeCmd
+            elif wtype == "stop":
+                # Check if stop immediately follows start without intervening notes
+                if wnum in state.activeWedges:
+                    # Check if hairpin was just started (pending) or already applied to single note
+                    if state.pendingWedgeCmd:
+                        # Hairpin starts and stops on same note - cannot render
+                        if state.mvtLastBarNo is not None:
+                            state.unrenderedHairpins.append(state.mvtLastBarNo)
+                        state.pendingWedgeCmd = ""
+                    else:
+                        # Hairpin was applied but may have been on a single sustained note
+                        # Check if lastOurRet has both start and stop markers
+                        if state.lastOurRet:
+                            hasStart = False
+                            for item in state.lastOurRet:
+                                if item and (r"\<" in item or r"\>" in item):
+                                    hasStart = True
+                                    break
+                            if not hasStart:
+                                # Hairpin cannot be rendered properly
+                                if state.mvtLastBarNo is not None:
+                                    state.unrenderedHairpins.append(state.mvtLastBarNo)
+                    del state.activeWedges[wnum]
+                else:
+                    # Stop wedge without corresponding active wedge - orphaned stop
+                    if state.mvtLastBarNo is not None:
+                        state.unrenderedHairpins.append(state.mvtLastBarNo)
+                if state.lastOurRet is not None:
+                    for i in range(len(state.lastOurRet)-1, -1, -1):
+                        if state.lastOurRet[i] and not state.lastOurRet[i].startswith("0") and not state.lastOurRet[i].startswith("/"):
+                            state.lastOurRet[i] += r" \!"
+                            break
+        elif name in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open".split():
+            if name in ("ppppp","pppp","ppp","pp","p","mp","mf","f","ff","fff","ffff","fffff","fp","sf","sfz","n","rfz"):
+                if state.activeWedges:
+                    state.pendingWedgeCmd = r"\!" + state.pendingWedgeCmd
+                    state.activeWedges.clear()
+            state.extras += " \\"+name
         elif name=="print":
             if state.readAttrs.get("new-page") == "yes" or state.readAttrs.get("new-system") == "yes":
                 state.mvtBreakIndicators.add("page break")
@@ -1328,6 +1381,7 @@ def xml2jianpu(x):
                 partsInProgress.append(paddingRestList[:paddingRestDict[state.position]]) # TODO: collapse to whole-bar rests when needed (as above)
                 positionsInProgress.append(state.position)
                 ourRet,ourI = partsInProgress[-1],len(partsInProgress)-1
+            state.lastOurRet = ourRet
             # Now OK to add the note to the part (voice)
             step,octave,acc,nType,dot,extras,tie,tuplet,tState,chord,grace,tremolo = state.getAndResetNote()
             if step=="r": r="0"
@@ -1384,6 +1438,9 @@ def xml2jianpu(x):
             state.prevChordOffset,state.prevChordNList=len(ourRet),ourRet
             w1,w2 = r.split(' ',1)
             if grace: w1="g["+w1+"]"
+            if state.pendingWedgeCmd:
+                extras = extras+' '+state.pendingWedgeCmd
+                state.pendingWedgeCmd = ""
             ourRet.append(w1+extras+' '+w2+' '+tie)
             if tState=="stop":
                 ourRet.append("]")
@@ -1397,6 +1454,8 @@ def xml2jianpu(x):
     xmlparser.CharacterDataHandler = c
     xmlparser.EndElementHandler = e
     xmlparser.Parse(x,True)
+    if state.unrenderedHairpins:
+        sys.stderr.write("Warning: Hairpin(s) not rendered on bar(s): %s\n" % ", ".join(str(b) for b in state.unrenderedHairpins))
     ret = '\n'.join(ret)
     if not type("")==type(ret): ret=ret.encode('utf-8') # Python 2
     return ret
