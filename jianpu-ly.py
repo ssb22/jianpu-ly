@@ -1416,8 +1416,9 @@ def xml2jianpu(x):
                     rr = state.prevChordNList[state.prevChordOffset]
                     parts = rr.split()
                     arp = parts[0] if parts and parts[0] in ('arpUp','arpDown','arp') else ''
-                    rest = ' '.join(parts[1:]) if arp else ' '.join(parts)
-                    state.prevChordNList[state.prevChordOffset] = (arp+' ' if arp else '')+(tremolo if not tremolo in rr else '')+r+' '+rest # last part is the " -"s
+                    firstNote = parts[0] if not arp else parts[1] if len(parts) > 1 else ''
+                    rest = ' '.join(parts[2:]) if arp else ' '.join(parts[1:])
+                    state.prevChordNList[state.prevChordOffset] = (arp+' ' if arp else '')+(tremolo if not tremolo in rr else '')+firstNote+r+''.join([' '+x for x in rest.split()]) # last part is the " -"s
                     return
             if tState=="start":
                 ourRet.append(tuplet+"[")
