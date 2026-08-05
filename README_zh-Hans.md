@@ -108,6 +108,8 @@ Lilypond 标题： `title=标题` （单独一行）
 
 倚音和弦： `g[1&3&5] 1`
 
+琵音和弦： `arpUp 135 arpDown 531 arp 135`
+
 从头反复： `1 1 Fine 1 1 1 1 1 1 DC`
 
 从𝄋反复： `1 1 Segno 1 1 ToCoda 1 1 DS 1 1`
@@ -152,8 +154,6 @@ Lilypond 标题： `title=标题` （单独一行）
 
 Lilypond头代码： `LPH: (定义) :LPH` （每个分隔符必须位于各行行首）
 
-用 Unicode 近似值代替 Lilypond 代码： `Unicode`
-
 按声部导出MIDI文件： `PartMidi`
 
 忽略： `% 注释`
@@ -175,6 +175,8 @@ Lilypond头代码： `LPH: (定义) :LPH` （每个分隔符必须位于各行�
 `--noStaff`: 强制不输出西方五线谱（即使输入指定了 WithStaff）
 
 `--nosort`: 不按音高排序和弦音符（适用于两个声部被写成和弦、又需要声部交叉的情况）
+
+`--unicode-approx`: 用Unicode近似值代替Lilypond代码
 
 `--version`: 只显示版本号（别名：-v、/v）
 

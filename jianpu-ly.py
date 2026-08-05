@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.88 (c) 2012-2026 Silas S. Brown
+# v1.881 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -128,6 +128,8 @@ Simple chords: ,135' 1 1b3 1
 简单和弦： ,135' 1 1b3 1
 Grace note chords: g[1&3&5] 1
 倚音和弦： g[1&3&5] 1
+Arpeggiated chords: arpUp 135 arpDown 531 arp 135
+琵音和弦： arpUp 135 arpDown 531 arp 135
 Da capo: 1 1 Fine 1 1 1 1 1 1 DC
 从头反复： 1 1 Fine 1 1 1 1 1 1 DC
 Dal segno: 1 1 Segno 1 1 ToCoda 1 1 DS 1 1
@@ -172,8 +174,6 @@ Other Lilypond code: LP: (block of code) :LP (each delimeter at start of its lin
 其它 Lilypond 代码： LP: (代码块) :LP （每个分隔符必须位于各行行首）
 Lilypond header additions: LPH: (definitions) :LPH (each at start of line)
 Lilypond头代码： LPH: (定义) :LPH （每个分隔符必须位于各行行首）
-Unicode approximation instead of Lilypond: Unicode
-用 Unicode 近似值代替 Lilypond 代码： Unicode
 Split MIDI files per part: PartMidi
 按声部导出MIDI文件： PartMidi
 Ignored: % a comment
@@ -306,6 +306,7 @@ def all_scores_start(inDat):
    (list
     `(two-dots
        . (
+           (script-priority . -200)
            (stencil . ,ly:text-interface::print)
            (text . ,#{ \markup \override #'(font-encoding . latin1) \center-align \bold ":" #})
            (padding . 0.20)
@@ -316,6 +317,7 @@ def all_scores_start(inDat):
    (list
     `(three-dots
        . (
+           (script-priority . -200)
            (stencil . ,ly:text-interface::print)
            (text . ,#{ \markup \override #'(font-encoding . latin1) \center-align \bold """+'"'+three_dots+'"'+r""" #})
            (padding . 0.30)
@@ -670,6 +672,7 @@ dashes_as_ties = True # Implement dash (-) continuations as invisible ties rathe
 use_rest_hack = True # Implement some short rests as notes (and if there are lyrics, creates temporary voices so the lyrics miss them); sometimes works better for beaming (at least in 2.15 through 2.24)
 sort_chords = True # Normally should be left as True.  See comment on --nosort below
 force_staff = None # None=default (respect input), True=--withStaff forces 5-line staff, False=--noStaff disables it
+unicode_approx = False
 
 class JlyException(Exception): pass # wrapped so you can catch it if you're calling this code as a module
 def errExit(msg):
@@ -727,7 +730,7 @@ class NoteheadMarkup:
       self.barPos = self.startBarPos = F(0)
       self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.chordsRoman = self.noIndent = self.raggedLast = 0
       self.withStaff = force_staff
-      self.keepLength = self.repeatAccidentals = self.pendingSlide = 0
+      self.keepLength = self.repeatAccidentals = self.pendingSlide = self.pendingArp = 0
       self.octavesPosition = None # or "before" (only setting in v1.847 and below) or "after", affects chords and grace notes when an octave mark is between two figures: is it before or after the note it affects.  Starting at None = no default, must specify if anything's ambiguous
       self.last_octave = self.base_octave = ""
       self.octavesSeen = []
@@ -820,6 +823,7 @@ class NoteheadMarkup:
         if self.onePage and not midi: ret += r"\noPageBreak "
         ret += "%{ bar "+str(self.barNo)+": %} "
         self.notesHad.insert(-1,"|")
+    if self.pendingArp: ret += {"arpUp":r"\arpeggioArrowUp ","arpDown":r"\arpeggioArrowDown ","arp":r"\arpeggioNormal "}[self.pendingArp]
     if not octave in self.current_accidentals: self.current_accidentals[octave] = [""]*7
     if nBeams==None: # unspecified
         if self.keepLength:
@@ -956,6 +960,7 @@ class NoteheadMarkup:
         else:
             ret = r" \jianpuGraceCurveEnd " + ret 
     # sys.stderr.write(accidental+figure+octave+dots+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
+    if self.pendingArp: ret += r"\arpeggio "
     if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figures,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
     if (self.barPos%self.beatLength == 0 or self.barPos==self.barLength) and self.inBeamGroup: # (or added for irregular time signatures; self.inBeamGroup is set only if not midi/western)
         # jianpu printouts tend to restart beams every beat
@@ -1118,6 +1123,8 @@ def xml2jianpu(x):
     from xml.parsers.expat import ParserCreate
     xmlparser = ParserCreate()
     positionsInProgress,partsInProgress = [0],[[]]
+    voiceFirstMvt = [0] # 0-based index of the first movement each voice belongs to
+    movementParts = [] # movementParts[m] = [(instrumentName, voiceText), ...] across all MusicXML <part>s
     paddingRestList, paddingRestDict = [], {0:0}
     ret = ["OctavesAfter"]
     partList=[""];time=["4","4"];tempo=["",""]
@@ -1128,28 +1135,35 @@ def xml2jianpu(x):
             self.position = self.lastDuration = 0
             self.keySig,self.barSig,self.barTied = ['']*7,['']*7,None
             self.note1 = "C"
-            self.tsigOffsets, self.initialQuavers = None,0
+            self.tsigOffsets, self.initialQuavers = None,F(0)
             self.prevChordOffset, self.prevChordNList = None,None
             self.multirestCount = self.multirestTotal = 0
             self.multirestSkip, self.multirestBuffer = False,""
-            self.mvtLastBarNo, self.mvtStartBarIndex, self.mvtBarLockedIndex, self.mvtBreakIndicators = None,0,None,set()
+            self.mvtLastBarNo, self.mvtStartBarIndices, self.mvtBarLockedIndices, self.mvtBreakIndicators, self.breakCount = None,[],None,set(),0
             self.activeWedges = {}
             self.pendingWedgeCmd = ""
             self.lastOurRet = None
         def looksLikeNewMovement(self): return len(self.mvtBreakIndicators) >= 2 # MusicXML standard = only 1 movement per file, but some programs like MuseScore include multiple movements.  To prevent false positives on this, we watch for at least 2 indicators that a new movement has begun before acting on it.
         def getAndResetNote(self,first=False):
-            r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tState,self.chord,self.grace,self.tremolo)
-            self.step=self.octave=self.accidental=self.nType=self.dot=self.extras=self.tie=self.tuplet=self.tState=self.chord=self.grace=self.tremolo=""
+            r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tupletNormal,self.tState,self.chord,self.grace,self.tremolo)
+            self.step=self.octave=self.accidental=self.nType=self.dot=self.extras=self.tie=self.tuplet=self.tupletNormal=self.tState=self.chord=self.grace=self.tremolo=""
             return r
     state = State()
+    def insertMovementBreak(idxs):
+        for n,p in enumerate(partsInProgress):
+            idx = idxs[n] if n < len(idxs) else 0
+            if idx is None: idx = 0
+            p.insert(idx, 'NextScore OctavesAfter')
+        state.mvtBreakIndicators = set()
+        state.breakCount += 1
     types={"64th":"h","32nd":"d","16th":"s","eighth":"q","quarter":"","half":" -","whole":" - - -"}
     typesDot={"64th":"h.","32nd":"d.","16th":"s.","eighth":"q.","quarter":".","half":" - -","whole":" - - - - -"}
     typesMM={"64th":"64","32nd":"32","16th":"16","eighth":"8","quarter":"4","half":"2","whole":"1"}
-    quavers={"64th":0.125,"32nd":0.25,"16th":0.5,"eighth":1,"quarter":2,"half":4,"whole":8}
+    quavers={"64th":F(1,8),"32nd":F(1,4),"16th":F(1,2),"eighth":F(1),"quarter":F(2),"half":F(4),"whole":F(8)}
     def s(name,attrs):
         state.readData,state.readAttrs="",attrs
         if name=="measure":
-            state.mvtStartBarIndex = len(partsInProgress[0])
+            state.mvtStartBarIndices = [len(p) for p in partsInProgress]
             oldBarsig = state.barSig
             state.barSig = state.keySig[:]
             if state.barTied is not None: state.barSig[state.barTied]=oldBarsig[state.barTied] # for tie
@@ -1175,18 +1189,34 @@ def xml2jianpu(x):
         elif name=="part-name" or name=="instrument-name": partList[-1]=d0
         elif name=="score-part": partList.append("")
         elif name=="part": # we're assuming score-partwise
+            instName = partList[0] if partList else None
             for n,p in enumerate(partsInProgress):
-                if partList: ret.append('instrument='+partList[0])
                 if positionsInProgress[n] < max(positionsInProgress) and positionsInProgress[n] in paddingRestDict: p.append(' '.join(paddingRestList[paddingRestDict[positionsInProgress[n]]:]))
                 else: os.environ["j2ly_sloppy_bars"] = "1"
-                ret.append(" ".join(p)) # don't use \n here because grace-note merging must be within same line post v1.83
-                ret.append("WithStaff NextPart")
+            # Movement detection puts NextScore markers inside the voices, but
+            # NextScore must be the OUTER level (NextPart within each score),
+            # so split each voice at its markers and regroup movement-major:
+            segsByVoice = []
+            for p in partsInProgress:
+                segs = [[]]
+                for tok in p:
+                    if tok=='NextScore OctavesAfter': segs.append([])
+                    else: segs[-1].append(tok)
+                segsByVoice.append(segs)
+            need = max(m0+len(segs) for m0,segs in zip(voiceFirstMvt,segsByVoice))
+            while len(movementParts) < need: movementParts.append([])
+            for m0,segs in zip(voiceFirstMvt,segsByVoice):
+                for segNo,seg in enumerate(segs):
+                    if any(t.strip() for t in seg): movementParts[m0+segNo].append((instName," ".join(seg)))
             del partsInProgress[:] ; del positionsInProgress[:]
             positionsInProgress.append(0);partsInProgress.append([])
+            del voiceFirstMvt[:] ; voiceFirstMvt.append(0)
             state.position=state.lastDuration=0 ; del paddingRestList[:]
             for k in list(paddingRestDict.keys()):
                 del paddingRestDict[k]
             paddingRestDict[0] = 0
+            state.mvtLastBarNo = None ; state.mvtBreakIndicators = set()
+            state.mvtBarLockedIndices = None ; state.breakCount = 0
             if partList: del partList[0]
         elif name=="fifths":
             state.keySig=['']*7
@@ -1208,7 +1238,7 @@ def xml2jianpu(x):
         elif name=="beat-type": time[1]=d0
         elif name=="time":
             state.tsigOffsets = [len(paddingRestList)] # so anacrusis logic can come back and add to this
-            state.initialQuavers = 0 # count quavers in 1st bar
+            state.initialQuavers = F(0) # count quavers in 1st bar
             paddingRestList.append("/".join(time))
             for k,v in list(paddingRestDict.items()):
                 if v==len(paddingRestList)-1: paddingRestDict[k] += 1
@@ -1224,27 +1254,27 @@ def xml2jianpu(x):
         elif name=="forward":
             state.position += state.lastDuration
             state.lastDuration = 0
-        elif name=="measure" and not state.tsigOffsets==None:
-            if not state.initialQuavers==int(time[0])*8/int(time[1]) and state.initialQuavers>0:
-                a = ","+{0.5:"16",0.75:"16.",1:"8",1.5:"8.",2:"4",3:"4.",4:"2",6:"2.",8:"1",12:"1."}[state.initialQuavers] # anacrusis
-                paddingRestList[state.tsigOffsets[0]] += a
-                for n,p in enumerate(state.tsigOffsets[1:]):
+        elif name == "measure" and not state.tsigOffsets == None:
+            expected = F(int(time[0])*8,int(time[1]))
+            if state.initialQuavers != expected and state.initialQuavers > 0:
+                a={F(1,2):"16",F(3,4):"16.",F(1):"8",F(3,2):"8.",F(2):"4",F(3):"4.",F(4):"2",F(6):"2.",F(8):"1",F(12):"1."}.get(state.initialQuavers)
+                if a is None: sys.stderr.write("Warning: cannot determine anacrusis from %s quavers; ignoring pickup\n" % state.initialQuavers)
+                else:
+                  a=","+a;paddingRestList[state.tsigOffsets[0]]+=a
+                  for n,p in enumerate(state.tsigOffsets[1:]):
                     if not p is None: partsInProgress[n][p]+=a
             state.tsigOffsets=None
         # Handle multibar rest from <multiple-rest> element (always on measure close) (contributed by Eagle Wu)
         if name=="measure" and state.multirestCount > 0:
             state.multirestCount -= 1
             # If signals are active during multirest, lock the insertion point to first measure
-            if state.looksLikeNewMovement() and state.mvtBarLockedIndex is None:
-                state.mvtBarLockedIndex = state.mvtStartBarIndex
+            if state.looksLikeNewMovement() and state.mvtBarLockedIndices is None:
+                state.mvtBarLockedIndices = state.mvtStartBarIndices[:]
             if state.multirestCount == 0:
-                # Check for movement boundary before outputting multirest
+                # Check for movement boundary before outputting multibar rest
                 if state.looksLikeNewMovement():
-                    insert_idx = state.mvtBarLockedIndex if state.mvtBarLockedIndex is not None else state.mvtStartBarIndex
-                    partsInProgress[0].insert(insert_idx, 'NextScore OctavesAfter')
-                    state.mvtBreakIndicators = set()
-                    state.mvtBarLockedIndex = None
-                
+                    insertMovementBreak(state.mvtBarLockedIndices if state.mvtBarLockedIndices is not None else state.mvtStartBarIndices)
+                    state.mvtBarLockedIndices = None
                 for p in partsInProgress: p.append('R*' + str(state.multirestTotal))
                 if state.multirestBuffer:
                     partsInProgress[0].append(state.multirestBuffer.strip())
@@ -1252,11 +1282,8 @@ def xml2jianpu(x):
                 state.multirestSkip = False
                 state.multirestCount = state.multirestTotal = 0
         elif name=="measure" and state.multirestCount == 0:
-            # Check for movement boundary at end of regular measures
             if len(state.mvtBreakIndicators) >= 2:
-                partsInProgress[0].insert(state.mvtStartBarIndex, 'NextScore OctavesAfter')
-            state.mvtBreakIndicators = set()
-            # Insert bar separator for txt export readability
+                insertMovementBreak(state.mvtStartBarIndices)
             partsInProgress[0].append("\n")
         elif name=="beat-unit": tempo[0]=typesMM.get(name,"4")
         elif name=="beat-minute" or name=="per-minute": tempo[1]=d0
@@ -1282,6 +1309,7 @@ def xml2jianpu(x):
         elif name=="slur": state.extras+={"start":" (","stop":" )"}[state.readAttrs.get("type","")]
         elif name=="tie": state.tie={"start":"~","stop":""}[state.readAttrs.get("type","")]
         elif name=="actual-notes": state.tuplet=d0
+        elif name=="normal-notes": state.tupletNormal=d0
         elif name=="tuplet": state.tState=state.readAttrs.get("type","")
         elif name=="chord": state.chord=True
         elif name=="tremolo": state.tremolo="///"
@@ -1347,12 +1375,14 @@ def xml2jianpu(x):
                         positionsInProgress[i] = state.position
                         break
             if ourRet is None: # need new part
-                partsInProgress.append(paddingRestList[:paddingRestDict[state.position]]) # TODO: collapse to whole-bar rests when needed (as above)
+                partsInProgress.append(paddingRestList[:paddingRestDict[state.position]])
                 positionsInProgress.append(state.position)
+                voiceFirstMvt.append(state.breakCount)
+                state.mvtStartBarIndices.append(None)
                 ourRet,ourI = partsInProgress[-1],len(partsInProgress)-1
             state.lastOurRet = ourRet
             # Now OK to add the note to the part (voice)
-            step,octave,acc,nType,dot,extras,tie,tuplet,tState,chord,grace,tremolo = state.getAndResetNote()
+            step,octave,acc,nType,dot,extras,tie,tuplet,tupletNormal,tState,chord,grace,tremolo = state.getAndResetNote()
             if state.multirestSkip: # just clean up
                 state.position+=state.lastDuration
                 positionsInProgress[ourI]=state.position
@@ -1385,9 +1415,9 @@ def xml2jianpu(x):
                 if ourI==0: paddingRestList.append(tuplet+"[")
             if not nType: # full-bar rest
                 assert (r,acc) == ("0","") and not tie, 'MusicXML standard at W3C does not allow measure="yes" for notes, you have found a non-standard file'
-                wantQ = int(time[0])*8/int(time[1])
+                wantQ = F(int(time[0])*8,int(time[1]))
                 nn = [k for k,v in quavers.items() if v==wantQ]
-                if not nn: nn,dot = [k for k,v in quavers.items() if v*1.5==wantQ],True
+                if not nn: nn,dot = [k for k,v in quavers.items() if v*F(3,2)==wantQ],True
                 if nn: nType = nn[0]
                 else: # need to split rests, so handle this separately
                     nList = []
@@ -1404,8 +1434,10 @@ def xml2jianpu(x):
                     if ourI==0: paddingRestDict[state.position] = len(paddingRestList)
                     return
             if not grace and not state.tsigOffsets==None and ourI==0: # we're counting the length of the first bar, for anacrusis
-                state.initialQuavers += quavers[nType]
-                if dot: state.initialQuavers += quavers[nType]/2.0
+                add = quavers[nType]
+                if dot: add += add/2
+                if tuplet: add *= F(int(tupletNormal) if tupletNormal else 2,int(tuplet))
+                state.initialQuavers += add
             if dot: d=typesDot
             else: d = types
             r += acc+('///' if tremolo else '')+d[nType]+' ' # typesDot or types, may add " -"s
@@ -1429,6 +1461,13 @@ def xml2jianpu(x):
     xmlparser.CharacterDataHandler = c
     xmlparser.EndElementHandler = e
     xmlparser.Parse(x,True)
+    movementParts = [mv for mv in movementParts if mv]
+    for m,mv in enumerate(movementParts):
+        for instName,txt in mv:
+            if instName: ret.append('instrument='+instName)
+            ret.append(txt)
+            ret.append("WithStaff NextPart")
+        if m < len(movementParts)-1: ret.append("NextScore OctavesAfter")
     ret = '\n'.join(ret)
     if not type("")==type(ret): ret=ret.encode('utf-8') # Python 2
     return ret
@@ -1857,6 +1896,7 @@ def getLY(score,headers=None,have_final_barline=True):
             elif word == "slideUp": notehead_markup.pendingSlide=u"\u2197"
             elif word == "slideDown": notehead_markup.pendingSlide=u"\u2198"
             elif word.startswith("slide="): notehead_markup.pendingSlide=word.split('=',1)[1]
+            elif word in ['arpUp','arpDown','arp']: notehead_markup.pendingArp=word
             elif word=="OnePage":
                 if notehead_markup.onePage: sys.stderr.write("WARNING: Duplicate OnePage, did you miss out a NextScore?\n")
                 notehead_markup.onePage=1
@@ -2049,9 +2089,6 @@ def getLY(score,headers=None,have_final_barline=True):
    return out,maxBeams,lyrics,headers,LP_between_head_and_first_score
 
 def process_input(inDat):
- global unicode_mode
- unicode_mode = not not re.search(r"\sUnicode\s"," "+inDat+" ")
- if unicode_mode: return get_unicode_approx(re.sub(r"\sUnicode\s"," "," "+inDat+" ").strip())+"\n"
  ret = []
  global scoreNo, western, has_lyrics, midi, not_angka, maxBeams, uniqCount, notehead_markup
  uniqCount = 0 ; notehead_markup = NoteheadMarkup()
@@ -2101,7 +2138,7 @@ def process_input(inDat):
        if notehead_markup.withStaff:
            western=True
            staffStart,voiceName = western_staff_start(inst)
-           average_octave = sum(notehead_markup.octavesSeen)*1.0/len(notehead_markup.octavesSeen)
+           average_octave = sum(notehead_markup.octavesSeen)*1.0/len(notehead_markup.octavesSeen) if notehead_markup.octavesSeen else 0
            if average_octave < -0.5: staffStart += r" \clef bass" # might want to say <0 but being conservative for now
            ret.append(staffStart+" "+getLY(part,have_final_barline=False)[0]+" "+western_staff_end())
            western = False
@@ -2115,7 +2152,7 @@ def process_input(inDat):
 def get_unicode_approx(inDat):
     if re.search(r"\sNextPart\s"," "+inDat+" "): errExit("multiple parts in Unicode mode not yet supported")
     if re.search(r"\sNextScore\s"," "+inDat+" "): errExit("multiple scores in Unicode mode not yet supported")
-    # TODO: also pick up on other not-supported stuff e.g. grace notes (or check for unicode_mode when these are encountered)
+    # TODO: also pick up on other not-supported stuff e.g. grace notes (or check for unicode_approx when these are encountered)
     global notehead_markup, western, midi, uniqCount, scoreNo, has_lyrics, not_angka, maxBeams
     notehead_markup = NoteheadMarkup()
     western = midi = not_angka = False
@@ -2145,21 +2182,21 @@ def write_exported(inDat,fn):
     o=open(fn,'w')
     fix_utf8(o,'w').write(inDat)
     o.close() ; print("Saved to "+fn)
-    
-def write_output(outDat,fn):
-    if sys.stdout.isatty():
-      if unicode_mode:
-        if sys.platform=='win32' and sys.version_info() < (3,6):
-          # Unicode on this console could be a problem
-          print ("""
+
+def write_unicode(outDat):
+    if sys.stdout.isatty() and sys.platform=='win32' and sys.version_info() < (3,6):
+        # Unicode on this console could be a problem
+        print ("""
 For Unicode approximation on this system, please do one of these things:
 (1) redirect output to a file,
 (2) upgrade to Python 3.6 or above, or
 (3) switch from Microsoft Windows to GNU/Linux""")
-          return
-      else: # normal Lilypond with no output redirect.  Previous versions used temp directory, so be careful with overwrites:
+    else: fix_utf8(sys.stdout,'w').write(outDat+"\n")
+
+def write_output(outDat,fn):
+    if sys.stdout.isatty(): # No output redirect.  Previous versions used temp directory, so be careful with overwrites:
         cwd = os.getcwd()
-        if os.path.exists(fn) and not "\n%{ The jianpu-ly input was:\n" in open(fn).read():
+        if os.path.exists(fn) and not b"\n%{ The jianpu-ly input was:\n" in open(fn,"rb").read():
             print(cwd+os.sep+fn+" already exists\nand doesn't look like jianpu-ly output, so not overwriting it")
             os.chdir(tempfile.gettempdir())
         print("Outputting to "+os.getcwd()+os.sep+fn)
@@ -2196,6 +2233,7 @@ args = {
     '--version': ("Just write version number (aliases: -v, /v)","只显示版本号（别名：-v、/v）",[write_version]),'-v':("","",[write_version]),'/v':("","",[write_version]),
     '--export-jly': ("Export the jianpu input to a .jly file instead of converting it (useful e.g. after a MusicXML import)","导出简谱输入到 .jly 文件而不进行转换（例如在导入 MusicXML 之后）",[('export', True)]),
     '--export-txt': ("","",[('export',True)]), # hidden alias for --export-jly for backward compatibility
+    '--unicode-approx': ("Output a Unicode approximation of the jianpu instead of Lilypond code","用Unicode近似值代替Lilypond代码",[('unicode_approx',True)]),
 }
 def read_args():
     files,actions = [],[]
@@ -2215,6 +2253,7 @@ def main():
     files = read_args()
     inDat = get_input(files)
     if export: return write_exported(inDat,outName(files,"jly")) # not txt please because we don't want to imply arbitrary wrap is OK on header or lyric lines
+    if unicode_approx: return write_unicode(get_unicode_approx(inDat))
     out = process_input(inDat) # you can also call this if importing as a module
     write_output(out,outName(files,"ly"))
 

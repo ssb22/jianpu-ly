@@ -110,6 +110,8 @@ Simple chords: `,135' 1 1b3 1`
 
 Grace note chords: `g[1&3&5] 1`
 
+Arpeggiated chords: `arpUp 135 arpDown 531 arp 135`
+
 Da capo: `1 1 Fine 1 1 1 1 1 1 DC`
 
 Dal segno: `1 1 Segno 1 1 ToCoda 1 1 DS 1 1`
@@ -154,8 +156,6 @@ Other Lilypond code: `LP: (block of code) :LP` (each delimeter at start of its l
 
 Lilypond header additions: `LPH: (definitions) :LPH` (each at start of line)
 
-Unicode approximation instead of Lilypond: `Unicode`
-
 Split MIDI files per part: `PartMidi`
 
 Ignored: `% a comment`
@@ -177,6 +177,8 @@ Ignored: `% a comment`
 `--noStaff`: Force no Western staff, even if the input asks for one
 
 `--nosort`: Don't sort chord notes by pitch (crossing parts when 2-voice music was mistakenly coded as chords)
+
+`--unicode-approx`: Output a Unicode approximation of the jianpu instead of Lilypond code
 
 `--version`: Just write version number (aliases: -v, /v)
 
