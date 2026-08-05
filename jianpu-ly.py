@@ -1145,8 +1145,8 @@ def xml2jianpu(x):
             self.lastOurRet = None
         def looksLikeNewMovement(self): return len(self.mvtBreakIndicators) >= 2 # MusicXML standard = only 1 movement per file, but some programs like MuseScore include multiple movements.  To prevent false positives on this, we watch for at least 2 indicators that a new movement has begun before acting on it.
         def getAndResetNote(self,first=False):
-            r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tupletNormal,self.tState,self.chord,self.grace,self.tremolo)
-            self.step=self.octave=self.accidental=self.nType=self.dot=self.extras=self.tie=self.tuplet=self.tupletNormal=self.tState=self.chord=self.grace=self.tremolo=""
+            r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tupletNormal,self.tState,self.chord,self.grace,self.tremolo,self.arpeggio)
+            self.step=self.octave=self.accidental=self.nType=self.dot=self.extras=self.tie=self.tuplet=self.tupletNormal=self.tState=self.chord=self.grace=self.tremolo=self.arpeggio=""
             return r
     state = State()
     def insertMovementBreak(idxs):
@@ -1312,6 +1312,12 @@ def xml2jianpu(x):
         elif name=="normal-notes": state.tupletNormal=d0
         elif name=="tuplet": state.tState=state.readAttrs.get("type","")
         elif name=="chord": state.chord=True
+        elif name=="arpeggiate":
+            direction = state.readAttrs.get("direction","")
+            if direction == "up": state.arpeggio = "arpUp"
+            elif direction == "down": state.arpeggio = "arpDown"
+            else: state.arpeggio = "arp"
+        elif name=="arpeggio": state.arpeggio = "arp"
         elif name=="tremolo": state.tremolo="///"
         elif name=="grace": state.grace=True
         elif name=="strong-accent": state.extras+=r" \accent"
@@ -1382,7 +1388,7 @@ def xml2jianpu(x):
                 ourRet,ourI = partsInProgress[-1],len(partsInProgress)-1
             state.lastOurRet = ourRet
             # Now OK to add the note to the part (voice)
-            step,octave,acc,nType,dot,extras,tie,tuplet,tupletNormal,tState,chord,grace,tremolo = state.getAndResetNote()
+            step,octave,acc,nType,dot,extras,tie,tuplet,tupletNormal,tState,chord,grace,tremolo,arpeggio = state.getAndResetNote()
             if state.multirestSkip: # just clean up
                 state.position+=state.lastDuration
                 positionsInProgress[ourI]=state.position
@@ -1448,7 +1454,7 @@ def xml2jianpu(x):
             if state.pendingWedgeCmd:
                 extras = extras+' '+state.pendingWedgeCmd
                 state.pendingWedgeCmd = ""
-            ourRet.append(w1+extras+' '+w2+' '+tie)
+            ourRet.append((arpeggio+' ' if arpeggio else '')+w1+extras+' '+w2+' '+tie)
             if tState=="stop":
                 ourRet.append("]")
                 if ourI==0: paddingRestList.append("]")

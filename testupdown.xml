@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE score-partwise PUBLIC "-//Recorded Music//DTD MusicXML 3.1 Partwise//EN" "http://www.musicxml.com/dtds/partwise.dtd">
+<score-partwise version="3.1">
+  <part-list>
+    <score-part id="P1"><part-name>Test</part-name></score-part>
+  </part-list>
+  <part id="P1">
+    <!-- Bar 1: arpeggio down -->
+    <measure number="1">
+      <attributes>
+        <divisions>1</divisions>
+        <key><fifths>0</fifths></key>
+        <time><beats>4</beats><beat-type>4</beat-type></time>
+        <clef><sign>G</sign><line>2</line></clef>
+      </attributes>
+      <note>
+        <pitch><step>D</step><octave>3</octave></pitch>
+        <duration>4</duration>
+        <type>whole</type>
+        <arpeggiate direction="down"/>
+      </note>
+    </measure>
+    <!-- Bar 2: arpeggio up -->
+    <measure number="2">
+      <note>
+        <pitch><step>E</step><octave>3</octave></pitch>
+        <duration>4</duration>
+        <type>whole</type>
+        <arpeggiate direction="up"/>
+      </note>
+    </measure>
+    <!-- Bar 3: arpeggio normal -->
+    <measure number="3">
+      <note>
+        <pitch><step>F</step><octave>3</octave></pitch>
+        <duration>4</duration>
+        <type>whole</type>
+        <arpeggiate/>
+      </note>
+    </measure>
+  </part>
+</score-partwise>
