@@ -1414,8 +1414,11 @@ def xml2jianpu(x):
                     ourRet[-1]=ourRet[-1][:i]+"&"+r+ourRet[-1][i:]
                 else:
                     rr = state.prevChordNList[state.prevChordOffset]
-                    state.prevChordNList[state.prevChordOffset] = rr.split()[0]+(tremolo if not tremolo in rr else '')+r+''.join([' '+x for x in rr.split()[1:]]) # last part is the " -"s
-                return
+                    parts = rr.split()
+                    arp = parts[0] if parts and parts[0] in ('arpUp','arpDown','arp') else ''
+                    rest = ' '.join(parts[1:]) if arp else ' '.join(parts)
+                    state.prevChordNList[state.prevChordOffset] = (arp+' ' if arp else '')+(tremolo if not tremolo in rr else '')+r+' '+rest # last part is the " -"s
+                    return
             if tState=="start":
                 ourRet.append(tuplet+"[")
                 if ourI==0: paddingRestList.append(tuplet+"[")
@@ -1454,8 +1457,7 @@ def xml2jianpu(x):
             if state.pendingWedgeCmd:
                 extras = extras+' '+state.pendingWedgeCmd
                 state.pendingWedgeCmd = ""
-            if arpeggio: ourRet.append(arpeggio)
-            ourRet.append(w1+extras+' '+w2+' '+tie)
+            ourRet.append((arpeggio+' ' if arpeggio else '')+w1+extras+' '+w2+' '+tie)
             if tState=="stop":
                 ourRet.append("]")
                 if ourI==0: paddingRestList.append("]")
