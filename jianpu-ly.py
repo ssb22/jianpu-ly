@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.881 (c) 2012-2026 Silas S. Brown
+# v1.882 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1145,8 +1145,8 @@ def xml2jianpu(x):
             self.lastOurRet = None
         def looksLikeNewMovement(self): return len(self.mvtBreakIndicators) >= 2 # MusicXML standard = only 1 movement per file, but some programs like MuseScore include multiple movements.  To prevent false positives on this, we watch for at least 2 indicators that a new movement has begun before acting on it.
         def getAndResetNote(self,first=False):
-            r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tupletNormal,self.tState,self.chord,self.grace,self.tremolo)
-            self.step=self.octave=self.accidental=self.nType=self.dot=self.extras=self.tie=self.tuplet=self.tupletNormal=self.tState=self.chord=self.grace=self.tremolo=""
+            r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tupletNormal,self.tState,self.chord,self.grace,self.tremolo,self.arpeggio)
+            self.step=self.octave=self.accidental=self.nType=self.dot=self.extras=self.tie=self.tuplet=self.tupletNormal=self.tState=self.chord=self.grace=self.tremolo=self.arpeggio=""
             return r
     state = State()
     def insertMovementBreak(idxs):
@@ -1312,6 +1312,8 @@ def xml2jianpu(x):
         elif name=="normal-notes": state.tupletNormal=d0
         elif name=="tuplet": state.tState=state.readAttrs.get("type","")
         elif name=="chord": state.chord=True
+        elif name=="arpeggiate": state.arpeggio = {"up":"arpUp","down":"arpDown"}.get(state.readAttrs.get("direction",""),"arp")
+        elif name=="arpeggio": state.arpeggio = "arp"
         elif name=="tremolo": state.tremolo="///"
         elif name=="grace": state.grace=True
         elif name=="strong-accent": state.extras+=r" \accent"
@@ -1382,7 +1384,7 @@ def xml2jianpu(x):
                 ourRet,ourI = partsInProgress[-1],len(partsInProgress)-1
             state.lastOurRet = ourRet
             # Now OK to add the note to the part (voice)
-            step,octave,acc,nType,dot,extras,tie,tuplet,tupletNormal,tState,chord,grace,tremolo = state.getAndResetNote()
+            step,octave,acc,nType,dot,extras,tie,tuplet,tupletNormal,tState,chord,grace,tremolo,arpeggio = state.getAndResetNote()
             if state.multirestSkip: # just clean up
                 state.position+=state.lastDuration
                 positionsInProgress[ourI]=state.position
@@ -1408,7 +1410,11 @@ def xml2jianpu(x):
                     ourRet[-1]=ourRet[-1][:i]+"&"+r+ourRet[-1][i:]
                 else:
                     rr = state.prevChordNList[state.prevChordOffset]
-                    state.prevChordNList[state.prevChordOffset] = rr.split()[0]+(tremolo if not tremolo in rr else '')+r+''.join([' '+x for x in rr.split()[1:]]) # last part is the " -"s
+                    chord,dashes = rr.split(None,1)
+                    if chord in ('arpUp','arpDown','arp'): arp,(chord,dashes)=chord+" ",dashes.split(None,1)
+                    else: arp=""
+                    if dashes: dashes=" "+dashes
+                    state.prevChordNList[state.prevChordOffset] = arp+(tremolo if not tremolo in rr else '')+chord+dashes
                 return
             if tState=="start":
                 ourRet.append(tuplet+"[")
@@ -1448,7 +1454,7 @@ def xml2jianpu(x):
             if state.pendingWedgeCmd:
                 extras = extras+' '+state.pendingWedgeCmd
                 state.pendingWedgeCmd = ""
-            ourRet.append(w1+extras+' '+w2+' '+tie)
+            ourRet.append((arpeggio+' ' if arpeggio else '')+w1+extras+' '+w2+' '+tie)
             if tState=="stop":
                 ourRet.append("]")
                 if ourI==0: paddingRestList.append("]")
