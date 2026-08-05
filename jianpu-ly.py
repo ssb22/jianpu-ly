@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.881 (c) 2012-2026 Silas S. Brown
+# v1.882 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1312,11 +1312,7 @@ def xml2jianpu(x):
         elif name=="normal-notes": state.tupletNormal=d0
         elif name=="tuplet": state.tState=state.readAttrs.get("type","")
         elif name=="chord": state.chord=True
-        elif name=="arpeggiate":
-            direction = state.readAttrs.get("direction","")
-            if direction == "up": state.arpeggio = "arpUp"
-            elif direction == "down": state.arpeggio = "arpDown"
-            else: state.arpeggio = "arp"
+        elif name=="arpeggiate": state.arpeggio = {"up":"arpUp","down":"arpDown"}.get(state.readAttrs.get("direction",""),"arp")
         elif name=="arpeggio": state.arpeggio = "arp"
         elif name=="tremolo": state.tremolo="///"
         elif name=="grace": state.grace=True
@@ -1414,12 +1410,12 @@ def xml2jianpu(x):
                     ourRet[-1]=ourRet[-1][:i]+"&"+r+ourRet[-1][i:]
                 else:
                     rr = state.prevChordNList[state.prevChordOffset]
-                    parts = rr.split()
-                    arp = parts[0] if parts and parts[0] in ('arpUp','arpDown','arp') else ''
-                    firstNote = parts[0] if not arp else parts[1] if len(parts) > 1 else ''
-                    rest = ' '.join(parts[2:]) if arp else ' '.join(parts[1:])
-                    state.prevChordNList[state.prevChordOffset] = (arp+' ' if arp else '')+(tremolo if not tremolo in rr else '')+firstNote+r+''.join([' '+x for x in rest.split()]) # last part is the " -"s
-                    return
+                    chord,dashes = rr.split(None,1)
+                    if chord in ('arpUp','arpDown','arp'): arp,(chord,dashes)=chord+" ",dashes.split(None,1)
+                    else: arp=""
+                    if dashes: dashes=" "+dashes
+                    state.prevChordNList[state.prevChordOffset] = arp+(tremolo if not tremolo in rr else '')+chord+dashes
+                return
             if tState=="start":
                 ourRet.append(tuplet+"[")
                 if ourI==0: paddingRestList.append(tuplet+"[")
