@@ -1454,7 +1454,8 @@ def xml2jianpu(x):
             if state.pendingWedgeCmd:
                 extras = extras+' '+state.pendingWedgeCmd
                 state.pendingWedgeCmd = ""
-            ourRet.append((arpeggio+' ' if arpeggio else '')+w1+extras+' '+w2+' '+tie)
+            if arpeggio: ourRet.append(arpeggio)
+            ourRet.append(w1+extras+' '+w2+' '+tie)
             if tState=="stop":
                 ourRet.append("]")
                 if ourI==0: paddingRestList.append("]")
