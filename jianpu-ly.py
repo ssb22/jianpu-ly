@@ -1410,12 +1410,18 @@ def xml2jianpu(x):
                     ourRet[-1]=ourRet[-1][:i]+"&"+r+ourRet[-1][i:]
                 else:
                     rr = state.prevChordNList[state.prevChordOffset]
-                    chord,dashes = rr.split(None,1)
-                    if chord in ('arpUp','arpDown','arp'): arp,(chord,dashes)=chord+" ",dashes.split(None,1)
+                    parts = rr.split(None,1)
+                    if len(parts) < 2: chord,dashes = rr,''
+                    else: chord,dashes = parts
+                    if chord in ('arpUp','arpDown','arp'):
+                        arpParts = dashes.split(None,1)
+                        arp=chord+" "
+                        chord=arpParts[0]
+                        dashes=arpParts[1] if len(arpParts)>1 else ''
                     else: arp=""
                     if dashes: dashes=" "+dashes
-                    state.prevChordNList[state.prevChordOffset] = arp+(tremolo if not tremolo in rr else '')+chord+dashes
-                return
+                    state.prevChordNList[state.prevChordOffset] = arp+(tremolo if not tremolo in rr else '')+chord+r+dashes
+                    return
             if tState=="start":
                 ourRet.append(tuplet+"[")
                 if ourI==0: paddingRestList.append(tuplet+"[")
