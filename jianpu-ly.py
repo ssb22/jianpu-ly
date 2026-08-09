@@ -960,7 +960,7 @@ class NoteheadMarkup:
         else:
             ret = r" \jianpuGraceCurveEnd " + ret 
     # sys.stderr.write(accidental+figure+octave+dots+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
-    if self.pendingArp: ret += r"\arpeggio "
+    if self.pendingArp: ret += r"\arpeggio "; self.pendingArp = 0
     if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figures,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
     if (self.barPos%self.beatLength == 0 or self.barPos==self.barLength) and self.inBeamGroup: # (or added for irregular time signatures; self.inBeamGroup is set only if not midi/western)
         # jianpu printouts tend to restart beams every beat
@@ -1217,6 +1217,7 @@ def xml2jianpu(x):
             paddingRestDict[0] = 0
             state.mvtLastBarNo = None ; state.mvtBreakIndicators = set()
             state.mvtBarLockedIndices = None ; state.breakCount = 0
+            state.prevChordOffset = None ; state.prevChordNList = None
             if partList: del partList[0]
         elif name=="fifths":
             state.keySig=['']*7
@@ -1411,13 +1412,13 @@ def xml2jianpu(x):
                 else:
                     rr = state.prevChordNList[state.prevChordOffset]
                     parts = rr.split(None,1)
-                    if len(parts) < 2: chord,dashes = rr,''
+                    if len(parts) < 2: chord,dashes = rr.strip(),' '
                     else: chord,dashes = parts
                     if chord in ('arpUp','arpDown','arp'):
                         arpParts = dashes.split(None,1)
                         arp=chord+" "
                         chord=arpParts[0]
-                        dashes=arpParts[1] if len(arpParts)>1 else ''
+                        dashes=arpParts[1].rstrip() if len(arpParts)>1 else ''
                     else: arp=""
                     if dashes: dashes=" "+dashes
                     state.prevChordNList[state.prevChordOffset] = arp+(tremolo if not tremolo in rr else '')+chord+r+dashes
