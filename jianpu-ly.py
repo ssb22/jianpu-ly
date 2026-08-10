@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.882 (c) 2012-2026 Silas S. Brown
+# v1.883 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -960,7 +960,7 @@ class NoteheadMarkup:
         else:
             ret = r" \jianpuGraceCurveEnd " + ret 
     # sys.stderr.write(accidental+figure+octave+dots+"/"+str(nBeams)+"->"+str(self.barPos)+" ") # if need to see where we are
-    if self.pendingArp: ret += r"\arpeggio "
+    if self.pendingArp: ret,self.pendingArp = ret+r"\arpeggio ",0
     if self.barPos > self.barLength: errExit("(notesHad=%s) barcheck fail: note crosses barline at \"%s\" with %d beams (%d skipped from %d to %d, bypassing %d), scoreNo=%d barNo=%d (but the error could be earlier)" % (' '.join(self.notesHad),figures,nBeams,toAdd,self.barPos-toAdd,self.barPos,self.barLength,scoreNo,self.barNo))
     if (self.barPos%self.beatLength == 0 or self.barPos==self.barLength) and self.inBeamGroup: # (or added for irregular time signatures; self.inBeamGroup is set only if not midi/western)
         # jianpu printouts tend to restart beams every beat
@@ -1217,6 +1217,7 @@ def xml2jianpu(x):
             paddingRestDict[0] = 0
             state.mvtLastBarNo = None ; state.mvtBreakIndicators = set()
             state.mvtBarLockedIndices = None ; state.breakCount = 0
+            state.prevChordOffset = None ; state.prevChordNList = None
             if partList: del partList[0]
         elif name=="fifths":
             state.keySig=['']*7
@@ -1404,17 +1405,16 @@ def xml2jianpu(x):
                 state.barTied=(dTone%7) if tie else None
                 if state.keySig[dTone%7]=="#": acc="" if acc=="#" else "b"
                 if state.keySig[dTone%7]=="b": acc="" if acc=="b" else "#"
-            if chord:
-                if grace:
-                    i=ourRet[-1].rindex("]")
-                    ourRet[-1]=ourRet[-1][:i]+"&"+r+ourRet[-1][i:]
-                else:
-                    rr = state.prevChordNList[state.prevChordOffset]
-                    chord,dashes = rr.split(None,1)
-                    if chord in ('arpUp','arpDown','arp'): arp,(chord,dashes)=chord+" ",dashes.split(None,1)
-                    else: arp=""
-                    if dashes: dashes=" "+dashes
-                    state.prevChordNList[state.prevChordOffset] = arp+(tremolo if not tremolo in rr else '')+chord+dashes
+            if chord and grace:
+                i=ourRet[-1].rindex("]")
+                ourRet[-1]=ourRet[-1][:i]+"&"+r+ourRet[-1][i:]
+                return
+            elif chord:
+                rr = state.prevChordNList[state.prevChordOffset]
+                arp,chord,dashes = rr.split(" ",2)
+                if arp: arp += " "
+                if dashes: dashes=" "+dashes.rstrip()
+                state.prevChordNList[state.prevChordOffset] = arp+(tremolo if not tremolo in rr else '')+chord+r+dashes
                 return
             if tState=="start":
                 ourRet.append(tuplet+"[")
@@ -1454,7 +1454,7 @@ def xml2jianpu(x):
             if state.pendingWedgeCmd:
                 extras = extras+' '+state.pendingWedgeCmd
                 state.pendingWedgeCmd = ""
-            ourRet.append((arpeggio+' ' if arpeggio else '')+w1+extras+' '+w2+' '+tie)
+            ourRet.append(arpeggio+' '+w1+extras+' '+w2+' '+tie)
             if tState=="stop":
                 ourRet.append("]")
                 if ourI==0: paddingRestList.append("]")
