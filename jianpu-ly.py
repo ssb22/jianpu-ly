@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.883 (c) 2012-2026 Silas S. Brown
+# v1.884 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -152,6 +152,8 @@ Erhu symbol (applies to previous note): souyin harmonic up down bend tilde
 二胡其它符号（适用于前一个音符）： souyin harmonic up down bend tilde
 Tremolo: 1/// - 1///5 -
 震音： 1/// - 1///5 -
+Glissando: glis 1 - 5
+滑音： glis 1 - 5
 Rehearsal marks: letterA letterB letter3 letterAA
 排练记号： letterA letterB letter3 letterAA
 Multibar rest: R*8
@@ -349,7 +351,29 @@ note-mod =
      \tweak Rest.text
         \markup \lower #0.5 \sans \bold #text
      #note
-   #})"""
+   #})
+
+#(define (jianpu-glissando grob)
+   (let* ((left-note (ly:spanner-bound grob LEFT))
+          (right-note (ly:spanner-bound grob RIGHT))
+          (left-y (ly:grob-property left-note 'Y-offset 0))
+          (right-y (ly:grob-property right-note 'Y-offset 0))
+          (left-event (ly:grob-property left-note 'cause))
+          (right-event (ly:grob-property right-note 'cause))
+          (left-pitch (and (ly:stream-event? left-event)
+                           (ly:event-property left-event 'pitch)))
+          (right-pitch (and (ly:stream-event? right-event)
+                            (ly:event-property right-event 'pitch))))
+     (if (and left-pitch right-pitch)
+         (let* ((left-y-off (if (ly:pitch<? left-pitch right-pitch) (- left-y 0.9) (if (ly:pitch<? right-pitch left-pitch) (+ left-y 1.5) left-y)))
+                (right-y-off (if (ly:pitch<? left-pitch right-pitch) (+ right-y 0.9) (if (ly:pitch<? right-pitch left-pitch) (- right-y 1.5) right-y)))
+                (bd (ly:grob-property grob 'bound-details))
+                (left-bd (list-copy (assoc-get 'left bd '())))
+                (right-bd (list-copy (assoc-get 'right bd '())))
+                (new-left-bd (assoc-set! left-bd 'Y left-y-off))
+                (new-right-bd (assoc-set! right-bd 'Y right-y-off))
+                (new-bd (list (cons 'left new-left-bd) (cons 'right new-right-bd))))
+           (ly:grob-set-property! grob 'bound-details new-bd)))))"""
     if re.search(r"(\s|^)(angka|Indonesian)(\s|$)",inDat): r += r"""
 note-mod-angka = #(define-music-function (text note) (markup? ly:music?)
    #{ \tweak NoteHead.stencil #ly:text-interface::print
@@ -613,7 +637,8 @@ def jianpu_staff_start(inst=None):
     \new RhythmicStaff \with {
     \consists "Accidental_engraver" """
     r += r"""
-    \consists \jianpuGraceCurveEngraver"""
+    \consists \jianpuGraceCurveEngraver
+    \omit Staff.DotColumn \omit Voice.Dots \override Glissando.before-line-breaking = #jianpu-glissando"""
     if inst: r += '\ninstrumentName = "'+inst+'"'
     if notehead_markup.withStaff: r+=r"""
    %% Limit space between Jianpu and corresponding-Western staff
@@ -871,14 +896,13 @@ class NoteheadMarkup:
             ret += r' \once \override Accidental.font-size = #0 \once \override Accidental.stencil = #ly:text-interface::print \once \override Accidental.text = \markup { \lower #1.0 "'+self.pendingSlide+r'"'+(r' \hspace #0.2 \magnify #0.6 \musicglyph "accidentals.'+("sharp" if accidental == "#" else "flat")+r'"' if accidental_visible else "")+' } '
             add_cautionary_accidental = accidental_visible = True
             self.pendingSlide = 0
-        if isChord and not figures=="-":
-            ret += chord_ret
-        elif figures=="-":
+        if figures=="-":
             if not_angka: figureDash=u"."
             else: figureDash=u"\u2013"
             if not type(u"")==type(""):
                 figureDash=figureDash.encode('utf-8')
             ret += (r' \note-mod-angka "' if not_angka else r' \note-mod "')+figureDash+'" '
+        elif isChord: ret += chord_ret
         else: # single, non-dash note
             s = str(figures)
             if not_angka and accidental:
@@ -904,7 +928,7 @@ class NoteheadMarkup:
         if accidental_visible and not not_angka and not (figures.startswith("-") or midi or western): ret += r"\once \tweak Accidental.extra-offset #'(0 . 0.7)"
         ret += placeholder_chord
         if midi or western or not not_angka: ret += {"":"", "#":"is", "b":"es"}[accidental]
-        if (midi or western) and not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''","'''":"''''",",":"",",,":",",",,,":",,"}[octave] # so no-mark starts near middle C
+        if not placeholder_chord=="r": ret += {"":"'","'":"''","''":"'''","'''":"''''",",":"",",,":",",",,,":",,"}[octave] # so no-mark starts near middle C
         if add_cautionary_accidental: ret += "!"
     ret += ("%d" % length) + dots
     if self.rplacNextIfStillInBeam: self.rplacNextIfStillInBeam += ("r%d" % length) + dots + '['
@@ -1145,8 +1169,8 @@ def xml2jianpu(x):
             self.lastOurRet = None
         def looksLikeNewMovement(self): return len(self.mvtBreakIndicators) >= 2 # MusicXML standard = only 1 movement per file, but some programs like MuseScore include multiple movements.  To prevent false positives on this, we watch for at least 2 indicators that a new movement has begun before acting on it.
         def getAndResetNote(self,first=False):
-            r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tupletNormal,self.tState,self.chord,self.grace,self.tremolo,self.arpeggio)
-            self.step=self.octave=self.accidental=self.nType=self.dot=self.extras=self.tie=self.tuplet=self.tupletNormal=self.tState=self.chord=self.grace=self.tremolo=self.arpeggio=""
+            r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tupletNormal,self.tState,self.chord,self.grace,self.tremolo,self.extrasBefore)
+            self.step=self.octave=self.accidental=self.nType=self.dot=self.extras=self.tie=self.tuplet=self.tupletNormal=self.tState=self.chord=self.grace=self.tremolo=self.extrasBefore=""
             return r
     state = State()
     def insertMovementBreak(idxs):
@@ -1313,8 +1337,9 @@ def xml2jianpu(x):
         elif name=="normal-notes": state.tupletNormal=d0
         elif name=="tuplet": state.tState=state.readAttrs.get("type","")
         elif name=="chord": state.chord=True
-        elif name=="arpeggiate": state.arpeggio = {"up":"arpUp","down":"arpDown"}.get(state.readAttrs.get("direction",""),"arp")
-        elif name=="arpeggio": state.arpeggio = "arp"
+        elif name=="arpeggiate": state.extrasBefore += {"up":"arpUp ","down":"arpDown "}.get(state.readAttrs.get("direction",""),"arp ")
+        elif name=="arpeggio": state.extrasBefore += "arp "
+        elif name in ["slide","glissando"] and state.readAttrs.get("type","")=="start": state.extrasBefore += "glis "
         elif name=="tremolo": state.tremolo="///"
         elif name=="grace": state.grace=True
         elif name=="strong-accent": state.extras+=r" \accent"
@@ -1385,7 +1410,7 @@ def xml2jianpu(x):
                 ourRet,ourI = partsInProgress[-1],len(partsInProgress)-1
             state.lastOurRet = ourRet
             # Now OK to add the note to the part (voice)
-            step,octave,acc,nType,dot,extras,tie,tuplet,tupletNormal,tState,chord,grace,tremolo,arpeggio = state.getAndResetNote()
+            step,octave,acc,nType,dot,extras,tie,tuplet,tupletNormal,tState,chord,grace,tremolo,extrasBefore = state.getAndResetNote()
             if state.multirestSkip: # just clean up
                 state.position+=state.lastDuration
                 positionsInProgress[ourI]=state.position
@@ -1410,11 +1435,10 @@ def xml2jianpu(x):
                 ourRet[-1]=ourRet[-1][:i]+"&"+r+ourRet[-1][i:]
                 return
             elif chord:
-                rr = state.prevChordNList[state.prevChordOffset]
-                arp,chord,dashes = rr.split(" ",2)
-                if arp: arp += " "
+                extrasBefore,rr = state.prevChordNList[state.prevChordOffset].split(chr(0))
+                chord,dashes = rr.split(" ",1)
                 if dashes: dashes=" "+dashes.rstrip()
-                state.prevChordNList[state.prevChordOffset] = arp+(tremolo if not tremolo in rr else '')+chord+r+dashes
+                state.prevChordNList[state.prevChordOffset] = extrasBefore+chr(0)+(tremolo if not tremolo in rr else '')+chord+r+dashes
                 return
             if tState=="start":
                 ourRet.append(tuplet+"[")
@@ -1454,7 +1478,7 @@ def xml2jianpu(x):
             if state.pendingWedgeCmd:
                 extras = extras+' '+state.pendingWedgeCmd
                 state.pendingWedgeCmd = ""
-            ourRet.append(arpeggio+' '+w1+extras+' '+w2+' '+tie)
+            ourRet.append(extrasBefore+chr(0)+w1+extras+' '+w2+' '+tie)
             if tState=="stop":
                 ourRet.append("]")
                 if ourI==0: paddingRestList.append("]")
@@ -1474,7 +1498,7 @@ def xml2jianpu(x):
             ret.append(txt)
             ret.append("WithStaff NextPart")
         if m < len(movementParts)-1: ret.append("NextScore OctavesAfter")
-    ret = '\n'.join(ret)
+    ret = '\n'.join(ret).replace(chr(0),"")
     if not type("")==type(ret): ret=ret.encode('utf-8') # Python 2
     return ret
 
@@ -1729,7 +1753,7 @@ def getLY(score,headers=None,have_final_barline=True):
    repeatStack = [] ; lastPtr = 0
    lastNonDashPtr = 0
    rStartP = None
-   escaping = inTranspose = 0
+   escaping = inTranspose = pendingGliss = 0
    aftrnext = None
    aftrnext2 = None ; DS = "}"
    isInHarmonic = False
@@ -1903,6 +1927,7 @@ def getLY(score,headers=None,have_final_barline=True):
             elif word == "slideDown": notehead_markup.pendingSlide=u"\u2198"
             elif word.startswith("slide="): notehead_markup.pendingSlide=word.split('=',1)[1]
             elif word in ['arpUp','arpDown','arp']: notehead_markup.pendingArp=word
+            elif word in ["glis","gliss"]: pendingGliss=2
             elif word=="OnePage":
                 if notehead_markup.onePage: sys.stderr.write("WARNING: Duplicate OnePage, did you miss out a NextScore?\n")
                 notehead_markup.onePage=1
@@ -2033,11 +2058,22 @@ def getLY(score,headers=None,have_final_barline=True):
                 aftrLastNonDash,isDash,b4last,replaceLast,aftrlast,this,accidental_visible,nBeams,octave = notehead_markup(figures,nBeams,dots,octave,accidental,tremolo,word0,line)
                 if replaceLast: out[lastPtr]=replaceLast
                 if b4last: out[lastPtr]=b4last+out[lastPtr]
-                if aftrlast: out.insert(lastPtr+1,aftrlast)
+                if aftrlast and not (isDash and pendingGliss): out.insert(lastPtr+1,aftrlast)
                 if aftrLastNonDash: out.insert(lastNonDashPtr+1,aftrLastNonDash)
-                lastPtr = len(out)
-                if not isDash: lastNonDashPtr = len(out)
-                out.append(this)
+                if not isDash:
+                    if pendingGliss and not out[-1]=="~":
+                      pendingGliss -= 1
+                      if not pendingGliss:
+                          out.append(r"\glissando ")
+                    lastNonDashPtr = len(out)
+                elif pendingGliss:
+                    if midi or western: cB,cA = "()","$"
+                    else: cB,cA = "(note-mod \".\" [a-g][',]*)",""
+                    longerNote = re.sub(cB+'4'+cA,r'\g<1>2',re.sub(cB+'2(?![.])'+cA,r'\g<1>2.',re.sub(cB+'2[.]'+cA,r'\g<1>1',out[lastPtr],count=1),count=1),count=1)
+                    if out[lastPtr]==longerNote: sys.stderr.write("Warning: failed to elongate this note for glissando, may spoil typesetting: {"+longerNote+"}\n")
+                    else: out[lastPtr],this = longerNote,"" # suppress dash, elongate instead
+                if this:
+                    lastPtr = len(out) ; out.append(this)
                 if aftrnext2:
                     out.append(aftrnext2)
                     aftrnext2 = None

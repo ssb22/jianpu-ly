@@ -134,6 +134,8 @@ Erhu symbol (applies to previous note): `souyin harmonic up down bend tilde`
 
 Tremolo: `1/// - 1///5 -`
 
+Glissando: `glis 1 - 5`
+
 Rehearsal marks: `letterA letterB letter3 letterAA`
 
 Multibar rest: `R*8`

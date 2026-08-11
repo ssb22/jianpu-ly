@@ -132,6 +132,8 @@ Lilypond 标题： `title=标题` （单独一行）
 
 震音： `1/// - 1///5 -`
 
+滑音： `glis 1 - 5`
+
 排练记号： `letterA letterB letter3 letterAA`
 
 多小节休止： `R*8`
