@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.884 (c) 2012-2026 Silas S. Brown
+# v1.885 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1927,7 +1927,7 @@ def getLY(score,headers=None,have_final_barline=True):
             elif word == "slideDown": notehead_markup.pendingSlide=u"\u2198"
             elif word.startswith("slide="): notehead_markup.pendingSlide=word.split('=',1)[1]
             elif word in ['arpUp','arpDown','arp']: notehead_markup.pendingArp=word
-            elif word in ["glis","gliss"]: pendingGliss=2
+            elif word in ["glis","gliss"]: pendingGliss=3
             elif word=="OnePage":
                 if notehead_markup.onePage: sys.stderr.write("WARNING: Duplicate OnePage, did you miss out a NextScore?\n")
                 notehead_markup.onePage=1
@@ -2061,10 +2061,11 @@ def getLY(score,headers=None,have_final_barline=True):
                 if aftrlast and not (isDash and pendingGliss): out.insert(lastPtr+1,aftrlast)
                 if aftrLastNonDash: out.insert(lastNonDashPtr+1,aftrLastNonDash)
                 if not isDash:
-                    if pendingGliss and not out[-1]=="~":
-                      pendingGliss -= 1
-                      if not pendingGliss:
-                          out.append(r"\glissando ")
+                    if pendingGliss==2:
+                        pendingGliss = 1 if out[-1]=="~" else 0
+                        out.append(r"\glissando")
+                    elif pendingGliss and not (pendingGliss==1 and out[-1]=="~"): pendingGliss -= 1
+                    if pendingGliss==1 and out[-1] in ["~",r"\glissando"]: out.append(r"\once \override NoteColumn.glissando-skip = ##t")
                     lastNonDashPtr = len(out)
                 elif pendingGliss:
                     if midi or western: cB,cA = "()","$"
