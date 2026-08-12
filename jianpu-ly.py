@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.885 (c) 2012-2026 Silas S. Brown
+# v1.886 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -697,7 +697,7 @@ dashes_as_ties = True # Implement dash (-) continuations as invisible ties rathe
 use_rest_hack = True # Implement some short rests as notes (and if there are lyrics, creates temporary voices so the lyrics miss them); sometimes works better for beaming (at least in 2.15 through 2.24)
 sort_chords = True # Normally should be left as True.  See comment on --nosort below
 force_staff = None # None=default (respect input), True=--withStaff forces 5-line staff, False=--noStaff disables it
-unicode_approx = False
+unicode_approx = xml_octaveShift_override = False
 
 class JlyException(Exception): pass # wrapped so you can catch it if you're calling this code as a module
 def errExit(msg):
@@ -771,7 +771,7 @@ class NoteheadMarkup:
       self.current_chord = None
   def endScore(self):
       if self.barPos == self.startBarPos: pass
-      elif os.environ.get("j2ly_sloppy_bars",""): sys.stderr.write("Wrong bar length at end of score %d ignored (j2ly_sloppy_bars set)\n" % scoreNo)
+      elif os.environ.get("j2ly_sloppy_bars"): sys.stderr.write("Wrong bar length at end of score %d ignored (j2ly_sloppy_bars set)\n" % scoreNo)
       elif self.startBarPos and not self.barPos: errExit("Score %d should end with a %g-beat bar to make up for the %g-beat anacrusis bar.  Set j2ly_sloppy_bars environment variable if you really want to break this rule." % (scoreNo,self.startBarPos/self.beatLength,(self.barLength-self.startBarPos)/self.beatLength)) # this is on the music theory syllabi at about Grade 3, but you can get up to Grade 5 practical without actually covering it, so we'd better not expect all users to understand "final bar does not make up for anacrusis bar"
       else: errExit("Incomplete bar at end of score %d (%g beats)" % (scoreNo,self.barPos*1.0/self.beatLength))
   def setTime(self,num,denom):
@@ -1100,6 +1100,9 @@ def dotsDictWithXTweaks(graceType):
 def getInput0(files):
   inDat = []
   for f in files:
+    if f.endswith(".mscz") or f.endswith(".mscx"): # somebody sent us a MuseScore file and forgot to export to MusicXML (not sure how to handle mxl already existing when this happens, so use tempdir)
+        o,f=f,tempfile.gettempdir()+os.sep+outName([f],"mxl")
+        if system(("musescore4" if (shutil.which('musescore4') if hasattr(shutil,'which') else os.path.exists('/usr/bin/musescore4')) else "musescore3" if (shutil.which('musescore3') if hasattr(shutil,'which') else os.path.exists('/usr/bin/musescore3')) else "musescore")+" -f -o "+quote(f)+" "+quote(o)): errExit("Failed to convert MuseScore file "+o+" to MusicXML "+f)
     if f.endswith(".mxl"):
         import zipfile ; z=zipfile.ZipFile(f)
         for F in z.infolist():
@@ -1147,6 +1150,7 @@ def xml2jianpu(x):
     from xml.parsers.expat import ParserCreate
     xmlparser = ParserCreate()
     positionsInProgress,partsInProgress = [0],[[]]
+    lyricsInProgress = [[({},0)]] # voice -> movement -> (verseDict, noteCount)
     voiceFirstMvt = [0] # 0-based index of the first movement each voice belongs to
     movementParts = [] # movementParts[m] = [(instrumentName, voiceText), ...] across all MusicXML <part>s
     paddingRestList, paddingRestDict = [], {0:0}
@@ -1167,17 +1171,26 @@ def xml2jianpu(x):
             self.activeWedges = {}
             self.pendingWedgeCmd = ""
             self.lastOurRet = None
+            self.lyrics_for_current_note = []
+            self.lyric_state,self.in_text,self.text_buffer=None,False,""
+            self.inEnding = self.pendingRepeatClose = False
+            self.fifths = self.mode = self.software = ""
+            self.octaveShifts = {}
         def looksLikeNewMovement(self): return len(self.mvtBreakIndicators) >= 2 # MusicXML standard = only 1 movement per file, but some programs like MuseScore include multiple movements.  To prevent false positives on this, we watch for at least 2 indicators that a new movement has begun before acting on it.
         def getAndResetNote(self,first=False):
             r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tupletNormal,self.tState,self.chord,self.grace,self.tremolo,self.extrasBefore)
             self.step=self.octave=self.accidental=self.nType=self.dot=self.extras=self.tie=self.tuplet=self.tupletNormal=self.tState=self.chord=self.grace=self.tremolo=self.extrasBefore=""
             return r
     state = State()
+    def allParts(cmd):
+        for n,p in enumerate(partsInProgress):
+            if positionsInProgress[n]==max(positionsInProgress): p.append(cmd)
     def insertMovementBreak(idxs):
         for n,p in enumerate(partsInProgress):
             idx = idxs[n] if n < len(idxs) else 0
             if idx is None: idx = 0
             p.insert(idx, 'NextScore OctavesAfter')
+            lyricsInProgress[n].append(({},0))
         state.mvtBreakIndicators = set()
         state.breakCount += 1
     types={"64th":"h","32nd":"d","16th":"s","eighth":"q","quarter":"","half":" -","whole":" - - -"}
@@ -1199,18 +1212,28 @@ def xml2jianpu(x):
                         state.mvtBreakIndicators.add("measure reset")
                     state.mvtLastBarNo = thisBarNo
                 except ValueError: pass
-    def c(data): state.readData += data
+        elif name=="lyric": state.lyric_state={"verse":attrs.get("number",attrs.get("name","1")),"texts":[],"syllabic":"single","extend":False,"elisions":[]}
+        elif state.lyric_state:
+            if name=="text": state.in_text,state.text_buffer = True,""
+            elif name=="elision": state.lyric_state["elisions"].append(True)
+            elif name=="extend": state.lyric_state["extend"]=(attrs.get("type")!="stop")
+    def c(data):
+        state.readData += data
+        if state.in_text: state.text_buffer += data
+    mxl2artic={"strong-accent":"accent","up-bow":"upbow","down-bow":"downbow","trill-mark":"trill","inverted-mordent":"prall","harmonic":"flageolet","snap-pizzicato":"snappizzicato","breath-mark":"breathe","inverted-turn":"reverseturn","detached-legato":"portato"}
+    for n in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open caesura scoop plop doit falloff".split(): mxl2artic[n]=n # Lilypond command is identical to MusicXML element name
+    mxl2all={"da-capo":"DC", "dal-segno":"DS", "segno":"Segno", "coda":"ToCoda", "fine":"Fine"} # TODO: is <coda> sometimes the actual coda not ToCoda?  (hopefully rare)
     def e(name):
         d0 = state.readData.strip()
-        if name in ['work-title','movement-title'] or name=='credit-words' and state.readAttrs.get("justify","")=="center":
-            if name == 'movement-title':
-                state.mvtBreakIndicators.add("movement title")
-            if not(any(r.startswith("title=") for r in ret)):
-                ret.append('title='+d0.replace("\n"," "))
-        elif name=='creator' and state.readAttrs.get("type","")=="composer" or name=='credit-words' and state.readAttrs.get("justify","")=="right":
-            if not(any(r.startswith("composer=") for r in ret)):
-                ret.append('composer='+d0.replace("\n"," "))
-        elif name=="part-name" or name=="instrument-name": partList[-1]=d0
+        if name in ['work-title','movement-title'] or name=='credit-words' and state.readAttrs.get("justify")=="center":
+            if name=='movement-title': state.mvtBreakIndicators.add("movement title")
+            if not any(r.startswith("title=") for r in ret): ret.append('title='+d0.replace("\n"," "))
+        elif (name=="creator" and state.readAttrs.get("type")=="composer" or name=='credit-words' and state.readAttrs.get("justify")=="right") and not any(r.startswith("composer=") for r in ret): ret.append("composer="+d0.replace("\n"," "))
+        elif name=="creator" and state.readAttrs.get("type")=="arranger" and not any(r.startswith("arranger=") for r in ret): ret.append("arranger="+d0.replace("\n"," "))
+        elif name=="creator" and state.readAttrs.get("type")=="lyricist" and not any(r.startswith("poet=") for r in ret): ret.append("poet="+d0.replace("\n"," "))
+        elif name=="opus" and not(any(r.startswith("opus=") for r in ret)): ret.append("opus="+d0.replace("\n"," "))
+        elif name=="rights" and not(any(r.startswith("copyright=") for r in ret)): ret.append("copyright="+d0.replace("\n"," "))
+        elif name in ["part-name","part-name-display","instrument-name"]: partList[-1]=d0
         elif name=="score-part": partList.append("")
         elif name=="part": # we're assuming score-partwise
             instName = partList[0] if partList else None
@@ -1227,13 +1250,23 @@ def xml2jianpu(x):
                     if tok=='NextScore OctavesAfter': segs.append([])
                     else: segs[-1].append(tok)
                 segsByVoice.append(segs)
+            lyricsByVoice=lyricsInProgress[:]
             need = max(m0+len(segs) for m0,segs in zip(voiceFirstMvt,segsByVoice))
             while len(movementParts) < need: movementParts.append([])
-            for m0,segs in zip(voiceFirstMvt,segsByVoice):
+            for n, (m0,segs) in enumerate(zip(voiceFirstMvt,segsByVoice)):
                 for segNo,seg in enumerate(segs):
-                    if any(t.strip() for t in seg): movementParts[m0+segNo].append((instName," ".join(seg)))
+                    if any(t.strip() for t in seg):
+                        mvt_lyrics_dict,_=lyricsByVoice[n][m0+segNo]
+                        lyricLines = []
+                        for idx,v in enumerate(sorted(mvt_lyrics_dict.keys())):
+                            syls = mvt_lyrics_dict[v]["syllables"]
+                            while syls and not syls[-1]: syls.pop()
+                            line,verseNo = " ".join(s if s else '""' for s in syls),re.search(r'\d+',v)
+                            if line: lyricLines.append("L: "+(verseNo.group()+". " if verseNo else str(idx+1)+". " if len(mvt_lyrics_dict)>1 else "")+line)
+                        movementParts[m0+segNo].append((instName," ".join(seg)+("\n"+"\n".join(lyricLines) if lyricLines else "")))
             del partsInProgress[:] ; del positionsInProgress[:]
             positionsInProgress.append(0);partsInProgress.append([])
+            del lyricsInProgress[:];lyricsInProgress.append([({},0)])
             del voiceFirstMvt[:] ; voiceFirstMvt.append(0)
             state.position=state.lastDuration=0 ; del paddingRestList[:]
             for k in list(paddingRestDict.keys()):
@@ -1243,22 +1276,23 @@ def xml2jianpu(x):
             state.mvtBarLockedIndices = None ; state.breakCount = 0
             state.prevChordOffset = None ; state.prevChordNList = None
             if partList: del partList[0]
-        elif name=="fifths":
-            state.keySig=['']*7
-            if d0.startswith('-'): keyAcc,start,inc='b',4-1,4 # Bb (b)4
+            state.octaveShifts = {}
+        elif name=="fifths": state.fifths=d0
+        elif name=="mode": state.mode=d0
+        elif name=="key" and state.fifths:
+            if state.fifths.startswith('-'): keyAcc,start,inc='b',4-1,4 # Bb (b)4
             else: keyAcc,start,inc='#',7-1,3 # F# (#)7
-            for i in range(abs(int(d0))):
+            for i in range(abs(int(state.fifths))):
                 state.keySig[start] = keyAcc
                 start = (start+inc) % 7
             state.barSig = state.keySig[:]
-            key = ["Gb","Db","Ab","Eb","Bb","F","C","G","D","A","E","B","F#"][int(d0)+6]
+            key = ["Gb","Db","Ab","Eb","Bb","F","C","G","D","A","E","B","F#","C#","G#","D#"][int(state.fifths)+(9 if state.mode=="minor" else 6)]
             state.note1=key[0]
-            paddingRestList.append("1="+key)
+            paddingRestList.append(("6=" if state.mode=="minor" else "1=")+key)
             for k,v in list(paddingRestDict.items()):
                 if v==len(paddingRestList)-1: paddingRestDict[k] += 1
-            for n,p in enumerate(partsInProgress):
-                if positionsInProgress[n]==max(positionsInProgress):
-                    p.append("1="+key)
+            allParts(("6=" if state.mode=="minor" else "1=")+key)
+            state.fifths=state.mode=""
         elif name=="beats": time[0]=d0
         elif name=="beat-type": time[1]=d0
         elif name=="time":
@@ -1310,14 +1344,12 @@ def xml2jianpu(x):
             if len(state.mvtBreakIndicators) >= 2:
                 insertMovementBreak(state.mvtStartBarIndices)
             partsInProgress[0].append("\n")
-        elif name=="beat-unit": tempo[0]=typesMM.get(name,"4")
+        elif name=="beat-unit": tempo[0]=typesMM.get(d0,"4")
+        elif name=="beat-unit-dot" and tempo[0]: tempo[0]+="."
         elif name=="beat-minute" or name=="per-minute": tempo[1]=d0
         elif name=="metronome":
-            if tempo[0] and tempo[1]:
-                for n,p in enumerate(partsInProgress):
-                    if positionsInProgress[n]==max(positionsInProgress):
-                        p.append("=".join(tempo)) ; break
-            tempo[0]=tempo[1]="" # for now we ignore <metronome> elements that don't specify all parameters
+            if tempo[0] and tempo[1]: allParts("=".join(tempo)) # for now we ignore <metronome> elements that don't specify all parameters; we also ignore <sound tempo="120"/> as it's often some default that isn't the composer's actual intention (plus it's always crotchet= even in 6/8 etc); user can edit it back in if needed
+            tempo[0]=tempo[1]=""
         elif name=="step": state.step=d0
         elif name=="multiple-rest":
             text = state.readData.strip() if state.readData else ""
@@ -1327,30 +1359,24 @@ def xml2jianpu(x):
                     state.multirestSkip = True
                 except ValueError: pass
         elif name=="rest": state.step="r"
+        elif name=="unpitched": state.step="x"
         elif name=="octave": state.octave=int(d0)
         elif name=="accidental": state.accidental=d0
         elif name=="type": state.nType=d0
         elif name=="dot": state.dot=True
-        elif name=="slur": state.extras+={"start":" (","stop":" )"}[state.readAttrs.get("type","")]
-        elif name=="tie": state.tie={"start":"~","stop":""}[state.readAttrs.get("type","")]
+        elif name=="slur": state.extras+={"start":" (","continue":" ) (","stop":" )"}[state.readAttrs.get("type")]
+        elif name in ["tie","tied"]: state.tie={"start":"~","continue":"~"}.get(state.readAttrs.get("type"),"")
         elif name=="actual-notes": state.tuplet=d0
         elif name=="normal-notes": state.tupletNormal=d0
-        elif name=="tuplet": state.tState=state.readAttrs.get("type","")
+        elif name=="tuplet": state.tState=state.readAttrs.get("type")
         elif name=="chord": state.chord=True
-        elif name=="arpeggiate": state.extrasBefore += {"up":"arpUp ","down":"arpDown "}.get(state.readAttrs.get("direction",""),"arp ")
+        elif name=="arpeggiate": state.extrasBefore += {"up":"arpUp ","down":"arpDown "}.get(state.readAttrs.get("direction"),"arp ")
         elif name=="arpeggio": state.extrasBefore += "arp "
-        elif name in ["slide","glissando"] and state.readAttrs.get("type","")=="start": state.extrasBefore += "glis "
+        elif name in ["slide","glissando"] and state.readAttrs.get("type")=="start": state.extrasBefore += "glis "
         elif name=="tremolo": state.tremolo="///"
         elif name=="grace": state.grace=True
-        elif name=="strong-accent": state.extras+=r" \accent"
-        elif name=="up-bow":     state.extras += r" \upbow"
-        elif name=="down-bow":   state.extras += r" \downbow"
-        elif name=="trill-mark": state.extras += r" \trill"
-        elif name=="inverted-mordent": state.extras+=r" \prall"
-        elif name=="harmonic": state.extras+=r" \flageolet"
-        elif name=="snap-pizzicato": state.extras+=r" \snappizzicato"
         elif name=="wedge":
-            wtype = state.readAttrs.get("type","")
+            wtype = state.readAttrs.get("type")
             wnum = state.readAttrs.get("number","1")
             if wtype in ("crescendo","decrescendo","diminuendo"):
                 wcmd = r"\<" if wtype=="crescendo" else r"\>"
@@ -1368,25 +1394,73 @@ def xml2jianpu(x):
                         if state.lastOurRet[i] and not state.lastOurRet[i].startswith("0") and not state.lastOurRet[i].startswith("/"):
                             state.lastOurRet[i] += r" \!"
                             break
-        elif name in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open".split(): # element names that exactly equal their corresponding no-parameter Lilypond commands, including dynamics + some others
+        elif name=="bar-style":
+            b = {"light-light":"||","light-heavy":"|.","heavy-light":".|","dashed":"dashed","dotted":":","tick":"'","short":"!"}.get(d0)
+            if b: allParts(r'\bar "'+b+'"') # Lilypond will de-duplicate with auto final barline
+        elif name=="repeat":
+            d = state.readAttrs.get("direction")
+            if d=="forward": allParts("R{")
+            elif d=="backward": state.pendingRepeatClose=not state.inEnding
+        elif name=="ending":
+            etype = state.readAttrs.get("type")
+            if etype=="start":
+                if not state.inEnding:
+                    allParts("} A{") ; state.inEnding=True
+                else: allParts("|")
+            elif etype=="stop":
+                allParts("}") ; state.inEnding = False
+        elif name=="barline" and state.pendingRepeatClose:
+            allParts("}") ; state.pendingRepeatClose=False
+        elif name=="fingering": state.extras += " Fr="+d0
+        elif name=="open-string": state.extras += " Fr=0"
+        elif name=="string": state.extras += ' ^"'+d0+'"'
+        elif name=="wavy-line" and state.readAttrs.get("type")=="start": state.extras += " tilde" # TODO: put tilde on every note until stop?
+        elif name=="bend": state.extras += " bend"
+        elif name in mxl2all: allParts(mxl2all[name])
+        elif name=="sound": # earlier versions of some mxl2all
+            a = state.readAttrs
+            if a.get("dacapo")=="yes": allParts("DC")
+            elif a.get("dalsegno") not in (None,"","no"): allParts("DS")
+            if a.get("fine")=="yes": allParts("Fine")
+            if a.get("tocoda")=="yes": allParts("ToCoda")
+        elif name in mxl2artic:
             if name in ("ppppp","pppp","ppp","pp","p","mp","mf","f","ff","fff","ffff","fffff","fp","sf","sfz","n","rfz"): state.activeWedges.clear() # dynamics: don't need \! as Lilypond does it automatically
-            state.extras += " \\"+name
+            state.extras += " \\"+mxl2artic[name]
         elif name=="print":
             if state.readAttrs.get("new-page") == "yes" or state.readAttrs.get("new-system") == "yes":
                 state.mvtBreakIndicators.add("page break")
-        elif name=="words":
-            if state.readAttrs.get("valign") == "top":
-                state.mvtBreakIndicators.add("valign-top words")
-            toAdd = r' ^"'+state.readData.strip().replace('"',"'")+'"'
+        elif name=="text" and state.in_text:
+            state.in_text=False
+            if state.lyric_state:
+                state.lyric_state["texts"].append(state.text_buffer.strip()) ; state.lyric_state["elisions"].append(False)
+        elif name=="syllabic" and state.lyric_state: state.lyric_state["syllabic"]=state.readData.strip()
+        elif name=="lyric" and state.lyric_state:
+            elisions = state.lyric_state["elisions"]
+            state.lyrics_for_current_note.append({
+                "verse": state.lyric_state["verse"],
+                "text": ''.join(re.sub(r'[-_]+$','',t)+("_" if i<len(elisions) and elisions[i] else "") for i,t in enumerate(state.lyric_state["texts"])),
+                "syllabic": state.lyric_state["syllabic"],
+                "extend": state.lyric_state["extend"]})
+            state.lyric_state=None
+        elif name in ["words","other-dynamics"]:
+            if name=="words" and state.readAttrs.get("valign")=="top": state.mvtBreakIndicators.add("valign-top words")
+            toAdd = ' '+{'bottom':'_'}.get(state.readAttrs.get("valign","bottom" if name=="other-dynamics" else 0),'^')+'"'+state.readData.strip().replace('"',"'")+'"'
             if state.multirestSkip: state.multirestBuffer += toAdd
             elif not toAdd in state.extras: state.extras += toAdd
         elif name=="rehearsal" and d0:
             paddingRestList.append("letter" + d0)
             for k,v in list(paddingRestDict.items()):
                 if v==len(paddingRestList)-1: paddingRestDict[k] += 1
-            for n,p in enumerate(partsInProgress):
-                if positionsInProgress[n]==max(positionsInProgress):
-                    p.append("letter" + d0)
+            allParts("letter" + d0)
+# in e(name)
+        elif name=="software": state.software = d0
+        elif name=="octave-shift":
+            mode = xml_octaveShift_override or ("written" if "musescore" in state.software.lower() else "sounding") # TODO: can we ask people to send test 8vas exported from Sibelius, Finale, XunScore, Ziipoo, Xihang and the others to see how they've done it?  W3C spec wording is unclear: my pedantic read suggests "sounding" is correct but it's understandable if some developers read it the other way
+            if mode=="sounding": return # pitch data already sounds as the dots will indicate (feel free to add \ottava to the Western staff but this is best redone manually anyway: different typesetters and musicians of different abilities may need it in different places for best reading)
+            otype,num = state.readAttrs.get("type"),state.readAttrs.get("number","1")
+            try: octs=int((int(state.readAttrs.get("size","8"))-1)/7)
+            except ValueError: octs=1
+            state.octaveShifts[num]=octs*(-1 if otype=="up" else 1 if otype=="down" else 0) # MusicXML "up" is actually 8vb: it's not "play this an octave up", it's "this *has been* shifted up for printing".  I would have argued against that if I'd been on the committee but it's done now :)
         elif name=="note":
             # Try to find which voice it goes onto, if we're MuseScore
             # or similar and have parts as voices within a part.
@@ -1416,10 +1490,27 @@ def xml2jianpu(x):
                 positionsInProgress[ourI]=state.position
                 state.lastDuration=0
                 if ourI==0: paddingRestDict[state.position]=len(paddingRestList)
-                return
-            elif step=="r": r="0"
+                state.lyrics_for_current_note=[] ; return
+            if not chord and not grace: # handle lyrics
+                voiceLlist=lyricsInProgress[ourI]
+                voiceLdict,count=voiceLlist[-1]
+                present_verses=set()
+                for lyc in state.lyrics_for_current_note:
+                    v=lyc["verse"] ; present_verses.add(v)
+                    if v not in voiceLdict: voiceLdict[v]={"syllables":[""]*count,"melisma": False}
+                for lyc in state.lyrics_for_current_note:
+                    v,text,syllabic = lyc["verse"],lyc["text"],lyc["syllabic"]
+                    voiceLdict[v]["syllables"].append(text+("-" if syllabic in ("begin", "middle") else ""))
+                    if lyc["extend"]: voiceLdict[v]["melisma"]=True
+                    elif syllabic in ("end","single"): voiceLdict[v]["melisma"]=False
+                for v, data in voiceLdict.items():
+                    if v not in present_verses: data["syllables"].append("_" if data["melisma"] else "")
+                voiceLlist[-1]=(voiceLdict,count+1)
+            state.lyrics_for_current_note=[]
+            if step=="r": r="0"
+            elif step=="x": r="x"
             else:
-                dTone=ord(step[0])-ord(state.note1)+7*(octave-4)
+                dTone=ord(step[0])-ord(state.note1)+7*(sum(state.octaveShifts.values())+octave-4)
                 if step[0] < 'C': dTone += 7
                 r=str((dTone%7)+1)
                 while dTone<0: # we use OctavesAfter
@@ -1498,7 +1589,7 @@ def xml2jianpu(x):
             ret.append(txt)
             ret.append("WithStaff NextPart")
         if m < len(movementParts)-1: ret.append("NextScore OctavesAfter")
-    ret = '\n'.join(ret).replace(chr(0),"")
+    ret = '\n'.join(ret).replace(chr(0),"").replace(" DC DC"," DC").replace(" DS DS"," DS").replace(" Fine Fine"," Fine").replace(" ToCoda ToCoda"," ToCoda") # de-duplicating in case some MusicXML 4 exporter sets both <sound> attributes *and* mxl2all elements
     if not type("")==type(ret): ret=ret.encode('utf-8') # Python 2
     return ret
 
@@ -2277,6 +2368,8 @@ args = {
     '--export-jly': ("Export the jianpu input to a .jly file instead of converting it (useful e.g. after a MusicXML import)","导出简谱输入到 .jly 文件而不进行转换（例如在导入 MusicXML 之后）",[('export', True)]),
     '--export-txt': ("","",[('export',True)]), # hidden alias for --export-jly for backward compatibility
     '--unicode-approx': ("Output a Unicode approximation of the jianpu instead of Lilypond code","用Unicode近似值代替Lilypond代码",[('unicode_approx',True)]),
+    '--octaveShiftSounding': ("Treat MusicXML octave-shift pitch data as sounding pitch (as unclearly stated in the W3C MusicXML 4 specification and as done by musicxml2ly); the default unless the file says it was encoded by MuseScore","强制将MusicXML octave-shift区域内的音高数据视为实际音高（W3C规范／musicxml2ly的行为）；除非文件注明由MuseScore生成，否则默认为此行为",[('xml_octaveShift_override','sounding')]),
+    '--octaveShiftWritten': ("Treat MusicXML octave-shift pitch data as written pitch (MuseScore behaviour, at least in versions 2 and 3); jianpu dots are adjusted to sounding pitch","强制将MusicXML octave-shift区域内的音高数据视为记谱音高（MuseScore的行为）；简谱的八度点将调整为实际音高",[('xml_octaveShift_override','written')]),
 }
 def read_args():
     files,actions = [],[]

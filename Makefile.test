@@ -13,7 +13,7 @@ testOnePythonVersion:
 	echo 'KeepOctave 2/4 <<1 - >1 - >1 - >1 - >1 -' | $(P) jianpu-ly.py | grep "c'''2" >/dev/null
 	echo "WithStaff 1( 2)~ 2( 3)" | $(P) jianpu-ly.py | grep "c'4 [(] d'4 [)] ~ d'4 [(] e'4 [)]" >/dev/null
 	(echo instrument=S;echo 1 1 1 1 NextPart instrument=A;echo 1 1 1 1) | $(P) jianpu-ly.py | grep "^ *instrumentName" >/dev/null
-
+	echo '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE score-partwise PUBLIC "-//Recordare//DTD MusicXML 4.0 Partwise//EN" "http://www.musicxml.org/dtds/partwise.dtd"><score-partwise version="4.0"><part-list><score-part id="P1"><part-name>Test</part-name></score-part></part-list><part id="P1"><measure number="1"><attributes><divisions>1</divisions><key><fifths>0</fifths></key><time><beats>4</beats><beat-type>4</beat-type></time></attributes><note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type><notations><articulations><breath-mark/></articulations></notations></note><note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type><notations><articulations><detached-legato/></articulations></notations></note><note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type><notations><ornaments><inverted-turn/></ornaments></notations></note><note><pitch><step>F</step><octave>4</octave></pitch><duration>1</duration><type>quarter</type><notations><articulations><caesura/></articulations></notations></note></measure></part></score-partwise>'| $(P) jianpu-ly.py | grep 'breathe.*portato.*reverseturn.*caesura' >/dev/null
 	$(P) jianpu-ly.py <(echo WithStaff 1 - 0 -) </dev/null | grep r2 >/dev/null # check read from non-stdin still works
 
 	$(P) test-import.py

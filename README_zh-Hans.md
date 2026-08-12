@@ -178,6 +178,10 @@ Lilypond头代码： `LPH: (定义) :LPH` （每个分隔符必须位于各行�
 
 `--nosort`: 不按音高排序和弦音符（适用于两个声部被写成和弦、又需要声部交叉的情况）
 
+`--octaveShiftSounding`: 强制将MusicXML octave-shift区域内的音高数据视为实际音高（W3C规范／musicxml2ly的行为）；除非文件注明由MuseScore生成，否则默认为此行为
+
+`--octaveShiftWritten`: 强制将MusicXML octave-shift区域内的音高数据视为记谱音高（MuseScore的行为）；简谱的八度点将调整为实际音高
+
 `--unicode-approx`: 用Unicode近似值代替Lilypond代码
 
 `--version`: 只显示版本号（别名：-v、/v）

@@ -180,6 +180,10 @@ Ignored: `% a comment`
 
 `--nosort`: Don't sort chord notes by pitch (crossing parts when 2-voice music was mistakenly coded as chords)
 
+`--octaveShiftSounding`: Treat MusicXML octave-shift pitch data as sounding pitch (as unclearly stated in the W3C MusicXML 4 specification and as done by musicxml2ly); the default unless the file says it was encoded by MuseScore
+
+`--octaveShiftWritten`: Treat MusicXML octave-shift pitch data as written pitch (MuseScore behaviour, at least in versions 2 and 3); jianpu dots are adjusted to sounding pitch
+
 `--unicode-approx`: Output a Unicode approximation of the jianpu instead of Lilypond code
 
 `--version`: Just write version number (aliases: -v, /v)
