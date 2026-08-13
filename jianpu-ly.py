@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.887 (c) 2012-2026 Silas S. Brown
+# v1.888 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1577,6 +1577,7 @@ def xml2jianpu(x):
                 positionsInProgress.append(state.position)
                 voiceFirstMvt.append(state.breakCount)
                 state.mvtStartBarIndices.append(None)
+                lyricsInProgress.append([({},0) for _ in range(state.breakCount+1)])
                 ourRet,ourI = partsInProgress[-1],len(partsInProgress)-1
             state.lastOurRet = ourRet
             # Now OK to add the note to the part (voice)
