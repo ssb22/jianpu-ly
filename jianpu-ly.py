@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.886 (c) 2012-2026 Silas S. Brown
+# v1.887 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1152,7 +1152,7 @@ def xml2jianpu(x):
     positionsInProgress,partsInProgress = [0],[[]]
     lyricsInProgress = [[({},0)]] # voice -> movement -> (verseDict, noteCount)
     voiceFirstMvt = [0] # 0-based index of the first movement each voice belongs to
-    movementParts = [] # movementParts[m] = [(instrumentName, voiceText), ...] across all MusicXML <part>s
+    chordsByMvt,movementParts = {},[]
     paddingRestList, paddingRestDict = [], {0:0}
     ret = ["OctavesAfter"]
     partList=[""];time=["4","4"];tempo=["",""]
@@ -1168,18 +1168,21 @@ def xml2jianpu(x):
             self.multirestCount = self.multirestTotal = 0
             self.multirestSkip, self.multirestBuffer = False,""
             self.mvtLastBarNo, self.mvtStartBarIndices, self.mvtBarLockedIndices, self.mvtBreakIndicators, self.breakCount = None,[],None,set(),0
-            self.activeWedges = {}
+            self.activeWedges,self.stoppedWedges = {},{}
             self.pendingWedgeCmd = ""
             self.lastOurRet = None
             self.lyrics_for_current_note = []
             self.lyric_state,self.in_text,self.text_buffer=None,False,""
-            self.inEnding = self.pendingRepeatClose = False
+            self.inEnding = self.pendingRepeatClose = self.inAlternatives = False
             self.fifths = self.mode = self.software = ""
             self.octaveShifts = {}
+            self.harm,self.inFrame = None,False
+            self.harmonies,self.harmonyBreaks = [],[]
+            self.divisions = 0 ; self.tremoloStart = None
         def looksLikeNewMovement(self): return len(self.mvtBreakIndicators) >= 2 # MusicXML standard = only 1 movement per file, but some programs like MuseScore include multiple movements.  To prevent false positives on this, we watch for at least 2 indicators that a new movement has begun before acting on it.
         def getAndResetNote(self,first=False):
-            r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tupletNormal,self.tState,self.chord,self.grace,self.tremolo,self.extrasBefore)
-            self.step=self.octave=self.accidental=self.nType=self.dot=self.extras=self.tie=self.tuplet=self.tupletNormal=self.tState=self.chord=self.grace=self.tremolo=self.extrasBefore=""
+            r = None if first else (self.step,self.octave,self.accidental,self.nType,self.dot,self.extras,self.tie,self.tuplet,self.tupletNormal,self.tState,self.chord,self.grace,self.tremolo,self.tremoloType,self.extrasBefore)
+            self.step=self.octave=self.accidental=self.nType=self.dot=self.extras=self.tie=self.tuplet=self.tupletNormal=self.tState=self.chord=self.grace=self.tremolo=self.tremoloType=self.extrasBefore=""
             return r
     state = State()
     def allParts(cmd):
@@ -1191,14 +1194,55 @@ def xml2jianpu(x):
             if idx is None: idx = 0
             p.insert(idx, 'NextScore OctavesAfter')
             lyricsInProgress[n].append(({},0))
+        state.harmonyBreaks.append(state.position)
         state.mvtBreakIndicators = set()
         state.breakCount += 1
+    kind2ly={"major":"","minor":"m","diminished":"dim","augmented":"aug","major-seventh":"maj7","minor-seventh":"m7","dominant-seventh":"7","diminished-seventh":"dim7","half-diminished":"m7.5-","major-minor":"m7.maj7","augmented-seventh":"aug7","major-sixth":"6","minor-sixth":"m6","dominant-sixth":"6","dominant-ninth":"9","major-ninth":"maj9","minor-ninth":"m9","dominant-11th":"11","major-11th":"maj11","minor-11th":"m11","dominant-13th":"13","major-13th":"maj13","minor-13th":"m13","suspended-second":"sus2","suspended-fourth":"sus4","power":"5","pedal":""}
+    def harmPitchName(step,alter):
+        try: a = int(float(alter))
+        except (ValueError,TypeError): a = 0
+        if not alter in ("",None) and not a==float(alter): sys.stderr.write("Warning: ignoring microtonal chord alter "+str(alter)+"\n")
+        return step.lower()+{-2:"eses",-1:"es",0:"",1:"is",2:"isis"}.get(a,"")
+    def harm2ly(h): # (root,suffix) for chordmode
+        kind = h["kind"]
+        if kind=="none": return None
+        mods = kind2ly.get(kind,"")
+        degs = ""
+        for deg in h["degrees"]:
+            try: v = int(deg.get("value","0"))
+            except ValueError: continue
+            if not v or deg.get("type","add")=="subtract": continue # not sure what to do with subtracted tones in Lilypond
+            try: a = int(float(deg.get("alter","0") or "0"))
+            except ValueError: a = 0
+            degs += ".%d%s" % (v,{1:"+",-1:"-"}.get(a,""))
+        suffix = (":" if mods or degs else "")+mods+degs
+        return harmPitchName(h["root"],h["rootAlter"]),suffix+("/"+harmPitchName(h["bass"],h["bassAlter"]) if h["bass"] else "")
+    def xmlDuration(whole): # fraction of a whole note -> Lilypond duration string, used for chord mode
+        best = None
+        for denom in [1,2,4,8,16,32,64]:
+            v,add,dots = F(1,denom),F(1,denom),0
+            while dots < 4:
+                if v==whole: return str(denom)+"."*dots
+                if best is None or abs(v-whole)<best[0]: best = (abs(v-whole),str(denom)+"."*dots)
+                add /= 2 ; v += add ; dots += 1
+        sys.stderr.write("Warning: approximating chord duration %s as %s\n" % (whole,best[1]))
+        return best[1]
     types={"64th":"h","32nd":"d","16th":"s","eighth":"q","quarter":"","half":" -","whole":" - - -"}
     typesDot={"64th":"h.","32nd":"d.","16th":"s.","eighth":"q.","quarter":".","half":" - -","whole":" - - - - -"}
     typesMM={"64th":"64","32nd":"32","16th":"16","eighth":"8","quarter":"4","half":"2","whole":"1"}
     quavers={"64th":F(1,8),"32nd":F(1,4),"16th":F(1,2),"eighth":F(1),"quarter":F(2),"half":F(4),"whole":F(8)}
+    durByQuavers = {F(1,8):"h",F(1,4):"d",F(1,2):"s",F(1):"q",F(2):"",F(4):" -",F(8):" - - -",F(3,8):"h.",F(3,4):"d.",F(3,2):"q.",F(3):".",F(6):" - -",F(12):" - - - - -"}
+    def twoNoteTremoloDur(nType1,dot1,nType2,dot2):
+        q = F(0)
+        for nType,dot in [(nType1,dot1),(nType2,dot2)]:
+            v = quavers.get(nType)
+            if v is None: return None
+            q += v + (v/2 if dot else F(0))
+        return durByQuavers.get(q)
     def s(name,attrs):
         state.readData,state.readAttrs="",attrs
+        # TODO: Piano music in MusicXML uses <staves>2</staves> in <attributes> and <staff>1</staff> or <staff>2</staff> on individual notes, and also <pedal type="start|stop|change"/>.  But do any pianists prefer to read jianpu?
+        # TODO: <transpose><diatonic>, <chromatic>, <octave-change> to get the key relationships for concert pitch of transposing instruments.  But do any players of Western transposing instruments prefer to read jianpu?
         if name=="measure":
             state.mvtStartBarIndices = [len(p) for p in partsInProgress]
             oldBarsig = state.barSig
@@ -1215,13 +1259,19 @@ def xml2jianpu(x):
         elif name=="lyric": state.lyric_state={"verse":attrs.get("number",attrs.get("name","1")),"texts":[],"syllabic":"single","extend":False,"elisions":[]}
         elif state.lyric_state:
             if name=="text": state.in_text,state.text_buffer = True,""
-            elif name=="elision": state.lyric_state["elisions"].append(True)
+            elif name=="elision" and state.lyric_state["elisions"]: state.lyric_state["elisions"][-1] = True
             elif name=="extend": state.lyric_state["extend"]=(attrs.get("type")!="stop")
+        elif name=="part": state.harmonies,state.harmonyBreaks = [],[]
+        elif name=="harmony": state.harm={"root":None,"rootAlter":"","kind":"major","bass":None,"bassAlter":"","degrees":[],"print":not attrs.get("print-object")=="no"}
+        elif name=="degree" and state.harm: state.harm["degree"]={}
+        elif name=="frame": state.inFrame=True
+        elif name=="score-timewise": errExit("Import of MusicXML 'timewise' format not yet supported, please re-export using 'partwise'") # this is rare as pretty much everybody exports to partwise by default?
     def c(data):
         state.readData += data
         if state.in_text: state.text_buffer += data
-    mxl2artic={"strong-accent":"accent","up-bow":"upbow","down-bow":"downbow","trill-mark":"trill","inverted-mordent":"prall","harmonic":"flageolet","snap-pizzicato":"snappizzicato","breath-mark":"breathe","inverted-turn":"reverseturn","detached-legato":"portato"}
-    for n in "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfz n rfz mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open caesura scoop plop doit falloff".split(): mxl2artic[n]=n # Lilypond command is identical to MusicXML element name
+    mxl2artic={"strong-accent":"accent","up-bow":"upbow","down-bow":"downbow","trill-mark":"trill","inverted-mordent":"prall","harmonic":"flageolet","snap-pizzicato":"snappizzicato","breath-mark":"breathe","inverted-turn":"reverseturn","detached-legato":"portato","stress":"marcato"}
+    mxlDyn = "ppppp pppp ppp pp p mp mf f ff fff ffff fffff fp sf sfp sfpp sff sfz sffz rfz rf fz".split() # and n, but I'm not sure how to do that in Lilypond so ignoring for now
+    for n in mxlDyn + "mordent accent tenuto turn marcato staccatissimo fermata staccato stopped open caesura scoop plop doit falloff".split(): mxl2artic[n]=n # Lilypond command is identical to MusicXML element name
     mxl2all={"da-capo":"DC", "dal-segno":"DS", "segno":"Segno", "coda":"ToCoda", "fine":"Fine"} # TODO: is <coda> sometimes the actual coda not ToCoda?  (hopefully rare)
     def e(name):
         d0 = state.readData.strip()
@@ -1236,6 +1286,8 @@ def xml2jianpu(x):
         elif name in ["part-name","part-name-display","instrument-name"]: partList[-1]=d0
         elif name=="score-part": partList.append("")
         elif name=="part": # we're assuming score-partwise
+            if state.inAlternatives:
+                allParts("}") ; state.inAlternatives=False
             instName = partList[0] if partList else None
             for n,p in enumerate(partsInProgress):
                 if positionsInProgress[n] < max(positionsInProgress) and positionsInProgress[n] in paddingRestDict: p.append(' '.join(paddingRestList[paddingRestDict[positionsInProgress[n]]:]))
@@ -1253,6 +1305,20 @@ def xml2jianpu(x):
             lyricsByVoice=lyricsInProgress[:]
             need = max(m0+len(segs) for m0,segs in zip(voiceFirstMvt,segsByVoice))
             while len(movementParts) < need: movementParts.append([])
+            segChords = [""]*(len(segsByVoice[0]) if segsByVoice else 1)
+            if state.harmonies and not state.divisions: sys.stderr.write("Warning: no <divisions> found, so dropping chord symbols\n")
+            elif state.harmonies:
+                starts,ends = [0]+state.harmonyBreaks,state.harmonyBreaks+[state.position]
+                for segNo in range(len(segChords)):
+                    startPos,endPos = starts[segNo] if segNo < len(starts) else state.position, ends[segNo] if segNo < len(ends) else state.position
+                    items = [h for h in state.harmonies if h[0]<endPos]
+                    toks = []
+                    if items and items[0][0] > startPos: toks.append("s"+xmlDuration(F(items[0][0]-startPos,state.divisions*4))) # silent gap before first chord
+                    for i,(pos,root,suffix) in enumerate(items):
+                        nxt = items[i+1][0] if i+1 < len(items) else endPos
+                        if nxt > pos: toks.append(root+xmlDuration(F(nxt-pos,state.divisions*4))+suffix)
+                        else: sys.stderr.write("Warning: dropping 0-length chord symbol "+root+suffix+"\n")
+                    segChords[segNo] = " ".join(toks)
             for n, (m0,segs) in enumerate(zip(voiceFirstMvt,segsByVoice)):
                 for segNo,seg in enumerate(segs):
                     if any(t.strip() for t in seg):
@@ -1264,6 +1330,9 @@ def xml2jianpu(x):
                             line,verseNo = " ".join(s if s else '""' for s in syls),re.search(r'\d+',v)
                             if line: lyricLines.append("L: "+(verseNo.group()+". " if verseNo else str(idx+1)+". " if len(mvt_lyrics_dict)>1 else "")+line)
                         movementParts[m0+segNo].append((instName," ".join(seg)+("\n"+"\n".join(lyricLines) if lyricLines else "")))
+                        if segNo < len(segChords) and segChords[segNo]:
+                            if chordsByMvt.get(m0+segNo): sys.stderr.write("Warning: more than one part has chord symbols in the same movement; keeping only the first\n")
+                            else: chordsByMvt[m0+segNo]=segChords[segNo]
             del partsInProgress[:] ; del positionsInProgress[:]
             positionsInProgress.append(0);partsInProgress.append([])
             del lyricsInProgress[:];lyricsInProgress.append([({},0)])
@@ -1276,7 +1345,8 @@ def xml2jianpu(x):
             state.mvtBarLockedIndices = None ; state.breakCount = 0
             state.prevChordOffset = None ; state.prevChordNList = None
             if partList: del partList[0]
-            state.octaveShifts = {}
+            state.octaveShifts,state.stoppedWedges = {},{}
+            state.inAlternatives = state.inEnding = False
         elif name=="fifths": state.fifths=d0
         elif name=="mode": state.mode=d0
         elif name=="key" and state.fifths:
@@ -1306,6 +1376,9 @@ def xml2jianpu(x):
                     state.tsigOffsets.append(len(p))
                     p.append("/".join(time))
                 else: state.tsigOffsets.append(None) # and hope anacrusis is fixed in paddingRestList before time signature gets copied to this part (TODO in theory this might not happen with all MusicXML generators)
+        elif name=="divisions":
+            try: state.divisions = int(d0)
+            except ValueError: pass
         elif name=="duration": state.lastDuration = int(state.readData.strip()) # last duration (could be inside note or backup,forward: handle when close)
         elif name=="backup":
             state.position -= state.lastDuration
@@ -1371,9 +1444,9 @@ def xml2jianpu(x):
         elif name=="tuplet": state.tState=state.readAttrs.get("type")
         elif name=="chord": state.chord=True
         elif name=="arpeggiate": state.extrasBefore += {"up":"arpUp ","down":"arpDown "}.get(state.readAttrs.get("direction"),"arp ")
-        elif name=="arpeggio": state.extrasBefore += "arp "
+        elif name=="arpeggio": state.extrasBefore += "arp " # TODO: do we also want to pick up on "non-arpeggiate" to emit some Lilypond command to say 'play it straight'?  different from 'arp' which is arpeggiate in unspecified direction.  Probably OK to omit though
         elif name in ["slide","glissando"] and state.readAttrs.get("type")=="start": state.extrasBefore += "glis "
-        elif name=="tremolo": state.tremolo="///"
+        elif name=="tremolo": state.tremolo,state.tremoloType = "///",state.readAttrs.get("type") or "single"
         elif name=="grace": state.grace=True
         elif name=="wedge":
             wtype = state.readAttrs.get("type")
@@ -1382,39 +1455,60 @@ def xml2jianpu(x):
                 wcmd = r"\<" if wtype=="crescendo" else r"\>"
                 state.activeWedges[wnum] = wcmd # Don't need to \! the oldCmd: Lilypond does that automatically
                 state.pendingWedgeCmd = wcmd + state.pendingWedgeCmd
-            elif wtype == "stop":
-                if wnum in state.activeWedges:
+            elif wtype=="continue": # MusicXML encoder broke a hairpin over its own system break: we want to take this out as Lilypond will redo (so stop+continue should cancel)
+                undone = state.stoppedWedges.pop(wnum,None)
+                if undone:
+                    lst,idx,cmd = undone
+                    if lst[idx].endswith(r" \!"): lst[idx] = lst[idx][:-3]
+                    state.activeWedges[wnum] = cmd
+            elif wtype=="stop":
+                cmd = state.activeWedges.pop(wnum,None)
+                if cmd:
                     if state.pendingWedgeCmd or not state.lastOurRet or not any(item and (r"\<" in item or r"\>" in item) for item in state.lastOurRet): # too short
-                        sys.stderr.write("Ignoring MusicXML hairpin that's too short at bar "+str(state.mvtLastBarNo)+"\n")
-                        state.pendingWedgeCmd = ""
-                    del state.activeWedges[wnum]
-                else: sys.stderr.write("Ignoring MusicXML isolated stop-hairpin at bar "+str(state.mvtLastBarNo)+"\n")
-                if state.lastOurRet is not None:
-                    for i in range(len(state.lastOurRet)-1, -1, -1):
-                        if state.lastOurRet[i] and not state.lastOurRet[i].startswith("0") and not state.lastOurRet[i].startswith("/"):
-                            state.lastOurRet[i] += r" \!"
-                            break
+                        state.pendingWedgeCmd = "" ; sys.stderr.write("Ignoring MusicXML hairpin that's too short at bar "+str(state.mvtLastBarNo)+"\n")
+                    else:
+                        for i in range(len(state.lastOurRet)-1, -1, -1):
+                            if state.lastOurRet[i] and not state.lastOurRet[i].startswith("0") and not state.lastOurRet[i].startswith("/"):
+                                state.lastOurRet[i] += r" \!"
+                                state.stoppedWedges[wnum] = (state.lastOurRet,i,cmd) # remember in case a continue follows
+                                break
         elif name=="bar-style":
             b = {"light-light":"||","light-heavy":"|.","heavy-light":".|","dashed":"dashed","dotted":":","tick":"'","short":"!"}.get(d0)
             if b: allParts(r'\bar "'+b+'"') # Lilypond will de-duplicate with auto final barline
         elif name=="repeat":
             d = state.readAttrs.get("direction")
             if d=="forward": allParts("R{")
-            elif d=="backward": state.pendingRepeatClose=not state.inEnding
+            elif d=="backward": state.pendingRepeatClose=not state.inEnding and not state.inAlternatives
         elif name=="ending":
             etype = state.readAttrs.get("type")
             if etype=="start":
-                if not state.inEnding:
-                    allParts("} A{") ; state.inEnding=True
+                if not state.inAlternatives:
+                    allParts("} A{") ; state.inAlternatives=True
                 else: allParts("|")
-            elif etype=="stop":
-                allParts("}") ; state.inEnding = False
+                state.inEnding=True
+            elif etype=="stop": state.inEnding=False
         elif name=="barline" and state.pendingRepeatClose:
             allParts("}") ; state.pendingRepeatClose=False
-        elif name=="fingering": state.extras += " Fr="+d0
-        elif name=="open-string": state.extras += " Fr=0"
-        elif name=="string": state.extras += ' ^"'+d0+'"'
-        elif name=="wavy-line" and state.readAttrs.get("type")=="start": state.extras += " tilde" # TODO: put tilde on every note until stop?
+        elif name=="frame": state.inFrame=False
+        elif name=="fingering" and not state.inFrame: state.extras += " Fr="+d0
+        elif name=="open-string" and not state.inFrame: state.extras += " Fr=0"
+        elif name in ["string","pluck"] and not state.inFrame: state.extras += ' ^"'+d0+'"'
+        elif name=="root-step" and state.harm: state.harm["root"]=d0
+        elif name=="root-alter" and state.harm: state.harm["rootAlter"]=d0
+        elif name=="kind" and state.harm: state.harm["kind"]=d0
+        elif name=="bass-step" and state.harm: state.harm["bass"]=d0
+        elif name=="bass-alter" and state.harm: state.harm["bassAlter"]=d0
+        elif name in ("degree-value","degree-alter","degree-type") and state.harm: state.harm.setdefault("degree",{})[{"degree-value":"value","degree-alter":"alter","degree-type":"type"}[name]]=d0
+        elif name=="degree" and state.harm: state.harm["degrees"].append(state.harm.pop("degree",{}))
+        elif name=="harmony":
+            h,state.harm = state.harm,None
+            if h and h["print"] and h["root"]:
+                r2 = harm2ly(h)
+                if r2:
+                    if state.harmonies and state.harmonies[-1][0]==state.position: state.harmonies[-1]=(state.position,)+r2
+                    else: state.harmonies.append((state.position,)+r2)
+            elif h and h["print"]: sys.stderr.write("Warning: ignoring chord symbol without root (function-based harmony?)\n")
+        elif name=="wavy-line": state.extras += {'start':r' \startTrillSpan','stop':r' \stopTrillSpan'}.get(state.readAttrs.get("type")," tilde")
         elif name=="bend": state.extras += " bend"
         elif name in mxl2all: allParts(mxl2all[name])
         elif name=="sound": # earlier versions of some mxl2all
@@ -1424,7 +1518,7 @@ def xml2jianpu(x):
             if a.get("fine")=="yes": allParts("Fine")
             if a.get("tocoda")=="yes": allParts("ToCoda")
         elif name in mxl2artic:
-            if name in ("ppppp","pppp","ppp","pp","p","mp","mf","f","ff","fff","ffff","fffff","fp","sf","sfz","n","rfz"): state.activeWedges.clear() # dynamics: don't need \! as Lilypond does it automatically
+            if name in mxlDyn: state.activeWedges.clear() # dynamics: don't need \! as Lilypond does it automatically
             state.extras += " \\"+mxl2artic[name]
         elif name=="print":
             if state.readAttrs.get("new-page") == "yes" or state.readAttrs.get("new-system") == "yes":
@@ -1444,7 +1538,7 @@ def xml2jianpu(x):
             state.lyric_state=None
         elif name in ["words","other-dynamics"]:
             if name=="words" and state.readAttrs.get("valign")=="top": state.mvtBreakIndicators.add("valign-top words")
-            toAdd = ' '+{'bottom':'_'}.get(state.readAttrs.get("valign","bottom" if name=="other-dynamics" else 0),'^')+'"'+state.readData.strip().replace('"',"'")+'"'
+            toAdd = ' '+{"bottom":'_'}.get(state.readAttrs.get("valign","bottom" if name=="other-dynamics" or float(state.readAttrs.get("default-y","0"))<0 else 0),'^')+'"'+state.readData.strip().replace('"',"'")+'"'
             if state.multirestSkip: state.multirestBuffer += toAdd
             elif not toAdd in state.extras: state.extras += toAdd
         elif name=="rehearsal" and d0:
@@ -1457,11 +1551,13 @@ def xml2jianpu(x):
         elif name=="octave-shift":
             mode = xml_octaveShift_override or ("written" if "musescore" in state.software.lower() else "sounding") # TODO: can we ask people to send test 8vas exported from Sibelius, Finale, XunScore, Ziipoo, Xihang and the others to see how they've done it?  W3C spec wording is unclear: my pedantic read suggests "sounding" is correct but it's understandable if some developers read it the other way
             if mode=="sounding": return # pitch data already sounds as the dots will indicate (feel free to add \ottava to the Western staff but this is best redone manually anyway: different typesetters and musicians of different abilities may need it in different places for best reading)
-            otype,num = state.readAttrs.get("type"),state.readAttrs.get("number","1")
+            if state.readAttrs.get("type")=="continue": return
             try: octs=int((int(state.readAttrs.get("size","8"))-1)/7)
             except ValueError: octs=1
-            state.octaveShifts[num]=octs*(-1 if otype=="up" else 1 if otype=="down" else 0) # MusicXML "up" is actually 8vb: it's not "play this an octave up", it's "this *has been* shifted up for printing".  I would have argued against that if I'd been on the committee but it's done now :)
+            state.octaveShifts[state.readAttrs.get("number","1")]=octs*{"up":-1,"down":1}.get(state.readAttrs.get("type"),0) # MusicXML "up" is actually 8vb: it's not "play this an octave up", it's "this *has been* shifted up for printing".  I would have argued against that if I'd been on the committee but it's done now :)
         elif name=="note":
+            if state.inAlternatives and not state.inEnding:
+                allParts("}") ; state.inAlternatives=False
             # Try to find which voice it goes onto, if we're MuseScore
             # or similar and have parts as voices within a part.
             # TODO: sometimes the XML will give us a voice or staff number; for now we just find the first one to fit
@@ -1484,14 +1580,14 @@ def xml2jianpu(x):
                 ourRet,ourI = partsInProgress[-1],len(partsInProgress)-1
             state.lastOurRet = ourRet
             # Now OK to add the note to the part (voice)
-            step,octave,acc,nType,dot,extras,tie,tuplet,tupletNormal,tState,chord,grace,tremolo,extrasBefore = state.getAndResetNote()
+            step,octave,acc,nType,dot,extras,tie,tuplet,tupletNormal,tState,chord,grace,tremolo,tremoloType,extrasBefore = state.getAndResetNote()
             if state.multirestSkip: # just clean up
                 state.position+=state.lastDuration
                 positionsInProgress[ourI]=state.position
                 state.lastDuration=0
                 if ourI==0: paddingRestDict[state.position]=len(paddingRestList)
                 state.lyrics_for_current_note=[] ; return
-            if not chord and not grace: # handle lyrics
+            if not chord and not grace and not (tremoloType=="stop" and state.tremoloStart): # handle lyrics
                 voiceLlist=lyricsInProgress[ourI]
                 voiceLdict,count=voiceLlist[-1]
                 present_verses=set()
@@ -1531,6 +1627,27 @@ def xml2jianpu(x):
                 if dashes: dashes=" "+dashes.rstrip()
                 state.prevChordNList[state.prevChordOffset] = extrasBefore+chr(0)+(tremolo if not tremolo in rr else '')+chord+r+dashes
                 return
+            if tremoloType=="stop" and state.tremoloStart and not grace: # combine 2-note tremolo
+                sNList,sOff,sExtrasBefore,sW1,sExtras,sTie,sNType,sDot = state.tremoloStart
+                combinedDur = twoNoteTremoloDur(sNType,sDot,nType,dot)
+                state.tremoloStart = None
+                if combinedDur is None: sys.stderr.write("Warning: failed to calculate combined duration of two-note tremolo at bar "+str(state.mvtLastBarNo)+"; leaving it as two single-note tremolos\n")
+                else: # this gets tedious (can we refactor to reuse code elsewhere?  low priority as working for now)
+                    if state.pendingWedgeCmd:
+                        extras = extras+' '+state.pendingWedgeCmd
+                        state.pendingWedgeCmd = ""
+                    sNList[sOff] = sExtrasBefore+chr(0)+sW1+r+acc+sExtras+extras+' '+combinedDur+' '+sTie
+                    if not state.tsigOffsets==None and ourI==0:
+                        add = quavers[nType]
+                        if dot: add += add/2
+                        if tuplet: add *= F(int(tupletNormal) if tupletNormal else 2,int(tuplet))
+                        state.initialQuavers += add
+                    if ourI==0: paddingRestList.append("0"+(typesDot if dot else types)[nType])
+                    state.position += state.lastDuration
+                    positionsInProgress[ourI] = state.position
+                    state.lastDuration = 0
+                    if ourI==0: paddingRestDict[state.position] = len(paddingRestList)
+                    return
             if tState=="start":
                 ourRet.append(tuplet+"[")
                 if ourI==0: paddingRestList.append(tuplet+"[")
@@ -1570,6 +1687,7 @@ def xml2jianpu(x):
                 extras = extras+' '+state.pendingWedgeCmd
                 state.pendingWedgeCmd = ""
             ourRet.append(extrasBefore+chr(0)+w1+extras+' '+w2+' '+tie)
+            state.tremoloStart = (ourRet,len(ourRet)-1,extrasBefore,w1,extras,tie,nType,dot) if tremoloType=="start" and not grace else None
             if tState=="stop":
                 ourRet.append("]")
                 if ourI==0: paddingRestList.append("]")
@@ -1584,10 +1702,11 @@ def xml2jianpu(x):
     xmlparser.Parse(x,True)
     movementParts = [mv for mv in movementParts if mv]
     for m,mv in enumerate(movementParts):
-        for instName,txt in mv:
+        for i,(instName,txt) in enumerate(mv):
             if instName: ret.append('instrument='+instName)
+            if i==0 and chordsByMvt.get(m): txt += "\nchords=" + chordsByMvt[m]
             ret.append(txt)
-            ret.append("WithStaff NextPart")
+            ret.append("WithStaff"+(" NextPart" if i<len(mv)-1 else ""))
         if m < len(movementParts)-1: ret.append("NextScore OctavesAfter")
     ret = '\n'.join(ret).replace(chr(0),"").replace(" DC DC"," DC").replace(" DS DS"," DS").replace(" Fine Fine"," Fine").replace(" ToCoda ToCoda"," ToCoda") # de-duplicating in case some MusicXML 4 exporter sets both <sound> attributes *and* mxl2all elements
     if not type("")==type(ret): ret=ret.encode('utf-8') # Python 2
