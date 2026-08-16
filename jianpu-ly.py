@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.888 (c) 2012-2026 Silas S. Brown
+# v1.889 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1626,7 +1626,7 @@ def xml2jianpu(x):
                 extrasBefore,rr = state.prevChordNList[state.prevChordOffset].split(chr(0))
                 chord,dashes = rr.split(" ",1)
                 if dashes: dashes=" "+dashes.rstrip()
-                state.prevChordNList[state.prevChordOffset] = extrasBefore+chr(0)+(tremolo if not tremolo in rr else '')+chord+r+dashes
+                state.prevChordNList[state.prevChordOffset] = extrasBefore+chr(0)+(tremolo if not tremolo in rr else '')+chord+r+" "+dashes
                 return
             if tremoloType=="stop" and state.tremoloStart and not grace: # combine 2-note tremolo
                 sNList,sOff,sExtrasBefore,sW1,sExtras,sTie,sNType,sDot = state.tremoloStart
