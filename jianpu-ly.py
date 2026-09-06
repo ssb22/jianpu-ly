@@ -4,7 +4,7 @@
 
 r"""
 # Jianpu (numbered musical notaion) for Lilypond
-# v1.889 (c) 2012-2026 Silas S. Brown
+# v1.890 (c) 2012-2026 Silas S. Brown
 # v1.826 (c) 2024 Unbored
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -752,6 +752,7 @@ class NoteheadMarkup:
       self.separateTimesig = False
   def initOneScore(self):
       self.barLength = 64 ; self.beatLength = 16 # in 64th notes
+      self.wholeBarRestExpansion=""
       self.barPos = self.startBarPos = F(0)
       self.inBeamGroup = self.lastNBeams = self.onePage = self.noBarNums = self.chordsRoman = self.noIndent = self.raggedLast = 0
       self.withStaff = force_staff
@@ -776,6 +777,7 @@ class NoteheadMarkup:
       else: errExit("Incomplete bar at end of score %d (%g beats)" % (scoreNo,self.barPos*1.0/self.beatLength))
   def setTime(self,num,denom):
       self.barLength = int(64*num/denom)
+      if not num==denom: self.wholeBarRestExpansion=" *"+str(num)+"/"+str(denom)+" "
       if denom>4 and num%3==0: self.beatLength = 24 # compound time
       else: self.beatLength = 16
   def setAnac(self,denom,dotted):
@@ -783,7 +785,6 @@ class NoteheadMarkup:
       if dotted: self.barPos -= F(64)/denom/2
       if self.barPos<0: errExit("Anacrusis is longer than bar in score %d" % scoreNo) # but anacrusis being exactly equal to bar is OK: we'll just interpret that as no anacrusis
       self.startBarPos = self.barPos
-  def wholeBarRestLen(self): return {96:"1.",48:"2.",32:"2",24:"4.",16:"4",12:"8.",8:"8"}.get(self.barLength,"1") # TODO: what if irregular?
   def baseOctaveChange(self,change):
       self.base_octave = addOctaves(change,self.base_octave)
   def __call__(self,figures,nBeams,dots,octave,accidental,tremolo,word,line):
@@ -2118,7 +2119,7 @@ def getLY(score,headers=None,have_final_barline=True):
                 out.append(r'\mark \markup{ \box { "%s" } }' % word[6:])
             elif re.match(r"R\*[1-9][0-9]*$",word):
                 if not western: out.append(r"\set Score.skipBars = ##t \override MultiMeasureRest #'expand-limit = #1 ") # \compressFullBarRests on Lilypond 2.20, \compressEmptyMeasures on 2.22, both map to \set Score.skipBars
-                out.append(r"R"+notehead_markup.wholeBarRestLen()+word[1:])
+                out.append(r"R1"+notehead_markup.wholeBarRestExpansion+word[1:])
                 notehead_markup.barNo += int(word[2:])
             elif re.match("[1-9][0-9]*/[1-468]+(,[1-9][0-9]*[.]?)?$",word): # time signature
                 if ',' in word: # anacrusis
